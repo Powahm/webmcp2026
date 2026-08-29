@@ -83,13 +83,17 @@ interface PscRecord {
 
 // --- Input discovery --------------------------------------------------------
 
-function findFile(dir: string, exts: string[], what: string, help: string): string {
+/** The Free Company Data Product ships either as one big CSV or as six split
+ *  parts. Both are normal; take every CSV in the directory, sorted, and stream
+ *  them in sequence as though they were one file. */
+function findFiles(dir: string, exts: string[], what: string, help: string): string[] {
   if (!existsSync(dir)) fail(what, help);
-  const hit = readdirSync(dir).find((f) =>
-    exts.some((e) => f.toLowerCase().endsWith(e))
-  );
-  if (!hit) fail(what, help);
-  return join(dir, hit!);
+  const hits = readdirSync(dir)
+    .filter((f) => exts.some((e) => f.toLowerCase().endsWith(e)))
+    .sort()
+    .map((f) => join(dir, f));
+  if (!hits.length) fail(what, help);
+  return hits;
 }
 
 function fail(what: string, help: string): never {
@@ -109,6 +113,13 @@ function csvStream(file: string) {
   );
 }
 
+/** Every row across every part, in order. */
+async function* csvRows(files: string[]): AsyncGenerator<Record<string, string>> {
+  for (const f of files) {
+    yield* csvStream(f) as AsyncIterable<Record<string, string>>;
+  }
+}
+
 function rowAddress(r: Record<string, string>): RawAddress {
   return {
     careOf: r["RegAddress.CareOf"],
@@ -122,10 +133,10 @@ function rowAddress(r: Record<string, string>): RawAddress {
   };
 }
 
-async function countAddresses(file: string): Promise<Uint16Array> {
+async function countAddresses(files: string[]): Promise<Uint16Array> {
   const counts = new Uint16Array(BUCKETS);
   const p = progress("pass 1 / counting addresses");
-  for await (const r of csvStream(file) as AsyncIterable<Record<string, string>>) {
+  for await (const r of csvRows(files)) {
     p.tick();
     if (r["CompanyStatus"] !== "Active") continue;
     const norm = normaliseAddress(rowAddress(r));
@@ -166,12 +177,12 @@ function toRow(
 }
 
 async function collectCandidates(
-  file: string,
+  files: string[],
   counts: Uint16Array
 ): Promise<CompanyRow[]> {
   const out: CompanyRow[] = [];
   const p = progress("pass 2 / collecting candidates");
-  for await (const r of csvStream(file) as AsyncIterable<Record<string, string>>) {
+  for await (const r of csvRows(files)) {
     p.tick();
     if (r["CompanyStatus"] !== "Active") continue;
     const address = rowAddress(r);
@@ -188,10 +199,10 @@ async function collectCandidates(
 
 /** Third pass, run only when the PSC expansion reaches companies that were not
  *  at a busy address and so were dropped in pass 2. */
-async function collectByNumber(file: string, want: Set<string>): Promise<CompanyRow[]> {
+async function collectByNumber(files: string[], want: Set<string>): Promise<CompanyRow[]> {
   const out: CompanyRow[] = [];
   const p = progress("pass 3 / rows for PSC-linked companies");
-  for await (const r of csvStream(file) as AsyncIterable<Record<string, string>>) {
+  for await (const r of csvRows(files)) {
     p.tick();
     if (!want.has(r["CompanyNumber"])) continue;
     out.push(toRow(r));
@@ -315,14 +326,15 @@ async function main() {
   if (!SELECT_ONLY) requireApiKey();
   ensureDirs();
 
-  const bulk = findFile(
+  const bulk = findFiles(
     RAW_BULK,
     [".csv"],
     "the Free Company Data Product CSV",
     "  Download and unzip it from http://download.companieshouse.gov.uk/en_output.html\n" +
-      `  then put the .csv in ${RAW_BULK}/`
+      `  then put the .csv (or all six split parts) in ${RAW_BULK}/`
   );
-  console.log(`\n  bulk data: ${bulk}`);
+  console.log(`\n  bulk data: ${bulk.length} file(s)`);
+  for (const f of bulk) console.log(`    ${f}`);
 
   const counts = await countAddresses(bulk);
   const candidates = await collectCandidates(bulk, counts);
@@ -438,7 +450,7 @@ async function main() {
     JSON.stringify(
       {
         generated_at: new Date().toISOString(),
-        source: { bulk, psc: pscFile ? join(RAW_PSC, pscFile) : null },
+        source: { bulk_files: bulk, psc: pscFile ? join(RAW_PSC, pscFile) : null },
         seed_company_numbers: [...seedNumbers],
         companies: selected,
         addressGroups: chosenGroups,
