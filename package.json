@@ -1,0 +1,36 @@
+{
+  "name": "threadweaver",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -b --noEmit",
+    "corpus:fetch": "tsx scripts/fetch-companies.ts",
+    "corpus:build": "tsx scripts/build-corpus.ts",
+    "corpus:chains": "tsx scripts/find-chains.ts"
+  },
+  "dependencies": {
+    "d3-force-3d": "^3.0.5",
+    "minisearch": "^7.1.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-force-graph-3d": "^1.26.1",
+    "three": "^0.169.0",
+    "zustand": "^5.0.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@types/three": "^0.169.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "csv-parse": "^5.6.0",
+    "dotenv": "^16.4.7",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11"
+  }
+}

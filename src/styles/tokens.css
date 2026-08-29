@@ -1,0 +1,51 @@
+/* Threadweaver palette — one accent, spent entirely on proposals.
+   Dark-committed by design: an investigation canvas is a dark room, and the
+   emissive materials on the 3D layer need a dark ground to read. The 2D panels
+   use the same tokens so the two layers feel like one product. */
+
+:root {
+  --bg: #0b0e12;
+  --grid: #161b22;
+  --panel: #10151c;
+  --panel-2: #141a22;
+  --line: #212a35;
+
+  --company: #7c8ca1;
+  --person: #d9a05b;
+  --address: #6e8577;
+  --document: #e6e8ea;
+
+  --proposed: #4fd1c5;
+  --confirmed: #e6e8ea;
+  --reject: #c2513f;
+
+  --text: #e6e8ea;
+  --text-dim: #8b97a6;
+  --text-faint: #5c6774;
+
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --sans: ui-sans-serif, -apple-system, "Segoe UI", Inter, system-ui, sans-serif;
+
+  --r: 6px;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--proposed); }
+
+::selection { background: rgba(79, 209, 197, 0.3); }
