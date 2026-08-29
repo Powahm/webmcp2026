@@ -4,6 +4,7 @@ import GraphCanvas from "./canvas/GraphCanvas";
 import { loadCorpus } from "./corpus/loadCorpus";
 import EvidenceDrawer, { type EvidenceTarget } from "./panels/EvidenceDrawer";
 import Inspector from "./panels/Inspector";
+import ProposalTray from "./panels/ProposalTray";
 import SearchPanel from "./panels/SearchPanel";
 import ToolLog from "./panels/ToolLog";
 import { seedCanvas } from "./state/actions";
@@ -85,6 +86,7 @@ export default function App() {
 
         <aside className="side">
           <SearchPanel />
+          <ProposalTray onShowEvidence={setEvidence} />
           <Inspector onShowEvidence={setEvidence} />
           <EvidenceDrawer target={evidence} onClose={() => setEvidence(null)} />
         </aside>

@@ -530,3 +530,48 @@ code { font-family: var(--mono); font-size: 0.95em; color: var(--proposed); }
   max-height: 200px;
   overflow: auto;
 }
+
+/* --- Proposal tray --------------------------------------------------------
+   The only route from "the agent said so" to "it is in the graph". */
+
+.proposal-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+
+.proposal {
+  border: 1px dashed var(--proposed);
+  border-radius: var(--r);
+  padding: 10px 11px;
+  background: rgba(79, 209, 197, 0.05);
+}
+
+.proposal-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+
+.badge {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--proposed);
+  border: 1px solid var(--proposed);
+  border-radius: 3px;
+  padding: 0 5px;
+}
+
+.proposal-head .origin { margin-left: auto; }
+
+.proposal-claim { margin: 0 0 4px; font-size: 12px; font-weight: 600; line-height: 1.4; }
+.proposal-reason { margin: 0 0 10px; font-size: 11px; color: var(--text-dim); line-height: 1.45; }
+
+.proposal-actions { display: flex; gap: 6px; align-items: center; }
+.proposal-actions .primary { padding: 5px 12px; font-size: 12px; }
+
+.reject {
+  padding: 5px 12px;
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.reject:hover { color: var(--reject); border-color: var(--reject); }
+
+.proposal-actions .citation { margin-right: auto; }

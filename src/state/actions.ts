@@ -437,29 +437,44 @@ export function annotate(
 /**
  * Defence in depth.
  *
- * The primary guarantee is structural — there is no registered tool that
- * promotes a proposal, and nothing in src/webmcp/ imports the two functions
- * below. This adds a second, independent guarantee at the browser level: a
- * promotion must happen inside a real user gesture. A tool call is not one.
+ * The primary guarantee is structural: no registered tool promotes a proposal,
+ * nothing under src/webmcp/ imports the two functions below, and
+ * scripts/check-no-commit-tool.ts fails the build if that stops being true.
  *
- * Where userActivation is unavailable we do not fail closed, because the app
- * must keep working in browsers that lack it — the structural guarantee still
- * holds there on its own.
+ * This is the second, independent guarantee. Promotion requires a DOM event
+ * with `isTrusted === true` — an event the browser itself dispatched from a
+ * real input device. `isTrusted` is read-only and is false on any event
+ * constructed in script, and a tool call has no event at all, so a bug that
+ * wired promotion into a tool fails closed rather than silently committing.
+ *
+ * An earlier version of this check used navigator.userActivation.isActive.
+ * That was too weak to be worth having: it stays true for several seconds
+ * after any interaction, so a tool call arriving just after the analyst
+ * clicked anything would have passed it.
  */
-function requireHumanGesture(what: string): boolean {
-  const ua = (navigator as Navigator & { userActivation?: { isActive: boolean } }).userActivation;
-  if (!ua) return true;
-  if (ua.isActive) return true;
+export type HumanGesture = { isTrusted: boolean } | { nativeEvent: { isTrusted: boolean } };
+
+function isTrustedGesture(gesture: HumanGesture | undefined): boolean {
+  if (!gesture) return false;
+  if ("nativeEvent" in gesture) return gesture.nativeEvent?.isTrusted === true;
+  return gesture.isTrusted === true;
+}
+
+function requireHumanGesture(what: string, gesture: HumanGesture | undefined): boolean {
+  if (isTrustedGesture(gesture)) return true;
   console.error(
-    `[threadweaver] refused to ${what}: no user gesture. Only the analyst can ` +
-      "promote a proposal — see docs/TOOLS.md, 'Why there is no commit tool'."
+    `[threadweaver] refused to ${what}: not a trusted user event. Only the ` +
+      "analyst can promote a proposal — see docs/TOOLS.md, 'Why there is no commit tool'."
   );
   return false;
 }
 
-export function acceptProposal(proposalId: string): ActionResult {
-  if (!requireHumanGesture("accept a proposal")) {
-    return fail("Proposals can only be accepted by the analyst.");
+export function acceptProposal(proposalId: string, gesture?: HumanGesture): ActionResult {
+  if (!requireHumanGesture("accept a proposal", gesture)) {
+    return fail(
+      "Proposals can only be accepted by the analyst, from the proposal tray.",
+      "There is no tool that promotes a proposal. Propose it with a citation and let them decide."
+    );
   }
 
   const map = new Map(proposals().proposals);
@@ -505,9 +520,12 @@ export function acceptProposal(proposalId: string): ActionResult {
   return { ok: true, id: proposalId };
 }
 
-export function rejectProposal(proposalId: string): ActionResult {
-  if (!requireHumanGesture("reject a proposal")) {
-    return fail("Proposals can only be rejected by the analyst.");
+export function rejectProposal(proposalId: string, gesture?: HumanGesture): ActionResult {
+  if (!requireHumanGesture("reject a proposal", gesture)) {
+    return fail(
+      "Proposals can only be rejected by the analyst, from the proposal tray.",
+      "There is no tool that rejects a proposal."
+    );
   }
   const map = new Map(proposals().proposals);
   const p = map.get(proposalId);

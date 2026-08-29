@@ -8,7 +8,7 @@ import {
 } from "../state/actions";
 import { useGraphStore } from "../state/graphStore";
 import { pendingProposals, useProposalStore } from "../state/proposalStore";
-import { centroid, focusTransitionMs, framingDistance, type Vec3 } from "./camera";
+import { focusTransitionMs, framePosition, placedPoints } from "./camera";
 import {
   linkColour,
   linkWidthFor,
@@ -220,25 +220,26 @@ export default function GraphCanvas() {
     return () => window.clearTimeout(t);
   }, [data.nodes.length, frameOnce]);
 
+  const flyTo = useCallback((ids: string[]): boolean => {
+    const fg = fgRef.current;
+    if (!fg) return false;
+    const points = placedPoints(data.nodes.filter((n) => ids.includes(n.id)));
+    const frame = framePosition(fg.camera(), points);
+    if (!frame) return false;
+    fg.cameraPosition(frame.position, frame.lookAt, focusTransitionMs());
+    return true;
+  }, [data.nodes]);
+
   // --- focus(node_ids): the agent moves the analyst's view ------------------
+  // A node proposed a moment ago has no position until the simulation places
+  // it, so a focus that finds nothing placed yet retries rather than flying to
+  // the origin and showing the analyst an empty screen.
   useEffect(() => {
     if (!focusRequest) return;
-    const fg = fgRef.current;
-    if (!fg) return;
-    const points = data.nodes
-      .filter((n) => focusRequest.nodeIds.includes(n.id))
-      .map((n) => ({ x: n.x ?? 0, y: n.y ?? 0, z: n.z ?? 0 }) as Vec3);
-    if (!points.length) return;
-
-    const c = centroid(points);
-    const dist = framingDistance(points, c);
-    const len = Math.hypot(c.x, c.y, c.z) || 1;
-    fg.cameraPosition(
-      { x: c.x + (c.x / len) * dist, y: c.y + (c.y / len) * dist * 0.4, z: c.z + (c.z / len) * dist },
-      c,
-      focusTransitionMs()
-    );
-  }, [focusRequest, data.nodes]);
+    if (flyTo(focusRequest.nodeIds)) return;
+    const retry = window.setTimeout(() => flyTo(focusRequest.nodeIds), 500);
+    return () => window.clearTimeout(retry);
+  }, [focusRequest, flyTo]);
 
   // --- Per-frame: pulse the proposal materials, report the viewport ---------
   const onEngineTick = useCallback(() => {
@@ -313,47 +314,20 @@ export default function GraphCanvas() {
   const handleNodeDoubleClick = useCallback(
     (node: GNode) => {
       noteInteraction();
-      const fg = fgRef.current;
-      if (!fg || node.x === undefined) return;
-      const dist = 110;
-      const len = Math.hypot(node.x, node.y ?? 0, node.z ?? 0) || 1;
-      fg.cameraPosition(
-        {
-          x: node.x + (node.x / len) * dist,
-          y: (node.y ?? 0) + ((node.y ?? 0) / len) * dist,
-          z: (node.z ?? 0) + ((node.z ?? 0) / len) * dist,
-        },
-        { x: node.x, y: node.y ?? 0, z: node.z ?? 0 },
-        focusTransitionMs()
-      );
+      flyTo([node.id]);
     },
-    [noteInteraction]
+    [noteInteraction, flyTo]
   );
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement)?.tagName === "INPUT") return;
       if (e.key === "Escape") clearSelection();
-      if (e.key.toLowerCase() === "f" && selection.length) {
-        const fg = fgRef.current;
-        if (!fg) return;
-        const points = data.nodes
-          .filter((n) => selection.includes(n.id))
-          .map((n) => ({ x: n.x ?? 0, y: n.y ?? 0, z: n.z ?? 0 }));
-        if (!points.length) return;
-        const c = centroid(points);
-        const dist = framingDistance(points, c);
-        const len = Math.hypot(c.x, c.y, c.z) || 1;
-        fg.cameraPosition(
-          { x: c.x + (c.x / len) * dist, y: c.y, z: c.z + (c.z / len) * dist },
-          c,
-          focusTransitionMs()
-        );
-      }
+      if (e.key.toLowerCase() === "f" && selection.length) flyTo(selection);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [selection, data.nodes]);
+  }, [selection, flyTo]);
 
   // --- Rendering ------------------------------------------------------------
   const nodeThreeObject = useCallback(
