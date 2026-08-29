@@ -4,7 +4,7 @@
 .app {
   height: 100%;
   display: grid;
-  grid-template-rows: 40px 1fr 30px;
+  grid-template-rows: 40px minmax(0, 1fr) 168px 26px;
   background: var(--bg);
 }
 
@@ -425,4 +425,108 @@ code { font-family: var(--mono); font-size: 0.95em; color: var(--proposed); }
      window usable rather than broken. */
   .main { grid-template-columns: 1fr; grid-template-rows: 1fr auto; }
   .side { border-left: 0; border-top: 1px solid var(--line); max-height: 45vh; }
+}
+
+/* --- Tool log -------------------------------------------------------------
+   The visible proof that WebMCP is doing the work. Styled properly on purpose:
+   this is what a judge watches during the demo, not a console. */
+
+.toollog {
+  display: grid;
+  grid-template-rows: 28px minmax(0, 1fr);
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+  min-height: 0;
+}
+
+.toollog-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.toollog-head h2 {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.toollog-head .count {
+  margin-left: 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.toollog-head .ghost { margin-left: auto; }
+
+.toollog-body {
+  overflow-y: auto;
+  padding: 4px 0 8px;
+}
+
+.toollog-body .empty { padding: 8px 14px; }
+
+.toollog ul { list-style: none; margin: 0; padding: 0; }
+
+.call {
+  display: grid;
+  grid-template-columns: 74px 46px 168px minmax(0, 1fr) 190px 56px;
+  gap: 10px;
+  align-items: baseline;
+  width: 100%;
+  padding: 3px 14px;
+  background: none;
+  border: 0;
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+.call:hover { background: var(--panel-2); }
+
+.toollog li.failed .call { color: var(--reject); }
+
+.time { color: var(--text-faint); }
+
+.kind {
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 0 5px;
+  font-size: 10px;
+  text-align: center;
+}
+.kind.read { color: var(--text-faint); }
+.kind.write { color: var(--proposed); border-color: var(--proposed); }
+
+.tool { color: var(--text); }
+
+.args, .summary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.summary { color: var(--proposed); }
+.toollog li.failed .summary { color: var(--reject); }
+
+.ms { color: var(--text-faint); text-align: right; }
+
+.args-full {
+  margin: 2px 14px 8px;
+  padding: 8px 10px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: pre-wrap;
+  max-height: 200px;
+  overflow: auto;
 }

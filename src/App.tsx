@@ -5,6 +5,7 @@ import { loadCorpus } from "./corpus/loadCorpus";
 import EvidenceDrawer, { type EvidenceTarget } from "./panels/EvidenceDrawer";
 import Inspector from "./panels/Inspector";
 import SearchPanel from "./panels/SearchPanel";
+import ToolLog from "./panels/ToolLog";
 import { seedCanvas } from "./state/actions";
 
 /**
@@ -88,6 +89,8 @@ export default function App() {
           <EvidenceDrawer target={evidence} onClose={() => setEvidence(null)} />
         </aside>
       </div>
+
+      <ToolLog />
 
       <footer className="toolbar-bottom">
         <span className="dim">

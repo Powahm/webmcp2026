@@ -1,11 +1,17 @@
 /**
- * The registry. Read tools first so they read first in the Site tools panel.
+ * The registry.
  *
- * Step 1 of the build order (docs/PLAN.md §5) is deliberately ONE tool: nothing
- * else is built until a judge's browser can see a tool on the deployed URL.
+ * Read tools first, so they read first in the browser's Site tools panel: an
+ * agent scanning the list should see what it can look at before what it can
+ * assert.
+ *
+ * There is no commit tool, and nothing under src/webmcp/ imports
+ * acceptProposal or rejectProposal. That absence is the safety guarantee.
  */
 
+import { instrument } from "../instrument";
 import type { McpToolDefinition } from "../mcpTypes";
 import { getPageTitle } from "./getPageTitle";
+import { READ_TOOLS } from "./readTools";
 
-export const ALL_TOOLS: McpToolDefinition[] = [getPageTitle];
+export const ALL_TOOLS: McpToolDefinition[] = [...READ_TOOLS, getPageTitle].map(instrument);
