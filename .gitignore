@@ -7,3 +7,5 @@ raw/
 *.log
 .DS_Store
 src/corpus/__dev__/
+_snapshot.tgz
+*.tsbuildinfo

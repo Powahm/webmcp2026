@@ -1,41 +1,100 @@
 import { useEffect, useState } from "react";
 import "./App.css";
+import GraphCanvas from "./canvas/GraphCanvas";
+import { loadCorpus } from "./corpus/loadCorpus";
+import EvidenceDrawer, { type EvidenceTarget } from "./panels/EvidenceDrawer";
+import Inspector from "./panels/Inspector";
+import SearchPanel from "./panels/SearchPanel";
+import { seedCanvas } from "./state/actions";
 
 /**
- * Step 1 shell. The real layout — canvas left, panels right, tool log along the
- * bottom (docs/UI-3D.md) — lands in step 3. This exists so there is something
- * honest on the deployed URL while the registration gate is verified.
+ * Layout, per docs/UI-3D.md: canvas left, panels right, tool log along the
+ * bottom. The 3D layer is spatial; the 2D panels are evidential.
  */
+
+type BootState =
+  | { phase: "loading" }
+  | { phase: "ready"; fixture: boolean }
+  | { phase: "failed"; error: string };
+
 export default function App() {
-  const [host, setHost] = useState<string>("checking…");
+  const [boot, setBoot] = useState<BootState>({ phase: "loading" });
+  const [evidence, setEvidence] = useState<EvidenceTarget | null>(null);
 
   useEffect(() => {
-    if (document.modelContext?.registerTool) setHost("document.modelContext");
-    else if (navigator.modelContext?.registerTool) setHost("navigator.modelContext");
-    else setHost("none — running as a normal web app");
+    let cancelled = false;
+    loadCorpus()
+      .then((corpus) => {
+        if (cancelled) return;
+        seedCanvas();
+        setBoot({ phase: "ready", fixture: corpus.isFixture });
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setBoot({ phase: "failed", error: err instanceof Error ? err.message : String(err) });
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
+  if (boot.phase === "loading") {
+    return (
+      <main className="boot">
+        <div className="boot-card">
+          <h1>Threadweaver</h1>
+          <p className="lede">Loading the corpus…</p>
+        </div>
+      </main>
+    );
+  }
+
+  if (boot.phase === "failed") {
+    return (
+      <main className="boot">
+        <div className="boot-card">
+          <h1>Threadweaver</h1>
+          <p className="lede">The corpus could not be loaded.</p>
+          <pre className="filing-text">{boot.error}</pre>
+          <p className="foot">
+            Run <code>npm run corpus:fetch</code> then <code>npm run corpus:build</code>.
+            See <code>docs/DATA.md</code>.
+          </p>
+        </div>
+      </main>
+    );
+  }
+
   return (
-    <main className="boot">
-      <div className="boot-card">
-        <h1>Threadweaver</h1>
-        <p className="lede">
-          An investigative graph canvas where a human and an AI agent build the same
-          picture together, over real UK Companies House public records.
-        </p>
-        <dl className="kv">
-          <dt>WebMCP host</dt>
-          <dd className={host.startsWith("none") ? "dim" : "ok"}>{host}</dd>
-          <dt>Tools registered</dt>
-          <dd>1 — <code>get_page_title</code></dd>
-          <dt>Build stage</dt>
-          <dd className="dim">1 of 5 — registration gate</dd>
-        </dl>
-        <p className="foot">
-          Open the <strong>Site tools</strong> panel in the address bar. If
-          <code> get_page_title</code> is listed, the gate is passed.
-        </p>
+    <div className="app">
+      <header className="topbar">
+        <span className="brand">Threadweaver</span>
+        <span className="tagline">
+          UK Companies House public records · structure, not accusation
+        </span>
+        {boot.fixture && (
+          <span className="fixture-warning" title="public/corpus/ is missing">
+            DEV FIXTURE — not real records
+          </span>
+        )}
+      </header>
+
+      <div className="main">
+        <GraphCanvas />
+
+        <aside className="side">
+          <SearchPanel />
+          <Inspector onShowEvidence={setEvidence} />
+          <EvidenceDrawer target={evidence} onClose={() => setEvidence(null)} />
+        </aside>
       </div>
-    </main>
+
+      <footer className="toolbar-bottom">
+        <span className="dim">
+          Click a node to select · click a second to select both · F frames the
+          selection · Esc clears it · right-click a node to fly to it
+        </span>
+      </footer>
+    </div>
   );
 }
