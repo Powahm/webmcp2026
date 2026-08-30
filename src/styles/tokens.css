@@ -36,7 +36,9 @@
 
   --text: #e6e9ef;
   --text-dim: #98a3b3;
-  --text-faint: #6a7686;
+  /* ~5:1 on --surface. It was #6a7686 (~4.0:1), which fails at the 10-11px
+     sizes it is actually used at. */
+  --text-faint: #7c8798;
 
   /* Type */
   --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;

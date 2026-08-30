@@ -31,8 +31,9 @@ and a link canvas you build by hand.** That is the test we hold ourselves to.
 There are nineteen tools. Ten read, nine stage a proposal, point at something or report back, and
 **none promotes a proposal into the graph.** That is not a missing feature; it is the design.
 
-Four things have no tool at all, and belong to the human alone: promoting a proposal, raising a line
-of enquiry, filing one, and deleting your own markings. The agent works a queue you wrote.
+Six things have no tool at all, and belong to the human alone: promoting a proposal, rejecting one,
+raising a line of enquiry, filing one, deleting your own markings, and adding a document to the
+working set. The agent works a queue you wrote.
 
 It is guaranteed twice over:
 
@@ -59,7 +60,8 @@ Chrome 149+ works too with `chrome://flags/#enable-webmcp-testing`.
 
 ### Building the corpus
 
-`public/corpus/` is committed, so the app runs without this. To rebuild it from source records:
+`public/corpus/*.json` is what the app serves — there is no backend, so it has to be in the repo
+that gets deployed. To rebuild it from source records:
 
 ```bash
 cp .env.example .env     # add a free Companies House REST API key
@@ -77,8 +79,17 @@ npm run corpus:fetch -- --select-only   # streaming selection, no API calls
 npm run corpus:fetch                    # officers + filing history, cached per company
 npm run corpus:build                    # -> public/corpus/*.json
 npm run corpus:chains                   # candidate 3-4 hop chains, with citations
-npm run corpus:chains -- --lock 0       # lock one; writes docs/VERIFIED-CHAIN.md
+npm run corpus:chains -- --lock 09112233 # lock one by company number; writes docs/VERIFIED-CHAIN.md
 ```
+
+Then commit the result:
+
+```bash
+git add public/corpus                   # the deployed site has no records without it
+```
+
+If the header shows an orange **DEV FIXTURE — not real records** badge, the corpus did not load and
+you are looking at the development stand-in.
 
 `raw/` and `.env` are gitignored. `CH_API_KEY` is read only by `scripts/`; the built bundle contains
 neither the key nor the Companies House hostname, and `npm run build` is checked for that.

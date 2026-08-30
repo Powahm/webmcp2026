@@ -151,9 +151,12 @@ for. Lead the Devpost description with this tool, not with the graph.
   them — that is a real answer, not a failure"*. That readout is the before/after of the whole
   product in one line of UI.
 
+- **Reader queue grouped by company.** 91 filings is a long flat list; they now sit under the
+  company they belong to, with the analyst's own uploads in their own group at the top.
+
 ### P1 — still open
 
-- Reader queue grouped by company (91 filings is a long flat list).
+Nothing. If a day is left over, spend it rehearsing the prompts (§9) rather than adding features.
 
 ### P2 — assume these do not happen
 
@@ -270,9 +273,11 @@ Wednesday. If a prompt reliably fails, that is a description bug, and it is fixa
 that split is built early. If you find yourself shrinking panels to fit on Wednesday morning, the
 answer is to cut a panel, not to shrink them all.
 
-**The offsets break.** Two named failure modes and both fixes are in `docs/ARCHITECTURE.md`. Write
-a test that round-trips a marking through the store and back to the rendered string on Monday, when
-it costs ten minutes, rather than debugging it Tuesday night when it costs the demo.
+**The offsets break.** Two named failure modes and both fixes are in `docs/ARCHITECTURE.md`.
+Covered: `scripts/check-offsets.ts` runs on every build and fails it if a mark stops round-tripping
+through the renderer, or if any corpus citation stops resolving to real text in the filing it
+names. The DOM half — a `Range` mapped back to a source offset — still needs a browser and is
+checked by hand.
 
 **The corpus is unreadable.** The whole Reader premise collapses if the filings render as a wall of
 field:value. See the amendment in `docs/DATA.md` — check the demo filings by actually reading one,

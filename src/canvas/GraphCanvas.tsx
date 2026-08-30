@@ -483,9 +483,19 @@ export default function GraphCanvas() {
 
   return (
     <div className="canvas-wrap" ref={wrapRef}>
+      {/* A canvas is opaque to assistive technology, so it carries a summary
+          of what it holds. The Inspector and the Corpus panel are the
+          navigable, readable equivalents of everything drawn here. */}
       <canvas
         ref={canvasRef}
         className="graph-canvas"
+        role="img"
+        aria-label={
+          `Link chart: ${scene.drawNodes.size} entities, ${scene.drawLinks.length} relationships` +
+          (selection.length ? `. ${selection.length} selected` : "") +
+          (path?.found ? `. A path of ${path.hops} hops connects them` : "") +
+          (path && !path.found ? ". No path connects them" : "")
+        }
         style={{ cursor }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}

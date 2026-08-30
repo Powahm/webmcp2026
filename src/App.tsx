@@ -202,21 +202,46 @@ export default function App() {
         </section>
 
         <aside className="rail-right">
-          <nav className="tabs" aria-label="Panels">
+          <div className="tabs" role="tablist" aria-label="Panels">
             {tabs.map((t) => (
               <button
                 key={t.id}
+                id={`tab-${t.id}`}
+                role="tab"
+                type="button"
                 className={tab === t.id ? "on" : ""}
                 onClick={() => setTab(t.id)}
-                aria-pressed={tab === t.id}
+                aria-selected={tab === t.id}
+                aria-controls="rail-panel"
+                // Only the active tab is in the tab order; arrow keys move
+                // between them, which is what a tablist is supposed to do.
+                tabIndex={tab === t.id ? 0 : -1}
+                onKeyDown={(e) => {
+                  const i = tabs.findIndex((x) => x.id === tab);
+                  const go = (n: number) => {
+                    e.preventDefault();
+                    const next = tabs[(n + tabs.length) % tabs.length];
+                    setTab(next.id);
+                    document.getElementById(`tab-${next.id}`)?.focus();
+                  };
+                  if (e.key === "ArrowRight") go(i + 1);
+                  if (e.key === "ArrowLeft") go(i - 1);
+                  if (e.key === "Home") go(0);
+                  if (e.key === "End") go(tabs.length - 1);
+                }}
               >
                 {t.label}
-                {t.badge ? <span className="tab-badge">{t.badge}</span> : null}
+                {t.badge ? (
+                  <span className="tab-badge">
+                    <span aria-hidden="true">{t.badge}</span>
+                    <span className="sr-only">, {t.badge} waiting</span>
+                  </span>
+                ) : null}
               </button>
             ))}
-          </nav>
+          </div>
 
-          <div className="rail-body">
+          <div className="rail-body" id="rail-panel" role="tabpanel" aria-labelledby={`tab-${tab}`}>
             {tab === "proposals" && <ProposalTray onShowEvidence={showEvidence} />}
             {tab === "enquiries" && <EnquiryPanel onShowEvidence={showEvidence} />}
             {tab === "evidence" && (

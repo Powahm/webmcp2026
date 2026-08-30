@@ -31,6 +31,13 @@ import { readSelection } from "./selection";
  *     own reading visually primary.
  */
 
+/**
+ * Below this the marks column and a 78-column filing stop fitting side by side:
+ * 236px of queue + 372px of rail + 268px of margin + the text itself. Measured,
+ * not guessed — see the media queries in App.css that step the rails down.
+ */
+const MARGIN_FITS_ABOVE = "(max-width: 1520px)";
+
 const TYPE_KEYS: Record<string, MarkingType> = {
   "1": "person",
   "2": "company",
@@ -156,6 +163,23 @@ export default function Reader() {
 
   const pendingSelection = selection?.doc_id === doc?.id ? selection : null;
 
+  /**
+   * The margin costs 268px, and a filing is 78 columns of monospace that must
+   * not wrap — the claim is that this is the record rendered verbatim, and a
+   * correspondence address broken across two lines reads as a bug. So below the
+   * width where both fit, the margin folds away and the analyst opens it when
+   * they want it. Above it, nothing changes.
+   */
+  const [marginOpen, setMarginOpen] = useState(
+    () => !window.matchMedia(MARGIN_FITS_ABOVE).matches
+  );
+  useEffect(() => {
+    const mq = window.matchMedia(MARGIN_FITS_ABOVE);
+    const sync = () => setMarginOpen(!mq.matches);
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+
   if (!doc) {
     return (
       <div className="reader">
@@ -179,9 +203,20 @@ export default function Reader() {
             <span> · {marks.length} mark{marks.length === 1 ? "" : "s"}</span>
           </p>
         </div>
+
+        <button
+          className={`margin-toggle ${marginOpen ? "on" : ""}`}
+          type="button"
+          onClick={() => setMarginOpen((o) => !o)}
+          aria-expanded={marginOpen}
+          aria-controls="reader-margin"
+        >
+          Marks
+          <span className="count">{marks.length}</span>
+        </button>
       </header>
 
-      <div className="reader-body">
+      <div className={`reader-body ${marginOpen ? "" : "solo"}`}>
         <div className="reader-scroll" ref={scrollRef}>
           {/* white-space: pre-wrap, and the string is never touched. */}
           <pre className="filing-text" ref={textRef}>
@@ -226,7 +261,7 @@ export default function Reader() {
           </p>
         </div>
 
-        <MarginList docId={doc.id} onGoTo={scrollToSpan} />
+        {marginOpen && <MarginList docId={doc.id} onGoTo={scrollToSpan} />}
       </div>
 
       <MarkBar selection={pendingSelection} onMark={mark} />
@@ -306,7 +341,7 @@ function MarginList({
   };
 
   return (
-    <aside className="margin">
+    <aside className="margin" id="reader-margin">
       <header className="margin-head">
         <h3>Marks</h3>
         <span className="count">{marks.length}</span>

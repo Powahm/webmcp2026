@@ -11,7 +11,7 @@
     "corpus:fetch": "tsx scripts/fetch-companies.ts",
     "corpus:build": "tsx scripts/build-corpus.ts",
     "corpus:chains": "tsx scripts/find-chains.ts",
-    "check": "tsx scripts/check-no-commit-tool.ts"
+    "check": "tsx scripts/check-no-commit-tool.ts && tsx scripts/check-offsets.ts"
   },
   "dependencies": {
     "minisearch": "^7.1.2",

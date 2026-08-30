@@ -21,6 +21,10 @@ export function segment(text: string, markings: Marking[]): Segment[] {
   const relevant = markings.filter(
     (m) => m.span.start < text.length && m.span.end > m.span.start
   );
+  // An empty document has no runs at all rather than one empty one: every
+  // segment becomes a rendered anchor, and an anchor with no text is a place
+  // the analyst can put a caret but never a selection.
+  if (!text.length) return [];
   if (!relevant.length) {
     return [{ start: 0, end: text.length, text, marks: [] }];
   }

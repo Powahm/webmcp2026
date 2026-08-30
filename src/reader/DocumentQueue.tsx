@@ -2,6 +2,14 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { getCorpus } from "../corpus/loadCorpus";
 import { ingestDocument, openDocument } from "../state/actions";
 import { markingsFor, useReaderStore } from "../state/readerStore";
+import type { CorpusDocument } from "../types";
+
+interface QueueRow {
+  doc: CorpusDocument;
+  /** What kind of record it is, with the company name stripped off. */
+  kind: string;
+  marks: number;
+}
 
 /**
  * The working set of filings.
@@ -54,24 +62,56 @@ export default function DocumentQueue() {
     }
   }, []);
 
-  const rows = useMemo(() => {
-    const { documents } = getCorpus();
+  /**
+   * Grouped by the company the filing belongs to.
+   *
+   * Ninety filings titled "COMPANY NAME — persons with significant control" is
+   * ninety repetitions of the company name and nothing else to read. Grouping
+   * says the name once and leaves the row to say which record it is, which is
+   * the only part that differs.
+   */
+  const groups = useMemo(() => {
+    const { documents, entities } = getCorpus();
     const q = filter.trim().toLowerCase();
-    return queue
-      .map((id) => documents.get(id))
-      .filter((d) => d !== undefined)
-      .filter((d) => !q || d!.title.toLowerCase().includes(q))
-      .map((d) => ({
-        doc: d!,
-        marks: markingsFor(markingMap, d!.id).length,
-      }));
+
+    const byOwner = new Map<string, { label: string; rows: QueueRow[] }>();
+    for (const id of queue) {
+      const doc = documents.get(id);
+      if (!doc) continue;
+      if (q && !doc.title.toLowerCase().includes(q)) continue;
+
+      // "COMPANY — register of directors" -> the part after the dash is what
+      // distinguishes one row from another.
+      const dash = doc.title.indexOf(" — ");
+      const kind = dash > -1 ? doc.title.slice(dash + 3) : doc.title;
+
+      // Anything the analyst brought in has no owning entity. It goes first,
+      // under its own heading, because it is theirs and not ours.
+      const ownerId = doc.entity_id ?? "__yours__";
+      const ownerLabel =
+        ownerId === "__yours__"
+          ? "Your documents"
+          : (entities.get(ownerId)?.label ?? (dash > -1 ? doc.title.slice(0, dash) : ownerId));
+
+      const group = byOwner.get(ownerId);
+      const row: QueueRow = { doc, kind, marks: markingsFor(markingMap, doc.id).length };
+      if (group) group.rows.push(row);
+      else byOwner.set(ownerId, { label: ownerLabel, rows: [row] });
+    }
+
+    const all = [...byOwner.entries()].map(([id, g]) => ({ id, ...g }));
+    // The analyst's own material first; everything else keeps queue order,
+    // which puts the filing carrying hop one of the chain at the top.
+    return all.sort((a, b) => (a.id === "__yours__" ? -1 : b.id === "__yours__" ? 1 : 0));
   }, [queue, filter, markingMap]);
+
+  const total = groups.reduce((n, g) => n + g.rows.length, 0);
 
   return (
     <section className="panel queue">
       <header className="panel-head">
         <h2>Filings</h2>
-        <span className="count">{queue.length}</span>
+        <span className="count">{total}</span>
       </header>
 
       <div
@@ -121,29 +161,42 @@ export default function DocumentQueue() {
         />
       )}
 
-      {rows.length === 0 && (
+      {total === 0 && (
         <p className="empty">
-          No filings in the working set. Add an entity from the corpus and its
-          filings come with it.
+          {filter.trim()
+            ? "No filing in the working set matches that."
+            : "No filings yet. Add an entity from the corpus and its filings come with it, or drop in one of your own."}
         </p>
       )}
 
-      <ul className="queue-list">
-        {rows.map(({ doc, marks }) => (
-          <li key={doc.id}>
-            <button
-              className={`queue-item ${doc.id === openDocId ? "open" : ""}`}
-              onClick={() => openDocument(doc.id)}
-            >
-              <span className="queue-title">{doc.title}</span>
-              <span className="queue-meta">
-                {doc.date && <span>{doc.date}</span>}
-                {marks > 0 && <span className="queue-marks">{marks} marked</span>}
-              </span>
-            </button>
-          </li>
-        ))}
-      </ul>
+      <div className="queue-groups">
+        {groups.map((g) => {
+          const marks = g.rows.reduce((n, r) => n + r.marks, 0);
+          return (
+            <section key={g.id} className={`queue-group ${g.id === "__yours__" ? "yours" : ""}`}>
+              <header className="queue-group-head">
+                <span className="queue-company">{g.label}</span>
+                {marks > 0 && <span className="queue-marks">{marks}</span>}
+              </header>
+              <ul className="queue-list">
+                {g.rows.map(({ doc, kind, marks: n }) => (
+                  <li key={doc.id}>
+                    <button
+                      className={`queue-item ${doc.id === openDocId ? "open" : ""}`}
+                      onClick={() => openDocument(doc.id)}
+                      title={doc.title}
+                    >
+                      <span className="queue-kind">{kind}</span>
+                      {n > 0 && <span className="queue-marks">{n}</span>}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          );
+        })}
+      </div>
+
     </section>
   );
 }

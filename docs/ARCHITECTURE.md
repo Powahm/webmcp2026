@@ -183,7 +183,9 @@ webmcp2026/
 ├─ scripts/                      offline only, never shipped
 │  ├─ fetch-companies.ts         bulk CSV/JSON + REST API -> raw/
 │  ├─ build-corpus.ts            raw -> public/corpus/*.json + MiniSearch index
-│  └─ find-chains.ts             hunts for a non-obvious verifiable 4-hop chain
+│  ├─ find-chains.ts             hunts for a non-obvious verifiable 4-hop chain
+│  ├─ check-no-commit-tool.ts    build gate: the agent still cannot promote anything
+│  └─ check-offsets.ts           build gate: marks and citations still hit the right words
 ├─ public/
 │  └─ corpus/
 │     ├─ entities.json           companies, people, addresses
@@ -260,13 +262,18 @@ time. Spans are indices into that exact string. Break this and every citation in
 points at the wrong words — and now every human marking does too, which is worse, because the human
 made it and will trust it.
 
-**Failure one: computing offsets from the DOM.** When the analyst selects text, do not walk
-`Range.startOffset` across rendered nodes and hope. Render the document as a single text node per
-segment and map the selection back to the source string, or — much cheaper, and what we should do
-given three days — render the whole filing as one text node inside the `<pre>` and read
-`selection.anchorOffset` / `focusOffset` directly against it, normalising the direction. Highlights
-then split that text node into segments, so recompute the segment offsets from the marking list
-rather than from the DOM.
+**Failure one: computing offsets from the DOM.** `Range.startOffset` is relative to whichever
+rendered fragment the selection happened to start in, and the moment one mark exists the filing is
+no longer one text node — `markings.ts` cuts it at every mark boundary so overlapping marks can
+render flat instead of nested. So every rendered run carries its own source offset in `data-start`,
+and `selection.ts` walks up to that anchor and adds the distance within it. Marks then nest and
+overlap freely without the arithmetic drifting.
+
+`scripts/check-offsets.ts` holds that line on every build: it fuzzes `segment()` with overlapping,
+nested, adjacent and out-of-range marks and asserts the runs reassemble into the source byte for
+byte and that each mark's runs reassemble into exactly its own substring. It also re-checks every
+citation in a built corpus against the document it names. The `Range` half needs a browser and is
+still checked by hand.
 
 **Failure two: reading the selection at tool-call time.** Covered in `TOOLS.md` under
 `get_reader_context`, and worth repeating because it will look like a bug and is not: by the time
@@ -291,5 +298,5 @@ genuinely exist in public records. The **canvas** holds only what has been pulle
 starting at twelve nodes, ending a session around forty.
 
 Nothing is planted. The links the agent finds were always there in the filings; they simply were not
-on screen. That is why the demo survives scrutiny, and it is also why performance is trivial: WebGL
-is drawing forty nodes, not nine hundred.
+on screen. That is why the demo survives scrutiny, and it is also why performance is trivial: the
+canvas is drawing forty nodes, not nine hundred.
