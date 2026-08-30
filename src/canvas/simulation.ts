@@ -29,6 +29,9 @@ export interface SimNode {
   fy?: number;
   /** More connections, more mass — hubs sit still and leaves swing. */
   weight: number;
+  /** Which connected component this node belongs to. Assigned in setGraph and
+   *  used to keep separate clusters apart without squashing either of them. */
+  comp: number;
 }
 
 export interface SimLink {
@@ -44,9 +47,34 @@ export const SIM = {
   /** Beyond this, nodes stop pushing at all — keeps distant clusters from
    *  inflating the whole layout. */
   chargeDistanceMax: 620,
-  /** Pull towards the centre of the canvas. Mild: the working set should stay
-   *  on screen without being crushed together. */
-  centerStrength: 0.02,
+
+  /**
+   * There is deliberately no pull towards the world centre.
+   *
+   * A centring force is proportional to a node's distance from the origin, so
+   * it fights the springs and the repulsion everywhere at once: two clusters
+   * that should sit apart get dragged into each other, and a wide chart gets
+   * compressed into a ball. The springs already hold a component together —
+   * that is what a spring is for — so the only two jobs left are keeping
+   * separate components off each other, and keeping the whole picture from
+   * wandering off screen. Those are the two constants below, and neither one
+   * distorts a cluster's shape.
+   */
+
+  /** Repulsion between the centroids of separate components, applied to every
+   *  node in each — so a cluster is translated away from its neighbour rather
+   *  than stretched towards it. */
+  clusterSeparation: 120_000,
+  /** Below this the separation force stops growing, so two components that
+   *  land on top of each other part firmly instead of exploding. */
+  clusterMinDistance: 140,
+  /**
+   * Recentring. Applied as one identical vector to every node, which makes it
+   * a pure translation of the whole layout: it can move the picture back into
+   * view, and it cannot change the shape of anything in it.
+   */
+  driftCorrection: 0.012,
+
   /** Nodes are drawn as discs; this stops them overlapping. */
   collisionPadding: 16,
 
@@ -74,14 +102,22 @@ export const linkStrengthFor = (proposed: boolean, acceptT = 1): number =>
     : SIM.linkStrengthProposed +
       (SIM.linkStrengthConfirmed - SIM.linkStrengthProposed) * acceptT;
 
-/** Radius in world units. Hubs read bigger, the way they do in Obsidian. */
+/**
+ * Radius in world units. Hubs read bigger, the way they do in Obsidian.
+ *
+ * The floor is set by the glyph rather than by taste: a disc smaller than about
+ * nine world units cannot carry a legible symbol, and a node whose type you
+ * cannot read is a dot.
+ */
 export const radiusFor = (weight: number, proposed: boolean): number =>
-  (proposed ? 7 : 8) + Math.min(9, Math.sqrt(weight) * 3.2);
+  (proposed ? 9 : 10) + Math.min(10, Math.sqrt(weight) * 3.4);
 
 export class Simulation {
   nodes: SimNode[] = [];
   links: SimLink[] = [];
   alpha = 1;
+  /** How many connected components the current graph has. */
+  components = 0;
 
   private index = new Map<string, SimNode>();
 
@@ -143,6 +179,7 @@ export class Simulation {
         vx: 0,
         vy: 0,
         weight: n.weight,
+        comp: 0,
       };
       next.push(fresh);
       nextIndex.set(n.id, fresh);
@@ -151,6 +188,49 @@ export class Simulation {
     this.nodes = next;
     this.index = nextIndex;
     this.links = links.filter((l) => nextIndex.has(l.source) && nextIndex.has(l.target));
+    this.labelComponents();
+  }
+
+  /**
+   * Label each node with its connected component.
+   *
+   * A flood fill over the adjacency, which is cheap at this size and only runs
+   * when the graph changes. Every unconnected node is its own component, which
+   * is exactly right: a lone entity the analyst dropped on the canvas should be
+   * pushed clear of the cluster it is not part of, not absorbed into it.
+   */
+  private labelComponents(): void {
+    const adjacency = new Map<string, string[]>();
+    const join = (a: string, b: string) => {
+      const list = adjacency.get(a);
+      if (list) list.push(b);
+      else adjacency.set(a, [b]);
+    };
+    for (const l of this.links) {
+      join(l.source, l.target);
+      join(l.target, l.source);
+    }
+
+    for (const n of this.nodes) n.comp = -1;
+
+    let comp = 0;
+    for (const start of this.nodes) {
+      if (start.comp !== -1) continue;
+      const queue = [start];
+      start.comp = comp;
+      while (queue.length) {
+        const node = queue.pop()!;
+        for (const id of adjacency.get(node.id) ?? []) {
+          const other = this.index.get(id);
+          if (other && other.comp === -1) {
+            other.comp = comp;
+            queue.push(other);
+          }
+        }
+      }
+      comp++;
+    }
+    this.components = comp;
   }
 
   reheat(alpha = 0.85): void {
@@ -228,7 +308,10 @@ export class Simulation {
       t.vy -= fy;
     }
 
-    // Centring and integration.
+    // Cluster forces, and the one correction that keeps the picture on screen.
+    this.applyClusterForces(a);
+
+    // Integration.
     for (const n of nodes) {
       if (n.fx !== undefined && n.fy !== undefined) {
         n.x = n.fx;
@@ -237,8 +320,6 @@ export class Simulation {
         n.vy = 0;
         continue;
       }
-      n.vx -= n.x * SIM.centerStrength * a;
-      n.vy -= n.y * SIM.centerStrength * a;
       n.vx *= SIM.velocityDecay;
       n.vy *= SIM.velocityDecay;
       n.x += n.vx;
@@ -246,6 +327,85 @@ export class Simulation {
     }
 
     return true;
+  }
+
+  /**
+   * Keep separate clusters off each other, and the whole picture in view.
+   *
+   * Both forces act on a component as a whole rather than on nodes
+   * individually, so neither can distort the shape the springs worked out. That
+   * is the difference from the centring force this replaced: a cluster is moved
+   * here, never squeezed.
+   */
+  private applyClusterForces(a: number): void {
+    const count = this.components;
+    if (count === 0) return;
+
+    const sumX = new Float64Array(count);
+    const sumY = new Float64Array(count);
+    const size = new Float64Array(count);
+    for (const n of this.nodes) {
+      sumX[n.comp] += n.x;
+      sumY[n.comp] += n.y;
+      size[n.comp]++;
+    }
+    for (let c = 0; c < count; c++) {
+      if (size[c]) {
+        sumX[c] /= size[c];
+        sumY[c] /= size[c];
+      }
+    }
+
+    // Separation. Every pair of components pushes apart along the line between
+    // their centroids, and every node in a component gets the same push.
+    if (count > 1) {
+      const pushX = new Float64Array(count);
+      const pushY = new Float64Array(count);
+
+      for (let i = 0; i < count; i++) {
+        for (let j = i + 1; j < count; j++) {
+          let dx = sumX[j] - sumX[i];
+          let dy = sumY[j] - sumY[i];
+          let d = Math.hypot(dx, dy);
+          if (d < 1e-3) {
+            // Coincident centroids have no direction to separate along.
+            dx = 1;
+            dy = (i % 2 === 0 ? 1 : -1) * 0.6;
+            d = Math.hypot(dx, dy);
+          }
+          const clamped = Math.max(d, SIM.clusterMinDistance);
+          const force = (SIM.clusterSeparation * a) / (clamped * clamped);
+          const ux = dx / d;
+          const uy = dy / d;
+          pushX[i] -= ux * force;
+          pushY[i] -= uy * force;
+          pushX[j] += ux * force;
+          pushY[j] += uy * force;
+        }
+      }
+
+      for (const n of this.nodes) {
+        if (n.fx !== undefined) continue;
+        n.vx += pushX[n.comp];
+        n.vy += pushY[n.comp];
+      }
+    }
+
+    // Recentring, as one shared vector: a translation, not a compression.
+    let gx = 0;
+    let gy = 0;
+    for (let c = 0; c < count; c++) {
+      gx += sumX[c];
+      gy += sumY[c];
+    }
+    gx = (gx / count) * SIM.driftCorrection * a;
+    gy = (gy / count) * SIM.driftCorrection * a;
+    if (gx === 0 && gy === 0) return;
+    for (const n of this.nodes) {
+      if (n.fx !== undefined) continue;
+      n.vx -= gx;
+      n.vy -= gy;
+    }
   }
 
   /** Bounding box of the given ids, or of everything. Used to frame the view. */

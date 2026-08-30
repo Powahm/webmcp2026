@@ -4,6 +4,17 @@ export const PALETTE = {
   bg: "#0d1117",
   grid: "#151b24",
 
+  /**
+   * One ink for every confirmed entity on the canvas.
+   *
+   * Type is carried by the glyph on the disc (src/canvas/glyphs.ts), not by the
+   * disc's colour. That frees colour to mean *state* — proposed, asserted,
+   * on-path — which is the distinction a reader actually has to make quickly.
+   * The per-type colours below survive for the small chips in the side panels,
+   * where there is no room for a glyph.
+   */
+  node: "#61748c",
+
   company: "#7aa2d4",
   person: "#e0a458",
   address: "#6fbfa0",

@@ -10,6 +10,7 @@ import EvidenceDrawer, { type EvidenceTarget } from "./panels/EvidenceDrawer";
 import Inspector from "./panels/Inspector";
 import ProposalTray from "./panels/ProposalTray";
 import SearchPanel from "./panels/SearchPanel";
+import Settings from "./panels/Settings";
 import ToolLog from "./panels/ToolLog";
 import { openDocument, seedCanvas } from "./state/actions";
 import { useDecisionLog } from "./state/decisionLog";
@@ -44,6 +45,7 @@ export default function App() {
   const [workspace, setWorkspace] = useState<Workspace>("read");
   const [tab, setTab] = useState<Tab>("proposals");
   const [evidence, setEvidence] = useState<EvidenceTarget | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const proposalMap = useProposalStore((s) => s.proposals);
   const enquiryMap = useEnquiryStore((s) => s.enquiries);
@@ -178,6 +180,22 @@ export default function App() {
         <span className="tool-badge" title={ALL_TOOLS.map((t) => t.name).join("\n")}>
           {ALL_TOOLS.length} WebMCP tools
         </span>
+
+        <div className="settings-anchor">
+          <button
+            className={`settings-button ${settingsOpen ? "on" : ""}`}
+            aria-label="Settings"
+            aria-expanded={settingsOpen}
+            title="Settings"
+            onClick={() => setSettingsOpen((open) => !open)}
+          >
+            <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden focusable="false">
+              <circle cx="8" cy="8" r="2.6" fill="none" stroke="currentColor" strokeWidth="1.4" />
+              <circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="1.4" strokeDasharray="2.6 2.2" />
+            </svg>
+          </button>
+          {settingsOpen && <Settings onClose={() => setSettingsOpen(false)} />}
+        </div>
 
         {boot.fixture && (
           <span className="fixture-warning" title="public/corpus/ is missing">

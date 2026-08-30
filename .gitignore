@@ -9,3 +9,5 @@ raw/
 src/corpus/__dev__/
 _snapshot.tgz
 *.tsbuildinfo
+
+.vercel

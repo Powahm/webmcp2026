@@ -3,6 +3,7 @@ import { findPaths } from "../corpus/paths";
 import { canvasEdges, clearSelection, setViewport, toggleSelection } from "../state/actions";
 import { useGraphStore } from "../state/graphStore";
 import { pendingProposals, useProposalStore } from "../state/proposalStore";
+import { NODE_KINDS, useGlyphStore } from "./glyphs";
 import type { NodeKind } from "./palette";
 import { draw, hitTest, linkKey, resizeCanvas, type DrawLink, type DrawNode, type Scene } from "./render";
 import {
@@ -78,6 +79,10 @@ export default function GraphCanvas() {
 
   const [hovered, setHovered] = useState<string | null>(null);
   const [cursor, setCursor] = useState<"grab" | "grabbing" | "pointer">("grab");
+
+  /** Only the legend needs these in React. The canvas reads them straight from
+   *  the store on each frame, so a change shows up without an invalidation. */
+  const glyphs = useGlyphStore((s) => s.glyphs);
 
   const nodes = useGraphStore((s) => s.nodes);
   const edges = useGraphStore((s) => s.edges);
@@ -541,11 +546,19 @@ export default function GraphCanvas() {
         </div>
       )}
 
+      {/* A reminder, not a decoder ring — the glyph is on the node itself. */}
       <div className="canvas-legend">
-        <span><i className="swatch company" /> company</span>
-        <span><i className="swatch person" /> person</span>
-        <span><i className="swatch address" /> address</span>
-        <span><i className="swatch proposed" /> proposed</span>
+        {NODE_KINDS.map((kind) => (
+          <span key={kind}>
+            <i className="swatch glyph" aria-hidden>
+              {glyphs[kind]}
+            </i>{" "}
+            {kind}
+          </span>
+        ))}
+        <span>
+          <i className="swatch proposed" /> proposed
+        </span>
       </div>
 
       {scene.drawNodes.size === 0 && (

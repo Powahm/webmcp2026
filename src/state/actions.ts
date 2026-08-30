@@ -135,6 +135,11 @@ export const canvasNodes = (): CanvasNode[] => [...graph().nodes.values()];
 export const canvasEdges = (): CanvasEdge[] => [...graph().edges.values()];
 export const onCanvas = (id: string): boolean => graph().nodes.has(id);
 
+/** True only while seedCanvas is placing the opening working set, so those
+ *  placements stay out of the decision log. See seedCanvas at the foot of this
+ *  file. */
+let seeding = false;
+
 /** A node id is resolvable if it is on the canvas or is a pending proposal. */
 function resolvableNodeId(id: string): boolean {
   if (onCanvas(id)) return true;
@@ -167,7 +172,9 @@ export function addCorpusNode(entityId: string): ActionResult {
   // Bring across every corpus edge that now has both ends on the canvas. The
   // analyst added the node; the relationships it already had are not new claims.
   attachCorpusEdgesFor(entityId);
-  record("human", "added", `${entity.type} "${entity.label}" to the canvas`, entityId);
+  if (!seeding) {
+    record("human", "added", `${entity.type} "${entity.label}" to the canvas`, entityId);
+  }
   return { ok: true, id: entityId };
 }
 
@@ -928,7 +935,17 @@ export function rejectProposal(proposalId: string, gesture?: HumanGesture): Acti
  */
 export function seedCanvas(): void {
   const { seedNodeIds, seedDocIds, entities, documents } = getCorpus();
-  for (const id of seedNodeIds) addCorpusNode(id);
+
+  // The seed is the state the session starts in, not twelve decisions somebody
+  // made. Logging each one as `human · added` fills the top of an audit trail
+  // with actions no human took — which is exactly the kind of claim this log
+  // exists to make impossible. One `opened` entry below says the true thing.
+  seeding = true;
+  try {
+    for (const id of seedNodeIds) addCorpusNode(id);
+  } finally {
+    seeding = false;
+  }
 
   const queue: string[] = [];
   const push = (docId: string) => {

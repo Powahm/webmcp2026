@@ -329,6 +329,15 @@ input::placeholder {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  /* A panel is never allowed to push the rail sideways. If something inside is
+     too wide, that is a bug in the panel, and a horizontal scrollbar on the
+     rail hides it instead of showing it. */
+  overflow-x: hidden;
+}
+
+.rail-right .panel,
+.rail-left .panel {
+  min-width: 0;
 }
 
 .stage {
@@ -544,7 +553,10 @@ input::placeholder {
    this exact string. */
 .filing-text {
   max-width: 78ch;
-  margin: 0;
+  /* Centred. The measure is fixed by readability, but the pane is as wide as
+     the window: left-aligning the column leaves most of the stage empty and the
+     filing marooned in a corner. */
+  margin: 0 auto;
   font-family: var(--mono);
   font-size: 12.5px;
   line-height: 1.85;
@@ -555,7 +567,8 @@ input::placeholder {
 
 .provenance {
   max-width: 78ch;
-  margin: var(--s5) 0 0;
+  /* Same column as the filing above it. */
+  margin: var(--s5) auto 0;
   padding-top: var(--s3);
   border-top: 1px solid var(--line-soft);
   color: var(--text-faint);
@@ -648,6 +661,122 @@ input::placeholder {
 }
 .swatch.proposed {
   background: var(--agent);
+}
+
+/* In the canvas legend the swatch *is* the glyph, so it carries no colour of
+   its own — the whole point is that type is no longer a colour. */
+.swatch.glyph {
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  background: none;
+  font-size: 12px;
+  line-height: 1;
+  vertical-align: -2px;
+  font-style: normal;
+}
+
+/* ------------------------------------------------------------- settings */
+
+.settings-anchor {
+  position: relative;
+  flex: none;
+}
+
+.settings-button {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+
+.settings-button:hover,
+.settings-button.on {
+  border-color: color-mix(in srgb, var(--text-dim) 45%, transparent);
+  color: var(--text);
+}
+
+.settings-pop {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 40;
+  width: 300px;
+  padding: var(--s3) var(--s4) var(--s4);
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  background: var(--surface-2);
+  box-shadow: 0 18px 40px rgb(0 0 0 / 55%);
+}
+
+.settings-pop .panel-head {
+  padding: 0 0 var(--s2);
+}
+
+.settings-pop .hint {
+  margin: 0 0 var(--s3);
+}
+
+.glyph-settings {
+  display: grid;
+  gap: var(--s3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.glyph-kind {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--text-faint);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.glyph-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.glyph-choice,
+.glyph-input {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1;
+  text-align: center;
+}
+
+.glyph-choice {
+  cursor: pointer;
+}
+
+.glyph-choice:hover {
+  border-color: color-mix(in srgb, var(--text-dim) 45%, transparent);
+}
+
+.glyph-choice.on {
+  border-color: var(--agent);
+}
+
+/* The escape hatch: any character at all, for an analyst whose symbol we did
+   not think of. */
+.glyph-input {
+  width: 42px;
+  font-family: inherit;
 }
 
 /* --- The margin --- */
@@ -1426,7 +1555,6 @@ input::placeholder {
 /* Relation and name are two separate spans; without a gap they read as one
    word — "← directorDavid Robert CASTELLAN". */
 .edge-jump,
-.connect,
 .expand-list button {
   display: flex;
   align-items: baseline;
@@ -1447,9 +1575,47 @@ input::placeholder {
   overflow-wrap: anywhere;
 }
 
-.edge-jump:hover,
-.connect:hover {
+.edge-jump:hover {
   color: var(--text);
+}
+
+/* The two-nodes-selected form. It used to share the flex row above, which laid
+   its label, select, button and explanation out side by side and squeezed the
+   explanation into a one-character-wide column with a scrollbar under it. It is
+   a form, so it gets a form's layout. */
+.connect {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--s2) var(--s3);
+  width: 100%;
+  margin-top: var(--s3);
+  color: var(--text-dim);
+}
+
+.connect label {
+  color: var(--text-faint);
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.connect select {
+  min-width: 0;
+  width: 100%;
+}
+
+.connect .primary,
+.connect .hint {
+  grid-column: 1 / -1;
+}
+
+.connect .primary {
+  justify-self: start;
+}
+
+.connect .hint {
+  margin: 0;
 }
 
 .rel {

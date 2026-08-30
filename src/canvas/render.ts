@@ -1,4 +1,5 @@
-import { colourFor, PALETTE, type NodeKind } from "./palette";
+import { glyphFor } from "./glyphs";
+import { PALETTE, type NodeKind } from "./palette";
 import { radiusFor, type SimNode } from "./simulation";
 import { toScreen, type Transform } from "./viewport";
 
@@ -230,7 +231,9 @@ export function draw(
     const selected = scene.selection.has(n.id);
     const hovered = scene.hovered === n.id;
     const dim = dimFactor(scene, n.id);
-    const colour = n.proposed ? PALETTE.proposed : colourFor(n.type);
+    // Every confirmed entity is the same ink. What kind of thing it is comes
+    // from the glyph below; the colour is left free to mean state.
+    const colour = n.proposed ? PALETTE.proposed : PALETTE.node;
 
     ctx.globalAlpha = dim;
 
@@ -273,6 +276,22 @@ export function draw(
         ctx.lineWidth = 1.2;
         ctx.stroke();
       }
+    }
+
+    // The glyph. This is what says *what the node is* — the reason the discs
+    // are all one colour. Below roughly nine pixels a symbol stops being a
+    // symbol and becomes a smudge, so at that point we draw nothing rather
+    // than something illegible; zooming in brings it straight back.
+    const glyph = glyphFor(n.type);
+    if (glyph && r >= 9) {
+      ctx.save();
+      ctx.font = `${Math.round(r * 1.05)}px "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", ui-sans-serif, system-ui, sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.globalAlpha = dim * (n.proposed ? 0.9 : 1);
+      ctx.fillStyle = PALETTE.text;
+      ctx.fillText(glyph, x, y);
+      ctx.restore();
     }
 
     placed.push({ x0: x - r - 2, y0: y - r - 2, x1: x + r + 2, y1: y + r + 2 });
