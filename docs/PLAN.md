@@ -140,12 +140,20 @@ minutes — there is no server that has it, no API that exposes it, and no page-
 reconstructs it. It is the page's own state, and handing it to an agent is precisely what WebMCP is
 for. Lead the Devpost description with this tool, not with the graph.
 
-### P1 — build if P0 lands on time
+### P1 — done
 
-- **Human-side upload.** Drop a `.txt` / `.md` file onto the Reader and it joins the working set,
-  indexed in-browser. Turns "your corpus" into "my documents" and is a strong beat. **Text only —
-  no PDF, no OCR.** PDF.js plus stable character offsets is a day of work and it will eat Tuesday.
-- Dim-the-rest when a path is highlighted.
+- **Human-side upload.** Drop a `.txt` / `.md` onto the Reader and it joins the working set,
+  indexed in the browser, markable, searchable by the agent. **Text only — no PDF, no OCR.**
+  PDF.js plus stable character offsets is a different project, and an offset that drifts points
+  every mark and every citation at the wrong words.
+- **Path highlighting.** Select two nodes and the route between them lights up while everything
+  else drops to 12%. When there is no route the canvas says so — *"nothing on this canvas connects
+  them — that is a real answer, not a failure"*. That readout is the before/after of the whole
+  product in one line of UI.
+
+### P1 — still open
+
+- Reader queue grouped by company (91 filings is a long flat list).
 
 ### P2 — assume these do not happen
 

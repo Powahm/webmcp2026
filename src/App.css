@@ -764,6 +764,50 @@ input::placeholder {
   overflow-y: auto;
 }
 
+/* The analyst's own material. Small and quiet — it is an affordance, not a
+   feature to shout about, and the queue below it is the real content. */
+.dropzone {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: var(--s3);
+  padding: var(--s3) var(--s2);
+  border: 1px dashed var(--line);
+  border-radius: var(--r2);
+  text-align: center;
+  transition: border-color 120ms, background 120ms;
+}
+
+.dropzone.over {
+  border-color: var(--agent);
+  border-style: solid;
+  background: color-mix(in srgb, var(--agent-dim) 22%, transparent);
+}
+
+.dropzone-btn {
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.dropzone:hover .dropzone-btn,
+.dropzone.over .dropzone-btn {
+  color: var(--text);
+}
+
+.dropzone-note {
+  color: var(--text-faint);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.dropzone-error {
+  margin: 0 0 var(--s3);
+  color: var(--reject);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
 .queue-item {
   display: block;
   width: 100%;
@@ -822,6 +866,53 @@ input::placeholder {
   display: flex;
   flex-direction: column;
   gap: 5px;
+}
+
+/* Two nodes selected: the canvas answers "how are these related?" — including
+   when the answer is "they are not". An empty result is a first-class outcome
+   here, not an error state, so it is styled as information. See docs/METHOD.md. */
+.path-readout {
+  position: absolute;
+  top: var(--s3);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: baseline;
+  gap: var(--s2);
+  max-width: 60ch;
+  padding: 7px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-2) 92%, transparent);
+  font-size: 11px;
+  color: var(--text-dim);
+  backdrop-filter: blur(8px);
+  animation: readout-in 180ms ease-out;
+}
+
+.path-readout strong {
+  font-size: 12px;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.path-readout.found {
+  border-color: var(--agent-dim);
+}
+
+.path-readout.found strong {
+  color: var(--agent);
+}
+
+@keyframes readout-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -4px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
 }
 
 .canvas-legend {

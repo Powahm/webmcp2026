@@ -16,9 +16,11 @@ and a human dragging across a paragraph land in the *same* `addMarking` call, di
 `origin`. There is no agent-flavoured write path. If you ever find yourself adding one, the product
 has stopped being what `docs/METHOD.md` says it is.
 
-**The one asymmetry, and it is deliberate.** Four operations exist only for the human and have no
-tool at all: promoting a proposal, filing an enquiry, raising an enquiry, deleting a marking. See
-the table at the end of `docs/TOOLS.md`. `scripts/check-no-commit-tool.ts` enforces it in CI.
+**The one asymmetry, and it is deliberate.** Six operations exist only for the human and have no
+tool at all: promoting a proposal, rejecting one, raising an enquiry, filing one, deleting a
+marking, and adding a document. See the table at the end of `docs/TOOLS.md`.
+`scripts/check-no-commit-tool.ts` enforces it in CI — it checks each one still refuses to run
+without a trusted DOM event, so the guarantee cannot rot.
 
 ## System
 

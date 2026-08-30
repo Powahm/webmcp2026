@@ -48,7 +48,7 @@ const read = <T,>(f: string): T => JSON.parse(readFileSync(join(CORPUS, f), "utf
 const entities = read<Entity[]>("entities.json");
 const edges = read<Edge[]>("edges.json");
 const documents = read<CorpusDocument[]>("documents.json");
-const seed = read<{ node_ids: string[] }>("seed.json");
+const seed = read<{ node_ids: string[]; doc_ids?: string[] }>("seed.json");
 
 const byId = new Map(entities.map((e) => [e.id, e]));
 const docById = new Map(documents.map((d) => [d.id, d]));
@@ -215,12 +215,94 @@ function print(chains: Chain[]) {
 
 function lock(c: Chain) {
   // The endpoints must be on the canvas at boot; the intermediates must not be.
-  const keep = seed.node_ids.filter((id) => !c.hiddenIntermediates.includes(id));
+  //
+  // Order matters, and getting it wrong is what makes the demo unusable: the
+  // seed used to be "whatever twelve companies the address pass picked, plus
+  // the endpoints appended". That buried both endpoints in a crowd of
+  // unrelated companies, so the analyst could not find the two things the
+  // whole demo is about. The canvas is built around the chain now.
+  const hidden = new Set(c.hiddenIntermediates);
   const endpoints = [c.nodes[0], c.nodes[c.nodes.length - 1]];
-  for (const e of endpoints) if (!keep.includes(e)) keep.push(e);
 
-  const next = { node_ids: keep.slice(0, 14) };
-  writeFileSync(join(CORPUS, "seed.json"), JSON.stringify(next, null, 2));
+  const keep: string[] = [];
+  const add = (id: string) => {
+    if (!hidden.has(id) && !keep.includes(id) && byId.has(id)) keep.push(id);
+  };
+
+  for (const e of endpoints) add(e);
+
+  // A couple of real neighbours per endpoint, so the canvas reads as a working
+  // set rather than two lonely nodes — but never an intermediate, and never so
+  // many that the endpoints stop being findable.
+  for (const e of endpoints) {
+    let taken = 0;
+    for (const { to } of adjacency.get(e) ?? []) {
+      if (taken >= 3) break;
+      if (hidden.has(to) || keep.includes(to)) continue;
+      add(to);
+      taken++;
+    }
+  }
+
+  // Then whatever the previous seed had, for background texture.
+  for (const id of seed.node_ids) {
+    if (keep.length >= 12) break;
+    add(id);
+  }
+
+  const node_ids = keep.slice(0, 12);
+
+  /**
+   * The reader queue, with the filing that carries hop one at the front.
+   *
+   * That document is what the analyst sees on load, and the first thirty
+   * seconds of the video are them reading it and highlighting the name in it.
+   * If the opening filing has nothing worth marking, the demo starts flat and
+   * no amount of agent cleverness recovers it — so the chain decides the
+   * opening shot rather than the other way round. See docs/DATA.md.
+   */
+  const openingDocId = c.edges[0]?.citations[0]?.doc_id;
+
+  /**
+   * A filing belonging to a hidden intermediate must never be in the queue.
+   *
+   * ENVIROPASS LTD's PSC statement names *both* people in this chain, so
+   * putting it in front of the analyst hands them the entire answer before the
+   * agent does anything. Hiding the node and then shipping its filing is not
+   * hiding it at all.
+   */
+  const revealsIntermediate = (docId: string) => {
+    const doc = docById.get(docId);
+    if (!doc) return true;
+    for (const id of hidden) {
+      const number = id.startsWith("company:") ? id.slice("company:".length) : null;
+      if (number && docId.includes(number)) return true;
+      if (doc.text.includes(byId.get(id)?.label ?? "\u0000")) return true;
+    }
+    return false;
+  };
+
+  const onCanvas = new Set(node_ids);
+  const existing: string[] = Array.isArray(seed.doc_ids) ? seed.doc_ids : [];
+  const doc_ids = [
+    ...(openingDocId ? [openingDocId] : []),
+    // Filings belonging to what is actually on the canvas — the analyst's own
+    // working set, and nothing that gives the chain away.
+    ...documents
+      .filter((d) => {
+        const owner = [...onCanvas].find((n) => d.id.includes(n.split(":")[1] ?? "\u0000"));
+        return Boolean(owner);
+      })
+      .map((d) => d.id),
+    ...existing,
+  ]
+    .filter((d, i, all) => d && all.indexOf(d) === i)
+    .filter((d) => d === openingDocId || !revealsIntermediate(d));
+
+  writeFileSync(
+    join(CORPUS, "seed.json"),
+    JSON.stringify({ node_ids, doc_ids }, null, 2)
+  );
 
   const md = [
     "# The verified chain",
@@ -249,23 +331,79 @@ function lock(c: Chain) {
     "Endpoints are seeded so the analyst can drag them together and ask.",
     "Intermediates are deliberately absent from `public/corpus/seed.json`.",
     "",
+    "## The opening shot",
+    "",
+    `The reader opens on **\`${c.edges[0]?.citations[0]?.doc_id ?? "?"}\`** — the filing that`,
+    "carries hop one. Rehearse this exact move:",
+    "",
+    `1. Read it, then select **"${(() => { const cit = c.edges[0]?.citations[0]; const d = cit && docById.get(cit.doc_id); return d ? d.text.slice(cit.span.start, cit.span.end).trim() : "?"; })()}"**`,
+    `   (characters ${c.edges[0]?.citations[0]?.span.start}–${c.edges[0]?.citations[0]?.span.end}).`,
+    "2. Press `1` to mark it `person`.",
+    "3. Raise a line of enquiry in your own words — *\"what else does this person control?\"*",
+    "4. Hand it to the agent.",
+    "",
+    "No AI is on screen for any of that. It is the whole differentiator — do not rush it.",
+    "",
   ].join("\n");
 
   writeFileSync(join("docs", "VERIFIED-CHAIN.md"), md);
-  console.log(`\n  locked.\n  rewrote ${join(CORPUS, "seed.json")} (${next.node_ids.length} nodes)`);
+  console.log(`\n  locked.\n  rewrote ${join(CORPUS, "seed.json")} (${node_ids.length} nodes, ${doc_ids.length} filings)`);
   console.log(`  wrote docs/VERIFIED-CHAIN.md — now verify every hop by hand.\n`);
 }
 
 const chains = findChains();
 const lockArg = process.argv.indexOf("--lock");
-if (lockArg > -1) {
-  const idx = Number(process.argv[lockArg + 1]);
-  if (!Number.isInteger(idx) || !chains[idx]) {
-    console.error(`\n  --lock needs an index between 0 and ${chains.length - 1}.\n`);
+
+/**
+ * Resolve what to lock.
+ *
+ * An index is convenient but not stable: the list is recomputed on every run,
+ * and several chains routinely tie on score, so `--lock 7` can lock a
+ * different chain than the `[7]` you just read. Once a chain has been verified
+ * by hand that is a genuinely dangerous way to lose it, so `--lock` also takes
+ * the far end's company number, which identifies a chain rather than a
+ * position in a list.
+ */
+function resolveLock(arg: string | undefined): Chain | null {
+  if (!arg) return null;
+
+  const idx = Number(arg);
+  if (Number.isInteger(idx) && String(idx) === arg.trim() && chains[idx]) return chains[idx];
+
+  // Anything else: match against the ids and labels along each chain, so a
+  // company number or a distinctive part of a name both work.
+  const needle = arg.trim().toLowerCase();
+  const hits = chains.filter((c) =>
+    c.nodes.some((n) => n.toLowerCase().includes(needle) || label(n).toLowerCase().includes(needle))
+  );
+  if (hits.length === 1) return hits[0];
+  if (hits.length > 1) {
+    // Prefer one whose *endpoint* matches — that is what the caller named.
+    const endpointHit = hits.filter((c) => {
+      const last = c.nodes[c.nodes.length - 1];
+      return last.toLowerCase().includes(needle) || label(last).toLowerCase().includes(needle);
+    });
+    if (endpointHit.length >= 1) return endpointHit[0];
+    console.error(`\n  "${arg}" matches ${hits.length} chains. Be more specific.\n`);
     process.exit(1);
   }
-  print([chains[idx]]);
-  lock(chains[idx]);
+  return null;
+}
+
+if (lockArg > -1) {
+  const arg = process.argv[lockArg + 1];
+  const chosenChain = resolveLock(arg);
+  if (!chosenChain) {
+    console.error(
+      `\n  --lock needs an index between 0 and ${chains.length - 1}, or a company\n` +
+        `  number / name from the chain you want — e.g. --lock 15481912\n\n` +
+        `  A number is a position in a list that is recomputed every run, so it can\n` +
+        `  move. Once you have verified a chain by hand, lock it by company number.\n`
+    );
+    process.exit(1);
+  }
+  print([chosenChain]);
+  lock(chosenChain);
 } else {
   print(chains);
 }

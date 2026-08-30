@@ -129,6 +129,26 @@ async function loadFixture(): Promise<Omit<Corpus, "isFixture">> {
   };
 }
 
+/**
+ * Add a document the analyst brought with them.
+ *
+ * The corpus is the 300 companies we ingested; this is everything else — the
+ * statement they were emailed, the notes they typed up, the letter they were
+ * sent. It is indexed in the browser and lives only for the session: there is
+ * no server, so their document never leaves the page, which is worth saying
+ * out loud to anyone who asks whether it is safe to drop a file in.
+ *
+ * The same offset discipline applies as to an ingested filing: the text stored
+ * here is byte-for-byte the text the reader renders, so every span the analyst
+ * marks and every span the agent cites means the same thing in both.
+ */
+export function addUploadedDocument(doc: CorpusDocument): void {
+  const c = getCorpus();
+  if (c.documents.has(doc.id)) return;
+  c.documents.set(doc.id, doc);
+  c.index.add(doc);
+}
+
 export async function loadCorpus(): Promise<Corpus> {
   if (corpus) return corpus;
   try {

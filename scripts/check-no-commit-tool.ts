@@ -16,9 +16,10 @@
  *   3. Every read-only tool declares readOnlyHint, and no write tool does.
  *   4. Each reserved operation still refuses to run without a trusted gesture.
  *
- * Four operations belong to the analyst alone and have no tool:
- * promoting a proposal, raising a line of enquiry, filing one, and deleting a
- * marking. See docs/TOOLS.md, "Why there is no commit tool".
+ * Five operations belong to the analyst alone and have no tool: promoting a
+ * proposal, raising a line of enquiry, filing one, deleting a marking, and
+ * adding a document to the working set. See docs/TOOLS.md, "Why there is no
+ * commit tool".
  */
 
 import { readFileSync, readdirSync, statSync } from "node:fs";
@@ -31,6 +32,7 @@ const HUMAN_ONLY = [
   "raiseEnquiry",
   "fileEnquiry",
   "removeMarking",
+  "ingestDocument",
 ];
 const FORBIDDEN = [
   ...HUMAN_ONLY,

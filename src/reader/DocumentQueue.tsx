@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { getCorpus } from "../corpus/loadCorpus";
-import { openDocument } from "../state/actions";
+import { ingestDocument, openDocument } from "../state/actions";
 import { markingsFor, useReaderStore } from "../state/readerStore";
 
 /**
@@ -16,6 +16,43 @@ export default function DocumentQueue() {
   const openDocId = useReaderStore((s) => s.openDocId);
   const markingMap = useReaderStore((s) => s.markings);
   const [filter, setFilter] = useState("");
+  const [dragging, setDragging] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  /**
+   * The analyst's own interaction with the drop zone.
+   *
+   * `ingestDocument` requires a trusted gesture, and the natural candidate —
+   * the file input's `change` event — is the wrong one: it fires after the
+   * browser's file dialog, and in some contexts arrives untrusted even though
+   * a real person picked the file. The gesture that actually means "I am
+   * adding this" is the pointer going down on the drop zone, so that is what
+   * we keep and hand on.
+   */
+  const gestureRef = useRef<{ isTrusted: boolean } | null>(null);
+
+  /**
+   * Take in whatever the analyst dropped.
+   *
+   * Text only, and deliberately so: PDF.js plus stable character offsets is a
+   * different project, and an offset that drifts would silently point every
+   * mark and every citation at the wrong words. Better to accept less than to
+   * accept something we cannot cite honestly.
+   */
+  const ingest = useCallback(async (files: FileList | null, ev: { isTrusted: boolean }) => {
+    if (!files?.length) return;
+    setError(null);
+    const gesture = ev?.isTrusted ? ev : gestureRef.current;
+    for (const file of Array.from(files)) {
+      if (!/\.(txt|md|markdown|csv|log|json)$/i.test(file.name)) {
+        setError(`"${file.name}" is not a text file. Plain text or Markdown only.`);
+        continue;
+      }
+      const res = ingestDocument(file.name, await file.text(), gesture ?? undefined);
+      if (!res.ok) setError(res.error);
+    }
+  }, []);
 
   const rows = useMemo(() => {
     const { documents } = getCorpus();
@@ -36,6 +73,43 @@ export default function DocumentQueue() {
         <h2>Filings</h2>
         <span className="count">{queue.length}</span>
       </header>
+
+      <div
+        className={`dropzone ${dragging ? "over" : ""}`}
+        onPointerDown={(e) => {
+          gestureRef.current = e.nativeEvent;
+        }}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragging(true);
+        }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragging(false);
+          void ingest(e.dataTransfer.files, e.nativeEvent);
+        }}
+      >
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".txt,.md,.markdown,.csv,.log,.json"
+          multiple
+          hidden
+          onChange={(e) => {
+            void ingest(e.target.files, e.nativeEvent);
+            e.target.value = "";
+          }}
+        />
+        <button className="dropzone-btn" onClick={() => fileRef.current?.click()}>
+          Drop a document, or browse
+        </button>
+        <span className="dropzone-note">
+          Text or Markdown. It stays in this browser — there is no server.
+        </span>
+      </div>
+
+      {error && <p className="dropzone-error">{error}</p>}
 
       {queue.length > 6 && (
         <input

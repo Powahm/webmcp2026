@@ -370,19 +370,45 @@ function main() {
     const docId = `doc:psc:${number}`;
     const mentions = new Set<string>([cid]);
 
+    // Rendered for a reader, not just as a citation target.
+    //
+    // A bare list of names came out at ~275 characters — four lines, nothing
+    // to read, and the Reader half of the product depends on there being
+    // something worth reading. Everything below comes from this same company's
+    // record; nothing is invented. See docs/DATA.md.
     const t = new TextBuilder();
     t.line(`COMPANIES HOUSE — PERSONS WITH SIGNIFICANT CONTROL`);
-    t.line(`${company.name} (company number ${number})`);
+    t.line(`${company.name}`);
+    t.line(`Company number ${number}`);
+    t.blank();
+    t.line(`A person with significant control ultimately owns or controls the`);
+    t.line(`company. Companies must identify them and keep this register`);
+    t.line(`up to date.`);
+    t.blank();
+    t.line(`REGISTERED OFFICE`);
+    t.blank();
+    t.line(`  ${formatAddress(company.address)}`);
+    t.blank();
+    t.line(`COMPANY DETAILS`);
+    t.blank();
+    t.line(`  Status              ${company.status || "Active"}`);
+    t.line(`  Incorporated on     ${UK_DATE(company.incorporated)}`);
+    t.line(`  Company type        ${company.category || "Private limited company"}`);
+    if (company.sic?.length) {
+      t.line(`  Nature of business  ${company.sic.join("; ")}`);
+    }
+    t.blank();
+    t.line(`PEOPLE WITH SIGNIFICANT CONTROL`);
     t.blank();
 
     const claims: { pid: string; span: Span }[] = [];
     for (const p of list) {
       const disp = displayName(p.name);
       const pid = personId(p.name, p.dob);
-      const span = t.lineWith(``, disp);
-      t.line(`  Notified on: ${UK_DATE(p.notified_on)}`);
+      const span = t.lineWith(`  `, disp);
+      t.line(`    Notified on: ${UK_DATE(p.notified_on)}`);
       for (const n of p.natures_of_control) {
-        t.line(`  Nature of control: ${n.replace(/-/g, " ")}`);
+        t.line(`    Nature of control: ${n.replace(/-/g, " ")}`);
       }
       t.blank();
 
@@ -396,6 +422,9 @@ function main() {
       mentions.add(pid);
       claims.push({ pid, span });
     }
+
+    t.line(`Filed under Part 21A of the Companies Act 2006. This is a public`);
+    t.line(`record. No inference is drawn here about any person named above.`);
 
     documents.push({
       id: docId,
@@ -517,9 +546,29 @@ function main() {
   writeFileSync(join(CORPUS, "edges.json"), JSON.stringify(edgeList));
   writeFileSync(join(CORPUS, "documents.json"), JSON.stringify(documents));
   writeFileSync(join(CORPUS, "search-index.json"), JSON.stringify(mini));
+  // The filings the reader queue opens with.
+  //
+  // The app opens on Read, so the very first thing anyone sees — a judge, and
+  // the first thirty seconds of the video — is one of these documents. It has
+  // to contain something worth stopping on. find-chains.ts --lock reorders
+  // this so the filing carrying hop one of the verified chain comes first;
+  // until then it is just the seed companies' own filings, PSC statements
+  // ahead of profiles because they name people.
+  const seedNodes = seedIds.slice(0, 12);
+  const seedDocIds: string[] = [];
+  const pushDoc = (id: string) => {
+    if (documents.some((d) => d.id === id) && !seedDocIds.includes(id)) seedDocIds.push(id);
+  };
+  for (const prefix of ["doc:psc:", "doc:officers:", "doc:profile:"]) {
+    for (const id of seedNodes) {
+      const number = id.startsWith("company:") ? id.slice("company:".length) : null;
+      if (number) pushDoc(`${prefix}${number}`);
+    }
+  }
+
   writeFileSync(
     join(CORPUS, "seed.json"),
-    JSON.stringify({ node_ids: seedIds.slice(0, 12) }, null, 2)
+    JSON.stringify({ node_ids: seedNodes, doc_ids: seedDocIds }, null, 2)
   );
 
   const counts = (t: EntityType) => entityList.filter((e) => e.type === t).length;
@@ -531,7 +580,7 @@ function main() {
     document ${counts("document")}
   edges      ${edgeList.length}  (${derivedCount} derived shares_address_with)
   documents  ${documents.length}  (${officerDocs} officer lists)
-  seed       ${Math.min(seedIds.length, 12)} nodes
+  seed       ${seedNodes.length} nodes, ${seedDocIds.length} filings
 
   wrote ${CORPUS}/{entities,edges,documents,search-index,seed}.json
 `);

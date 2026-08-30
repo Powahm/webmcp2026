@@ -56,10 +56,23 @@ export interface Scene {
   hovered: string | null;
   /** Neighbours of the hovered node — everything else dims. */
   adjacent: Set<string>;
-  /** Node ids the agent has just proposed, so they can pulse. */
+  /**
+   * The path between the two selected nodes, if there is one.
+   *
+   * This is the climax of the demo made visible: before the agent works, two
+   * selected nodes have no path and the canvas says so; after the analyst
+   * accepts, the same two nodes light a route through everything that was
+   * found. Everything off the path dims, which is the only way a four-hop
+   * chain is readable in a graph this size.
+   */
+  path: { nodes: Set<string>; edges: Set<string> } | null;
   time: number;
   reducedMotion: boolean;
 }
+
+/** Stable key for a link, order-independent — the simulation may hand us
+ *  either end first. */
+export const linkKey = (a: string, b: string): string => (a < b ? `${a}\u0000${b}` : `${b}\u0000${a}`);
 
 const DPR = () => Math.min(2, globalThis.devicePixelRatio || 1);
 
@@ -93,11 +106,25 @@ function drawGrid(ctx: CanvasRenderingContext2D, t: Transform, w: number, h: num
   ctx.globalAlpha = 1;
 }
 
-/** 0 while nothing is hovered, so the whole graph reads at full strength. */
+/**
+ * How strongly to draw something.
+ *
+ * Full strength when nothing is focused. A highlighted path wins over hover,
+ * because the path is a deliberate question the analyst asked and hover is
+ * just where the mouse happens to be.
+ */
 function dimFactor(scene: Scene, id: string): number {
+  if (scene.path) return scene.path.nodes.has(id) ? 1 : 0.12;
   if (!scene.hovered) return 1;
   if (id === scene.hovered || scene.adjacent.has(id)) return 1;
   return 0.22;
+}
+
+/** Links are dimmed by their own membership of the path, not by their ends —
+ *  two path nodes can be joined by an edge that is not on the route. */
+function linkDim(scene: Scene, l: DrawLink): number {
+  if (scene.path) return scene.path.edges.has(linkKey(l.source, l.target)) ? 1 : 0.08;
+  return Math.min(dimFactor(scene, l.source), dimFactor(scene, l.target));
 }
 
 export function draw(
@@ -127,7 +154,7 @@ export function draw(
     const [x0, y0] = toScreen(t, a.x, a.y);
     const [x1, y1] = toScreen(t, b.x, b.y);
 
-    const dim = Math.min(dimFactor(scene, l.source), dimFactor(scene, l.target));
+    const dim = linkDim(scene, l);
     ctx.globalAlpha = dim;
 
     if (l.proposed) {
@@ -139,12 +166,15 @@ export function draw(
       ctx.lineWidth = 1.7;
     } else {
       ctx.setLineDash([]);
-      ctx.strokeStyle = l.asserted
-        ? PALETTE.linkAsserted
-        : l.corroborated
-          ? PALETTE.linkStrong
-          : PALETTE.link;
-      ctx.lineWidth = l.corroborated ? 2.1 : 1.4;
+      const onPath = scene.path?.edges.has(linkKey(l.source, l.target)) ?? false;
+      ctx.strokeStyle = onPath
+        ? PALETTE.text
+        : l.asserted
+          ? PALETTE.linkAsserted
+          : l.corroborated
+            ? PALETTE.linkStrong
+            : PALETTE.link;
+      ctx.lineWidth = onPath ? 2.6 : l.corroborated ? 2.1 : 1.4;
     }
 
     ctx.beginPath();
@@ -261,7 +291,8 @@ export function draw(
   for (const { n, x, y, r, dim } of laid) {
     const selected = scene.selection.has(n.id);
     const hovered = scene.hovered === n.id;
-    if (!(showAllLabels || hovered || selected || n.proposed || n.weight >= 3)) continue;
+    const onPath = scene.path?.nodes.has(n.id) ?? false;
+    if (!(showAllLabels || hovered || selected || n.proposed || onPath || n.weight >= 3)) continue;
 
     ctx.font = `${selected || hovered ? 600 : 500} ${size}px ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif`;
     const label = shortLabel(n.label, n.type);
@@ -272,7 +303,7 @@ export function draw(
     // Three cases always keep their label whatever it overlaps: the node the
     // analyst is pointing at, the one they selected, and any proposal. An
     // unlabelled proposal is the one thing on this canvas nobody can act on.
-    if (!hovered && !selected && !n.proposed && collides(box)) continue;
+    if (!hovered && !selected && !n.proposed && !onPath && collides(box)) continue;
     placed.push(box);
 
     ctx.globalAlpha = dim;

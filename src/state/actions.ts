@@ -20,7 +20,7 @@
  *      real user gesture, so even a bug that wired one up would fail closed.
  */
 
-import { getCorpus } from "../corpus/loadCorpus";
+import { addUploadedDocument, getCorpus } from "../corpus/loadCorpus";
 import { neighbours } from "../corpus/paths";
 import type {
   Annotation,
@@ -318,6 +318,56 @@ export function openDocument(docId: string, scrollTo?: Span): ActionResult {
     r._setScrollRequest({ doc_id: docId, span: scrollTo, nonce: Date.now() });
   }
   return { ok: true, id: docId };
+}
+
+/**
+ * Take in a document the analyst dropped on the reader. **Human only.**
+ *
+ * There is no tool for this and there should not be: what enters the working
+ * set is the Receiver's judgement, and an agent that could add its own
+ * material to the record could quietly shape what the analyst reads. It goes
+ * through the same store, the same offsets and the same marking system as an
+ * ingested filing — the only difference is where it came from, which the UI
+ * says plainly.
+ */
+export function ingestDocument(
+  name: string,
+  text: string,
+  gesture?: HumanGesture
+): ActionResult<string> {
+  if (!requireHumanGesture("add a document", gesture)) {
+    return fail("Only the analyst can add a document to the working set.");
+  }
+
+  const body = text.replace(/\r\n/g, "\n").replace(/\u0000/g, "");
+  if (!body.trim()) return fail(`"${name}" is empty.`);
+  if (body.length > 400_000) {
+    return fail(
+      `"${name}" is ${Math.round(body.length / 1000)}k characters, which is too long to read.`,
+      "Split it, or paste the part that matters."
+    );
+  }
+
+  const title = name.replace(/\.[a-z0-9]+$/i, "").slice(0, 120) || "Untitled";
+  const id = uid("doc:added");
+
+  addUploadedDocument({
+    id,
+    title,
+    // Rendered verbatim. No wrapping, no normalising — the marking offsets and
+    // any citation the agent makes both index this exact string.
+    text: body,
+    mentions: [],
+  });
+
+  const r = useReaderStore.getState();
+  r._setQueue([id, ...reader().queue]);
+  r._setOpenDoc(id);
+  r._setSelection(null);
+  r._setVisibleSpan(null);
+
+  record("human", "added", `document "${title}" (${body.length.toLocaleString()} characters)`, id);
+  return { ok: true, id, data: id };
 }
 
 /** Captured on `selectionchange`, not read at tool-call time — see readerStore. */

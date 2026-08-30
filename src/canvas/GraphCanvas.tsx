@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { clearSelection, setViewport, toggleSelection } from "../state/actions";
+import { findPaths } from "../corpus/paths";
+import { canvasEdges, clearSelection, setViewport, toggleSelection } from "../state/actions";
 import { useGraphStore } from "../state/graphStore";
 import { pendingProposals, useProposalStore } from "../state/proposalStore";
 import type { NodeKind } from "./palette";
-import { draw, hitTest, resizeCanvas, type DrawLink, type DrawNode, type Scene } from "./render";
+import { draw, hitTest, linkKey, resizeCanvas, type DrawLink, type DrawNode, type Scene } from "./render";
 import {
   linkDistanceFor,
   linkStrengthFor,
@@ -164,6 +165,28 @@ export default function GraphCanvas() {
     return { drawNodes, drawLinks, simLinks };
   }, [nodes, edges, pending]);
 
+  /**
+   * The route between the two nodes the analyst selected, if one exists.
+   *
+   * Two selections is the gesture that means "how are these related?", so it
+   * is the moment to answer. Before the agent has worked there is no path and
+   * the canvas says so out loud — which is the honest half of the story, and
+   * the half most demos skip.
+   */
+  const path = useMemo(() => {
+    if (selection.length !== 2) return null;
+    const [from, to] = selection;
+    const found = findPaths(canvasEdges(), from, to, 4, 1)[0];
+    if (!found) return { nodes: new Set<string>(), edges: new Set<string>(), hops: 0, found: false };
+    return {
+      nodes: new Set(found.node_ids),
+      edges: new Set(found.edges.map((e) => linkKey(e.from_id, e.to_id))),
+      hops: found.hops,
+      found: true,
+    };
+    // The confirmed graph is the input, so recompute whenever it changes.
+  }, [selection, nodes, edges]);
+
   /** Neighbours of the hovered node. Everything else dims, which is how a dense
    *  chart stays readable without a mode to switch into. */
   const adjacent = useMemo(() => {
@@ -247,6 +270,7 @@ export default function GraphCanvas() {
         selection: new Set(selection),
         hovered,
         adjacent,
+        path: path?.found ? { nodes: path.nodes, edges: path.edges } : null,
         time: performance.now(),
         reducedMotion: reduced,
       };
@@ -255,7 +279,7 @@ export default function GraphCanvas() {
 
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [scene, selection, hovered, adjacent]);
+  }, [scene, selection, hovered, adjacent, path]);
 
   // --- Report the viewport, so get_viewport can answer honestly -------------
   useEffect(() => {
@@ -320,6 +344,7 @@ export default function GraphCanvas() {
         selection: new Set(selection),
         hovered,
         adjacent,
+        path: null,
         time: 0,
         reducedMotion: true,
       },
@@ -382,6 +407,7 @@ export default function GraphCanvas() {
         selection: new Set(selection),
         hovered,
         adjacent,
+        path: null,
         time: 0,
         reducedMotion: true,
       },
@@ -485,6 +511,25 @@ export default function GraphCanvas() {
           ⤢
         </button>
       </div>
+
+      {path && (
+        <div className={`path-readout ${path.found ? "found" : "none"}`}>
+          {path.found ? (
+            <>
+              <strong>{path.hops} hop{path.hops === 1 ? "" : "s"}</strong>
+              <span>between the two you selected</span>
+            </>
+          ) : (
+            <>
+              <strong>No path yet</strong>
+              <span>
+                nothing on this canvas connects them — that is a real answer,
+                not a failure
+              </span>
+            </>
+          )}
+        </div>
+      )}
 
       <div className="canvas-legend">
         <span><i className="swatch company" /> company</span>

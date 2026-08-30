@@ -544,7 +544,7 @@ point, and this is the tool that dilutes it. Build it last, if at all.
 The agent physically cannot promote a proposal. There is no registered tool that does it, and
 `actions.ts` exposes promotion only to the panel components.
 
-Four things stay on the human's side of the line, and none of them has a tool:
+Five things stay on the human's side of the line, and none of them has a tool:
 
 | The human alone can | Because |
 |---|---|
@@ -552,8 +552,9 @@ Four things stay on the human's side of the line, and none of them has a tool:
 | File a line of enquiry | Closing a question is a judgement about sufficiency |
 | Raise a line of enquiry (`propose_enquiry` only suggests) | The human sets the agenda |
 | Delete their own markings | They are the Reader's record of what they noticed |
+| Add a document to the working set | What enters the record is the Receiver's judgement, and an agent that could add its own material could shape what the analyst reads |
 
-`scripts/check-no-commit-tool.ts` should assert all four, not just the first, and it should run in
+`scripts/check-no-commit-tool.ts` asserts all of them, not just the first, and it should run in
 CI. A guarantee you can execute is worth more in a write-up than a guarantee you assert.
 
 Say this explicitly in the Devpost description. It is a design principle rather than a missing
