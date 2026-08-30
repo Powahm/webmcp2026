@@ -890,7 +890,7 @@ export function acceptProposal(proposalId: string, gesture?: HumanGesture): Acti
   );
 
   // The money shot: the spring tightens and the whole graph contracts around
-  // the new fact. See docs/UI-3D.md, "the three animated moments".
+  // the new fact. See docs/UI.md, "the animated moments".
   useGraphStore.getState()._bumpReheat();
   return { ok: true, id: proposalId };
 }
