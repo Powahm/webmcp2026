@@ -227,12 +227,22 @@ function pscIdentityKey(name: string, dob?: { month?: number; year?: number }): 
  * Pass B — which other companies those same people control, plus the full
  *          records for everything we end up keeping.
  */
+/**
+ * Stream the PSC snapshot.
+ *
+ * Takes a *list* of files, because Companies House offers the snapshot either
+ * as one ~6GB JSON or as a dozen 65MB chunks, and the chunks are far easier to
+ * download on a normal connection. Both are JSON Lines, so streaming several
+ * files in sequence is identical to streaming one — drop whatever you got into
+ * raw/psc/ and this reads all of it.
+ */
 async function streamPsc(
-  file: string,
+  files: string[],
   onRecord: (rec: PscRecord) => void,
   label: string
 ): Promise<void> {
   const p = progress(label, 1_000_000);
+  for (const file of files) {
   const rl = createInterface({ input: createReadStream(file), crlfDelay: Infinity });
   for await (const line of rl) {
     p.tick();
@@ -270,6 +280,7 @@ async function streamPsc(
       notified_on: d.notified_on,
       identityKey: pscIdentityKey(d.name, dob),
     });
+    }
   }
   p.done();
 }
@@ -364,17 +375,24 @@ async function main() {
 
   // --- One-hop expansion via shared PSC ---
   let psc: PscRecord[] = [];
-  const pscFile = existsSync(RAW_PSC)
-    ? readdirSync(RAW_PSC).find((f) => /\.(txt|json|jsonl)$/i.test(f))
-    : undefined;
+  // Every file in raw/psc/, sorted, so the chunked download works unmerged —
+  // psc-snapshot-2026-08-30_1of12.txt through _12of12.txt just go in the folder.
+  const pscPaths = existsSync(RAW_PSC)
+    ? readdirSync(RAW_PSC)
+        .filter((f) => /\.(txt|json|jsonl)$/i.test(f))
+        .sort()
+        .map((f) => join(RAW_PSC, f))
+    : [];
 
-  if (pscFile) {
-    const pscPath = join(RAW_PSC, pscFile);
-    console.log(`  psc snapshot: ${pscPath}`);
+  if (pscPaths.length) {
+    console.log(
+      `  psc snapshot: ${pscPaths.length} file(s) in ${RAW_PSC}/\n` +
+        pscPaths.map((f) => `    ${f}`).join("\n")
+    );
 
     const seedIdentities = new Set<string>();
     await streamPsc(
-      pscPath,
+      pscPaths,
       (r) => {
         if (seedNumbers.has(r.company_number)) seedIdentities.add(r.identityKey);
       },
@@ -384,7 +402,7 @@ async function main() {
 
     const linked = new Map<string, PscRecord[]>();
     await streamPsc(
-      pscPath,
+      pscPaths,
       (r) => {
         if (!seedIdentities.has(r.identityKey)) return;
         const list = linked.get(r.company_number);
@@ -426,11 +444,10 @@ async function main() {
   const selected = [...chosen].map((n) => byNumber.get(n)!).filter(Boolean);
 
   // Keep the full PSC records for exactly the companies we selected.
-  if (pscFile) {
-    const pscPath = join(RAW_PSC, pscFile);
+  if (pscPaths.length) {
     const keep: PscRecord[] = [];
     await streamPsc(
-      pscPath,
+      pscPaths,
       (r) => {
         if (chosen.has(r.company_number)) keep.push(r);
       },
@@ -450,7 +467,7 @@ async function main() {
     JSON.stringify(
       {
         generated_at: new Date().toISOString(),
-        source: { bulk_files: bulk, psc: pscFile ? join(RAW_PSC, pscFile) : null },
+        source: { bulk_files: bulk, psc: pscPaths.length ? pscPaths : null },
         seed_company_numbers: [...seedNumbers],
         companies: selected,
         addressGroups: chosenGroups,
