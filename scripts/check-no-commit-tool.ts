@@ -9,16 +9,37 @@
  * This makes it one — it runs as part of `npm run build`, and the build fails if
  * it stops being true.
  *
- * It checks three things:
- *   1. No file under src/webmcp/ references acceptProposal or rejectProposal.
+ * It checks four things:
+ *   1. No file under src/webmcp/ references any store setter or any of the
+ *      four operations reserved to the analyst.
  *   2. No registered tool's name suggests promotion.
  *   3. Every read-only tool declares readOnlyHint, and no write tool does.
+ *   4. Each reserved operation still refuses to run without a trusted gesture.
+ *
+ * Four operations belong to the analyst alone and have no tool:
+ * promoting a proposal, raising a line of enquiry, filing one, and deleting a
+ * marking. See docs/TOOLS.md, "Why there is no commit tool".
  */
 
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-const FORBIDDEN = ["acceptProposal", "rejectProposal", "_setNodes", "_setEdges"];
+/** Reserved to the analyst, plus the raw store setters no tool may touch. */
+const HUMAN_ONLY = [
+  "acceptProposal",
+  "rejectProposal",
+  "raiseEnquiry",
+  "fileEnquiry",
+  "removeMarking",
+];
+const FORBIDDEN = [
+  ...HUMAN_ONLY,
+  "_setNodes",
+  "_setEdges",
+  "_setProposals",
+  "_setMarkings",
+  "_setEnquiries",
+];
 const PROMOTION_WORDS = /(commit|promote|accept|confirm|approve|apply)/i;
 
 function walk(dir: string): string[] {
@@ -50,7 +71,9 @@ for (const file of walk(join("src", "webmcp"))) {
 }
 
 // 2 & 3. Tool names and annotations, read straight from the source of truth.
-const readSrc = readFileSync(join("src", "webmcp", "tools", "readTools.ts"), "utf8");
+const readSrc =
+  readFileSync(join("src", "webmcp", "tools", "readTools.ts"), "utf8") +
+  readFileSync(join("src", "webmcp", "tools", "readerTools.ts"), "utf8");
 const writeSrc = readFileSync(join("src", "webmcp", "tools", "writeTools.ts"), "utf8");
 
 const nameRe = /name:\s*"([a-z_]+)"/g;
@@ -81,11 +104,28 @@ for (const n of writeNames) {
   }
 }
 
+// 4. Each reserved operation still fails closed without a trusted DOM event.
+const actionsSrc = readFileSync(join("src", "state", "actions.ts"), "utf8");
+for (const fn of HUMAN_ONLY) {
+  const at = actionsSrc.indexOf(`export function ${fn}(`);
+  if (at < 0) {
+    fail(`actions.ts no longer exports ${fn}. The safety check cannot verify it.`);
+    continue;
+  }
+  const body = actionsSrc.slice(at, at + 700);
+  if (!body.includes("requireHumanGesture")) {
+    fail(
+      `${fn} does not require a trusted user gesture. It is reserved to the analyst — see docs/TOOLS.md.`
+    );
+  }
+}
+
 if (failures) {
   console.error(`\n  ${failures} safety check(s) failed.\n`);
   process.exit(1);
 }
 
 console.log(
-  `  ✓ no commit tool: ${readNames.length} read-only, ${writeNames.length} staged-write, 0 promotion tools`
+  `  ✓ no commit tool: ${readNames.length} read-only, ${writeNames.length} write, ` +
+    `0 promotion tools, ${HUMAN_ONLY.length} operations reserved to the analyst`
 );

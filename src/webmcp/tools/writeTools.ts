@@ -1,22 +1,43 @@
+import { getCorpus } from "../../corpus/loadCorpus";
 import {
+  addMarking,
   annotate,
+  claimEnquiry,
+  openDocument,
   pinEvidence,
   requestFocus,
+  resultEnquiry,
   stageEdge,
   stageNode,
   type ActionResult,
 } from "../../state/actions";
-import type { EntityType, Relation, Span } from "../../types";
+import type { Citation, EntityType, EnquiryOutcome, MarkingType, Relation, Span } from "../../types";
 import { errorResult, jsonResult, type McpToolDefinition } from "../mcpTypes";
-import { ANNOTATE, FOCUS, PIN_EVIDENCE, PROPOSE_EDGE, PROPOSE_NODE } from "../schemas";
+import {
+  ANNOTATE,
+  CLAIM_ENQUIRY,
+  FOCUS,
+  HIGHLIGHT_SPAN,
+  OPEN_DOCUMENT,
+  PIN_EVIDENCE,
+  PROPOSE_EDGE,
+  PROPOSE_NODE,
+  RESULT_ENQUIRY,
+} from "../schemas";
 
 /**
- * The five staged-write tools.
+ * The nine write tools.
  *
  * Every one of these calls actions.ts — the same entry point the analyst's
- * clicks use. None of them can alter the confirmed graph: propose_node and
- * propose_edge reach proposalStore only, pin_evidence can append a citation but
- * never change or remove one, annotate writes a note, and focus moves a camera.
+ * clicks use. They fall into three kinds and none can alter the confirmed
+ * graph:
+ *
+ *   - staged claims  propose_node, propose_edge, pin_evidence. They assert
+ *                    something, land unconfirmed, and wait for a human.
+ *   - pointing       highlight_span, open_document, focus, annotate. They
+ *                    change what the analyst is looking at and assert nothing.
+ *   - reporting      claim_enquiry, result_enquiry. They answer a question the
+ *                    analyst asked. Only the analyst files it.
  *
  * There is no commit tool. Nothing in this file imports acceptProposal or
  * rejectProposal, and no such tool is registered, so the agent physically
@@ -115,14 +136,132 @@ export const annotateTool: McpToolDefinition = {
 export const focusTool: McpToolDefinition = {
   name: "focus",
   description:
-    "Move the analyst's camera to frame these nodes. Use it after proposing something so they can see it without hunting for it. It changes the view only — it asserts nothing and changes no data.",
+    "Move the analyst's view on the canvas to frame these nodes. Use it after proposing something so they can see it without hunting for it. It changes the view only — it asserts nothing and changes no data.",
   inputSchema: FOCUS,
   execute: (args) => {
     const ids = Array.isArray(args.node_ids) ? (args.node_ids as unknown[]).map(String) : [];
     return reply(requestFocus(ids), () => ({
       focused: ids.length,
-      note: "The camera is moving to those nodes.",
+      note: "The canvas is moving to frame those nodes.",
     }));
+  },
+};
+
+// --- Pointing at things in the reader ---------------------------------------
+
+/**
+ * The agent marks a passage in the filing the analyst is reading, in the
+ * agent's own colour, beside their marks. Two actors annotating one surface.
+ *
+ * It goes through the same `addMarking` the analyst's mouse does, differing
+ * only in `origin`. There is no agent-flavoured write path.
+ */
+export const highlightSpanTool: McpToolDefinition = {
+  name: "highlight_span",
+  description:
+    "Mark a passage in a filing so the analyst sees it in their reader, shown as your mark rather than theirs. Use it to point at the exact words that support what you are about to propose or report. It asserts nothing and adds nothing to the canvas — the analyst can clear it.",
+  inputSchema: HIGHLIGHT_SPAN,
+  execute: (args) =>
+    reply(
+      addMarking({
+        doc_id: String(args.doc_id ?? ""),
+        span: asSpan(args.span),
+        type: String(args.type) as MarkingType,
+        note: args.note ? String(args.note) : undefined,
+        origin: "agent",
+      }),
+      (id) => ({
+        marking_id: id,
+        note: "Your mark is in the analyst's reader, in the agent colour, alongside their own.",
+      })
+    ),
+};
+
+export const openDocumentTool: McpToolDefinition = {
+  name: "open_document",
+  description:
+    "Open a filing in the analyst's reader and scroll it to a passage. Use it after finding something so they can read it in place rather than hunting for it. It changes the view only — it asserts nothing and changes no data.",
+  inputSchema: OPEN_DOCUMENT,
+  execute: (args) => {
+    const scroll = args.scroll_to ? asSpan(args.scroll_to) : undefined;
+    return reply(openDocument(String(args.doc_id ?? ""), scroll), (id) => ({
+      doc_id: id,
+      note: "The filing is open in front of the analyst.",
+    }));
+  },
+};
+
+// --- Working the analyst's queue --------------------------------------------
+
+export const claimEnquiryTool: McpToolDefinition = {
+  name: "claim_enquiry",
+  description:
+    "Take a line of enquiry off the analyst's queue so they can see you are working it. Call list_enquiries first. Claiming is reversible and asserts nothing.",
+  inputSchema: CLAIM_ENQUIRY,
+  execute: (args) =>
+    reply(claimEnquiry(String(args.enquiry_id ?? "")), (id) => ({
+      enquiry_id: id,
+      note: "Marked as yours. Report back with result_enquiry.",
+    })),
+};
+
+/**
+ * Reporting back — including with nothing.
+ *
+ * The description says outright that finding nothing is a valid result. Without
+ * that, a model keeps searching rather than admitting an empty answer, and
+ * stretching for a weak link is the exact failure this whole product is built
+ * against. In real investigative work, eliminating a line of enquiry is most of
+ * the job. See docs/METHOD.md.
+ */
+export const resultEnquiryTool: McpToolDefinition = {
+  name: "result_enquiry",
+  description:
+    "Report back on a line of enquiry the analyst raised. Finding nothing is a valid and useful result: report 'eliminated' with what you searched rather than stretching for a weak link. 'found' requires at least one citation. The analyst reviews every result — you cannot close an enquiry yourself.",
+  inputSchema: RESULT_ENQUIRY,
+  execute: (args) => {
+    const raw = Array.isArray(args.citations) ? (args.citations as unknown[]) : [];
+    const { documents } = getCorpus();
+    const citations: Citation[] = [];
+
+    for (const c of raw) {
+      const obj = c as { doc_id?: unknown; span?: unknown };
+      const docId = String(obj.doc_id ?? "");
+      const span = asSpan(obj.span);
+      const doc = documents.get(docId);
+      if (!doc) {
+        return errorResult(
+          `No document "${docId}" in the corpus.`,
+          "Use doc_ids exactly as returned by search_documents, get_entity or get_markings."
+        );
+      }
+      if (!Number.isInteger(span.start) || !Number.isInteger(span.end) || span.start < 0 || span.end <= span.start) {
+        return errorResult(
+          `Span {start: ${span.start}, end: ${span.end}} is not a valid range.`,
+          "start and end must be non-negative integers with end greater than start."
+        );
+      }
+      if (span.end > doc.text.length) {
+        return errorResult(
+          `Span ends at ${span.end} but "${docId}" is only ${doc.text.length} characters long.`,
+          "Use a span returned by search_documents rather than constructing one."
+        );
+      }
+      citations.push({ doc_id: docId, span });
+    }
+
+    return reply(
+      resultEnquiry({
+        id: String(args.enquiry_id ?? ""),
+        outcome: String(args.outcome) as EnquiryOutcome,
+        summary: String(args.summary ?? ""),
+        citations,
+      }),
+      (id) => ({
+        enquiry_id: id,
+        note: "Reported. It is in the analyst's queue and in the decision log; only they can file it.",
+      })
+    );
   },
 };
 
@@ -130,6 +269,10 @@ export const WRITE_TOOLS: McpToolDefinition[] = [
   proposeNode,
   proposeEdge,
   pinEvidenceTool,
+  highlightSpanTool,
   annotateTool,
+  openDocumentTool,
   focusTool,
+  claimEnquiryTool,
+  resultEnquiryTool,
 ];

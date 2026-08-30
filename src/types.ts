@@ -99,6 +99,91 @@ export interface EdgeProposal extends ProposalBase {
 
 export type Proposal = NodeProposal | EdgeProposal;
 
+// --- The reader ------------------------------------------------------------
+
+/**
+ * What a mark can be. Six types, because a person will not use more without a
+ * legend, and a legend in an investigation tool is a design failure.
+ */
+export type MarkingType = "person" | "company" | "address" | "date" | "question" | "lead";
+
+export const MARKING_TYPES: MarkingType[] = [
+  "person",
+  "company",
+  "address",
+  "date",
+  "question",
+  "lead",
+];
+
+/**
+ * A passage someone deliberately marked in a filing.
+ *
+ * The richest state in the application, and the one no server has: offsets into
+ * a string that is rendered from memory and never travelled over the wire. The
+ * analyst's marks and the agent's `highlight_span` marks are the same object,
+ * differing only in `origin` — there is no agent-flavoured write path.
+ */
+export interface Marking {
+  id: string;
+  doc_id: string;
+  span: Span;
+  /** The substring itself. Denormalised so tool results are readable without a
+   *  second lookup, and so a mark survives being read out of context. */
+  text: string;
+  type: MarkingType;
+  note?: string;
+  origin: "human" | "agent";
+  created_at: number;
+}
+
+// --- Lines of enquiry ------------------------------------------------------
+
+/**
+ * MIRSAP calls these Actions. The human raises them; the agent works them; only
+ * the human files one. See docs/METHOD.md.
+ */
+export type EnquiryStatus = "open" | "claimed" | "resulted" | "filed";
+
+/** `eliminated` is a result, not a failure — clearing a line of enquiry is the
+ *  majority of real investigative work. See docs/METHOD.md §3. */
+export type EnquiryOutcome = "found" | "eliminated" | "partial";
+
+export interface EnquiryResult {
+  outcome: EnquiryOutcome;
+  summary: string;
+  citations: Citation[];
+  at: number;
+}
+
+export interface Enquiry {
+  id: string;
+  /** The analyst's own words. Never rewritten by the agent. */
+  question: string;
+  status: EnquiryStatus;
+  raised_by: "human" | "agent";
+  /** The mark this came off, if it was raised from the reader. */
+  from_marking_id?: string;
+  result?: EnquiryResult;
+  created_at: number;
+}
+
+// --- Decision log ----------------------------------------------------------
+
+/** The SIO's policy log, and the audit trail an e-discovery process would ask
+ *  for. Append-only; both actors write to it; the analyst can export it. */
+export interface DecisionEntry {
+  id: string;
+  at: number;
+  actor: "human" | "agent";
+  /** Short verb phrase: "accepted", "marked", "raised", "resulted". */
+  action: string;
+  /** One line of plain English. Structural, never a conclusion about a person. */
+  detail: string;
+  /** Whatever it concerned — a node, an edge, a marking, an enquiry. */
+  target_id?: string;
+}
+
 /** A note left on a node or edge. */
 export interface Annotation {
   id: string;

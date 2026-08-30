@@ -14,6 +14,10 @@ export interface Corpus {
   documents: Map<string, CorpusDocument>;
   index: MiniSearch<CorpusDocument>;
   seedNodeIds: string[];
+  /** Filings the reader queue opens with. The first one is what the analyst
+   *  sees on load, so build-corpus.ts should nominate one worth reading — see
+   *  docs/DATA.md. Falls back to whatever the seed nodes cite. */
+  seedDocIds: string[];
   /** Adjacency over the whole corpus, used to answer "what else is attached". */
   adjacency: Map<string, { to: string; edge: Edge }[]>;
   /** True when running on the gitignored dev fixture rather than real records. */
@@ -66,7 +70,7 @@ async function loadReal(): Promise<Omit<Corpus, "isFixture">> {
     fetchJson<Edge[]>("/corpus/edges.json"),
     fetchJson<CorpusDocument[]>("/corpus/documents.json"),
     fetchJson<unknown>("/corpus/search-index.json"),
-    fetchJson<{ node_ids: string[] }>("/corpus/seed.json"),
+    fetchJson<{ node_ids: string[]; doc_ids?: string[] }>("/corpus/seed.json"),
   ]);
 
   return {
@@ -77,6 +81,7 @@ async function loadReal(): Promise<Omit<Corpus, "isFixture">> {
     // would cost a second of blank screen for no reason.
     index: MiniSearch.loadJS(indexJson as never, MINISEARCH_OPTIONS as never),
     seedNodeIds: seed.node_ids,
+    seedDocIds: seed.doc_ids ?? [],
     adjacency: buildAdjacency(edges),
   };
 }
@@ -93,6 +98,7 @@ type FixtureModule = {
     edges: Edge[];
     documents: CorpusDocument[];
     seedNodeIds: string[];
+    seedDocIds?: string[];
   };
 };
 
@@ -109,7 +115,7 @@ async function loadFixture(): Promise<Omit<Corpus, "isFixture">> {
         "Run `npm run corpus:fetch && npm run corpus:build`."
     );
   }
-  const { entities, edges, documents, seedNodeIds } = (await load()).fixture();
+  const { entities, edges, documents, seedNodeIds, seedDocIds } = (await load()).fixture();
   const index = new MiniSearch<CorpusDocument>(MINISEARCH_OPTIONS as never);
   index.addAll(documents);
   return {
@@ -118,6 +124,7 @@ async function loadFixture(): Promise<Omit<Corpus, "isFixture">> {
     documents: new Map(documents.map((d) => [d.id, d])),
     index,
     seedNodeIds,
+    seedDocIds: seedDocIds ?? [],
     adjacency: buildAdjacency(edges),
   };
 }

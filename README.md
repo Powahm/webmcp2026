@@ -1,23 +1,38 @@
 # Threadweaver
 
-An investigative graph canvas where a human and an AI agent build the same picture together.
+A document reader and a link canvas where a human and an AI agent work the same case.
 
-You drag two entities that feel connected onto the canvas and say *"I think there's a link here."*
-The agent reads what you have selected — through [WebMCP](https://webmcp.devpost.com) site tools —
-searches the corpus, and draws the missing nodes and the thread between them as **proposals**:
-dashed, glowing, unsettled, each carrying a citation. Click the citation, read the filing with the
-exact span highlighted, then accept or reject. Accepted knowledge locks into the physics simulation
-and the graph re-settles around it.
+**You read.** Open a filing, read it, drag across a passage and mark it — an address, a name, a
+date, a question. Raise a line of enquiry in your own words. This is the Document Reader's job in a
+police major incident room, and in this app it is yours.
+
+**The agent indexes.** Through [WebMCP](https://webmcp.devpost.com) site tools it can see the filing
+you have open, the passage you just highlighted, every mark you have left and the working set on
+your canvas — then cross-references all of it against a corpus you could not hold in your head. It
+comes back with **proposals**: dashed, glowing, unsettled, each carrying a citation, plus its own
+highlights laid alongside yours in the document you are still reading. Click a citation, check the
+filing with the exact span highlighted, then accept or reject. Accepted knowledge locks into the
+physics simulation and the graph re-settles around it.
+
+That split is not ours. Major incident rooms have run it since 1981, for the same reason: the human
+capacity that reads well is not the human capacity that cross-references exhaustively. See
+[`docs/METHOD.md`](docs/METHOD.md).
 
 Built on real UK Companies House public records. No backend — the corpus is static, every tool runs
 in the page.
+
+**Take the agent away and this is still a document reader with typed highlights, an enquiry queue
+and a link canvas you build by hand.** That is the test we hold ourselves to.
 
 **Submission for The WebMCP Challenge. Deadline: 3 September 2026, 1pm PDT.**
 
 ## The agent cannot commit anything
 
-There are eleven tools. Six read, five stage proposals, and **none promotes a proposal into the
-graph.** That is not a missing feature; it is the design.
+There are nineteen tools. Ten read, nine stage a proposal, point at something or report back, and
+**none promotes a proposal into the graph.** That is not a missing feature; it is the design.
+
+Four things have no tool at all, and belong to the human alone: promoting a proposal, raising a line
+of enquiry, filing one, and deleting your own markings. The agent works a queue you wrote.
 
 It is guaranteed twice over:
 
@@ -94,10 +109,11 @@ identity matching, but they are never rendered anywhere in the interface.
 
 | File | What's in it |
 |---|---|
+| [`docs/METHOD.md`](docs/METHOD.md) | **Start here.** The incident-room division of labour we implement, and why the human holds the Reader's chair |
 | [`docs/PLAN.md`](docs/PLAN.md) | Features by priority, the reasoning behind each decision, day-by-day schedule, definition of done |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | System diagrams, full file tree, the one architectural rule that matters |
-| [`docs/TOOLS.md`](docs/TOOLS.md) | All 11 WebMCP tool contracts with JSON Schemas |
-| [`docs/UI-3D.md`](docs/UI-3D.md) | The 3D visual and physics spec — what each force, material and animation means |
+| [`docs/TOOLS.md`](docs/TOOLS.md) | All 19 WebMCP tool contracts with JSON Schemas |
+| [`docs/UI.md`](docs/UI.md) | The visual and physics spec — what each force, colour and animation means, and why the canvas is 2D |
 | [`docs/DATA.md`](docs/DATA.md) | Companies House ingestion pipeline and how to find the demo chain |
 
 ## Licence

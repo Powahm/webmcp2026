@@ -64,10 +64,28 @@ Emits four files into `public/corpus/`:
   offsets**. This is the piece people get wrong: the evidence drawer highlights `span.start` to
   `span.end`, so the text you index must be byte-for-byte the text you render. Generate once, never
   reformat at display time.
+
+  **This file got more important.** A human now reads these documents end to end and drags across
+  them to make their own marks (`docs/METHOD.md`). Two consequences for `build-corpus.ts`:
+
+  1. **Render for a reader, not for a highlighter.** A filing that is a wall of field:value lines
+     is fine as a citation target and miserable as something to actually read. Give each document a
+     heading, short labelled sections, and blank lines between them. The first twenty seconds of
+     the video are a person reading one of these, so at least the demo filings must be pleasant.
+  2. **Length matters both ways.** Under ~600 characters there is nothing to read and marking feels
+     pointless; over ~6000 the analyst scrolls instead of reading and the video drags. Aim for
+     1–3k characters per filing and log the distribution when you build, so you can see the tail.
 - **`search-index.json`** — a prebuilt MiniSearch index. Build it offline; do not index 300
   documents in the browser at boot.
-- **`seed.json`** — the ~12 nodes the canvas opens with. Deliberately sparse and deliberately
-  *incomplete*: the interesting entities must be reachable but not present.
+- **`seed.json`** — the ~12 nodes the canvas opens with, **and the 5–8 filings the reader queue
+  opens with**. Deliberately sparse and deliberately *incomplete*: the interesting entities must be
+  reachable but not present.
+
+  Pick the opening filing deliberately. It has to contain something a human would genuinely stop
+  and mark — a correspondence address, a signatory, a date — whose consequences are *not* already on
+  the canvas. If the first document the analyst reads has nothing worth marking in it, the whole
+  demo starts flat and no amount of agent cleverness recovers it. Note the chosen filing and the
+  intended first mark alongside the verified chain.
 
 People need care. PSC records include names and month/year of birth. Use them for identity matching
 because that is what they are published for, but do not render dates of birth in the UI and do not
@@ -83,6 +101,12 @@ Run this Sunday. It searches the built corpus for a chain that satisfies all fou
 3. **Every hop independently citable** — a specific filing with a specific span.
 4. **A shape a human can narrate in one sentence.** "These two companies look unrelated, but the
    director of one is the PSC of a third company registered at the same address as the second."
+5. **Hop one must be findable by reading.** The chain has to start from something visible in a
+   filing the analyst can open on the first screen — an address or a name they can highlight
+   themselves. This criterion is new and it is the one that makes the demo work: the human finds
+   the thread, the agent follows it. A chain whose first hop is only discoverable by full-text
+   search is a chain that forces the agent to open the investigation, which is the story we are
+   deliberately not telling.
 
 Have it print the top ten candidates with their citations. Pick one, verify every hop by hand on the
 Companies House website, and write the verified chain into a comment at the top of the file. **Do

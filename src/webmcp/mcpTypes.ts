@@ -16,7 +16,7 @@ export interface JsonSchema {
 }
 
 export interface ToolAnnotations {
-  /** Set on all six read tools so the browser doesn't gate them behind a prompt. */
+  /** Set on every read-only tool so the browser doesn't gate it behind a prompt. */
   readOnlyHint?: boolean;
 }
 

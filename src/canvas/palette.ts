@@ -1,21 +1,29 @@
-/** Kept in sync with src/styles/tokens.css by hand — three.js cannot read CSS
- *  custom properties, and the two layers must feel like one product. */
+/** Kept in sync with src/styles/tokens.css by hand — the canvas is drawn with
+ *  2D context calls, which cannot read CSS custom properties. */
 export const PALETTE = {
-  bg: "#0b0e12",
-  company: "#7c8ca1",
-  person: "#d9a05b",
-  address: "#6e8577",
-  document: "#e6e8ea",
+  bg: "#0d1117",
+  grid: "#151b24",
+
+  company: "#7aa2d4",
+  person: "#e0a458",
+  address: "#6fbfa0",
+  document: "#a99bd6",
+
   proposed: "#4fd1c5",
-  confirmed: "#e6e8ea",
-  reject: "#c2513f",
-  link: "#55636f",
-  linkAsserted: "#7a8794",
+  reject: "#e0655a",
+
+  link: "#2c3644",
+  linkStrong: "#42505f",
+  linkAsserted: "#5a4f3c",
+
+  text: "#e6e9ef",
+  textDim: "#8b97a6",
+  textFaint: "#5c6774",
+  halo: "#0d1117",
 } as const;
 
 export type NodeKind = "company" | "person" | "address" | "document";
 
 export const colourFor = (type: NodeKind): string => PALETTE[type];
 
-export const prefersReducedMotion = (): boolean =>
-  typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+export { prefersReducedMotion } from "./viewport";

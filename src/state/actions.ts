@@ -25,14 +25,22 @@ import { neighbours } from "../corpus/paths";
 import type {
   Annotation,
   Citation,
+  DecisionEntry,
   Edge,
+  EnquiryOutcome,
   EntityType,
+  Marking,
+  MarkingType,
   Proposal,
   Relation,
   Span,
 } from "../types";
+import { MARKING_TYPES } from "../types";
+import { decisionLog, useDecisionLog } from "./decisionLog";
+import { enquiries, useEnquiryStore } from "./enquiryStore";
 import { graph, useGraphStore, type CanvasEdge, type CanvasNode } from "./graphStore";
 import { proposals, useProposalStore } from "./proposalStore";
+import { reader, useReaderStore } from "./readerStore";
 
 // --- Result type ------------------------------------------------------------
 
@@ -45,6 +53,30 @@ const fail = (error: string, hint?: string): ActionResult<never> =>
 
 let counter = 0;
 const uid = (prefix: string) => `${prefix}:${Date.now().toString(36)}-${(counter++).toString(36)}`;
+
+// --- The decision log -------------------------------------------------------
+
+/**
+ * Both actors write here, and every entry passes through this one function, so
+ * the log cannot disagree with what actually happened. It is the SIO's policy
+ * log: what was decided, by whom, at the time. See docs/METHOD.md.
+ */
+function record(
+  actor: "human" | "agent",
+  action: string,
+  detail: string,
+  targetId?: string
+): void {
+  const entry: DecisionEntry = {
+    id: uid("dec"),
+    at: Date.now(),
+    actor,
+    action,
+    detail,
+    target_id: targetId,
+  };
+  decisionLog()._push(entry);
+}
 
 // --- Validation -------------------------------------------------------------
 
@@ -135,6 +167,7 @@ export function addCorpusNode(entityId: string): ActionResult {
   // Bring across every corpus edge that now has both ends on the canvas. The
   // analyst added the node; the relationships it already had are not new claims.
   attachCorpusEdgesFor(entityId);
+  record("human", "added", `${entity.type} "${entity.label}" to the canvas`, entityId);
   return { ok: true, id: entityId };
 }
 
@@ -206,6 +239,7 @@ export function drawEdge(fromId: string, toId: string, relation: Relation): Acti
     analystAsserted: true,
   });
   useGraphStore.getState()._setEdges(edges);
+  record("human", "asserted", `${fromId} ${relation} ${toId} — no filing found, drawn by hand`, id);
   return { ok: true, id };
 }
 
@@ -227,7 +261,7 @@ export function clearSelection(): ActionResult {
   return { ok: true };
 }
 
-export function setViewport(v: { visibleNodeIds: string[]; cameraDistance: number }): void {
+export function setViewport(v: { visibleNodeIds: string[]; zoom: number }): void {
   useGraphStore.getState()._setViewport(v);
 }
 
@@ -244,6 +278,287 @@ export function requestFocus(nodeIds: string[]): ActionResult {
   }
   useGraphStore.getState()._setFocusRequest({ nodeIds: known, nonce: Date.now() });
   return { ok: true };
+}
+
+// --- The reader -------------------------------------------------------------
+
+/**
+ * Open a filing.
+ *
+ * Both the analyst clicking the queue and the agent's `open_document` land
+ * here. Opening drops the captured selection: a selection belongs to the
+ * document it was made in, and carrying it across would let a tool cite the
+ * wrong filing.
+ */
+export function openDocument(docId: string, scrollTo?: Span): ActionResult {
+  const { documents } = getCorpus();
+  const doc = documents.get(docId);
+  if (!doc) {
+    return fail(
+      `No document "${docId}" in the corpus.`,
+      "Use a doc_id exactly as returned by search_documents, get_entity or get_markings."
+    );
+  }
+
+  const r = useReaderStore.getState();
+  if (reader().openDocId !== docId) {
+    r._setOpenDoc(docId);
+    r._setSelection(null);
+    r._setVisibleSpan(null);
+  }
+  if (!reader().queue.includes(docId)) r._setQueue([docId, ...reader().queue]);
+
+  if (scrollTo) {
+    if (scrollTo.start < 0 || scrollTo.end > doc.text.length || scrollTo.end <= scrollTo.start) {
+      return fail(
+        `scroll_to {start: ${scrollTo.start}, end: ${scrollTo.end}} is outside "${docId}", which is ${doc.text.length} characters long.`,
+        "The filing was still opened. Pass a span from search_documents or get_markings."
+      );
+    }
+    r._setScrollRequest({ doc_id: docId, span: scrollTo, nonce: Date.now() });
+  }
+  return { ok: true, id: docId };
+}
+
+/** Captured on `selectionchange`, not read at tool-call time — see readerStore. */
+export function captureSelection(sel: { doc_id: string; start: number; end: number; text: string } | null): void {
+  useReaderStore.getState()._setSelection(sel);
+}
+
+export function setVisibleSpan(span: Span | null): void {
+  useReaderStore.getState()._setVisibleSpan(span);
+}
+
+export function clearScrollRequest(): void {
+  useReaderStore.getState()._setScrollRequest(null);
+}
+
+export interface AddMarkingInput {
+  doc_id: string;
+  span: Span;
+  type: MarkingType;
+  note?: string;
+  origin?: "human" | "agent";
+}
+
+/**
+ * Mark a passage.
+ *
+ * The analyst dragging across a paragraph and the agent's `highlight_span` are
+ * the *same* call, differing only in `origin`. There is no agent-flavoured
+ * write path — if one ever appears, the product has stopped being what
+ * docs/METHOD.md says it is.
+ */
+export function addMarking(input: AddMarkingInput): ActionResult<Marking> {
+  const { documents } = getCorpus();
+  const doc = documents.get(input.doc_id);
+  if (!doc) {
+    return fail(
+      `No document "${input.doc_id}" in the corpus.`,
+      "Use a doc_id from search_documents, get_entity or get_reader_context."
+    );
+  }
+
+  const { start, end } = input.span;
+  if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end <= start) {
+    return fail(
+      `Span {start: ${start}, end: ${end}} is not a valid range.`,
+      "start and end must be non-negative integers with end greater than start."
+    );
+  }
+  if (end > doc.text.length) {
+    return fail(
+      `Span ends at ${end} but "${input.doc_id}" is only ${doc.text.length} characters long.`,
+      "Use a span returned by search_documents rather than constructing one. An out-of-range span would render as an empty highlight, so it is refused."
+    );
+  }
+  if (!MARKING_TYPES.includes(input.type)) {
+    return fail(`"${input.type}" is not a marking type.`, `Use one of: ${MARKING_TYPES.join(", ")}.`);
+  }
+
+  const origin = input.origin ?? "human";
+  const text = doc.text.slice(start, end);
+
+  // Marking the same words twice is a no-op rather than an error: the agent
+  // pointing at something the analyst already marked is a signal, not a fault.
+  const map = new Map(reader().markings);
+  for (const m of map.values()) {
+    if (m.doc_id === input.doc_id && m.span.start === start && m.span.end === end && m.origin === origin) {
+      return { ok: true, id: m.id, data: m };
+    }
+  }
+
+  const marking: Marking = {
+    id: uid("mark"),
+    doc_id: input.doc_id,
+    span: { start, end },
+    text,
+    type: input.type,
+    note: input.note?.slice(0, 200) || undefined,
+    origin,
+    created_at: Date.now(),
+  };
+  map.set(marking.id, marking);
+  useReaderStore.getState()._setMarkings(map);
+
+  const shown = text.length > 60 ? `${text.slice(0, 57)}…` : text;
+  record(
+    origin,
+    "marked",
+    `${input.type} — "${shown}" in ${doc.title}`,
+    marking.id
+  );
+  return { ok: true, id: marking.id, data: marking };
+}
+
+/**
+ * Remove a mark. **Human only, and there is no tool for it.**
+ *
+ * A mark is the Reader's record of what they noticed. An agent that could
+ * delete one could quietly erase the analyst's own reasoning, which is the
+ * opposite of what this product is for.
+ */
+export function removeMarking(id: string, gesture?: HumanGesture): ActionResult {
+  if (!requireHumanGesture("delete a marking", gesture)) {
+    return fail("Only the analyst can delete their own markings.");
+  }
+  const map = new Map(reader().markings);
+  const m = map.get(id);
+  if (!m) return fail("No marking with that id.");
+  map.delete(id);
+  useReaderStore.getState()._setMarkings(map);
+  record("human", "unmarked", `removed a ${m.type} mark`, id);
+  return { ok: true };
+}
+
+// --- Lines of enquiry -------------------------------------------------------
+
+/**
+ * Raise a line of enquiry. **Human only, and there is no tool for it.**
+ *
+ * The human sets the agenda; the agent works the queue. This is the clearest
+ * answer the product has to "is the AI just doing everything?".
+ */
+export function raiseEnquiry(
+  question: string,
+  fromMarkingId?: string,
+  gesture?: HumanGesture
+): ActionResult {
+  if (!requireHumanGesture("raise a line of enquiry", gesture)) {
+    return fail("Only the analyst can raise a line of enquiry.");
+  }
+  const q = question.trim();
+  if (!q) return fail("A line of enquiry needs a question.");
+
+  const id = uid("enq");
+  const map = new Map(enquiries().enquiries);
+  map.set(id, {
+    id,
+    question: q.slice(0, 240),
+    status: "open",
+    raised_by: "human",
+    from_marking_id: fromMarkingId,
+    created_at: Date.now(),
+  });
+  useEnquiryStore.getState()._setEnquiries(map);
+  record("human", "raised", q.slice(0, 120), id);
+  return { ok: true, id };
+}
+
+/** The agent takes an enquiry off the queue. Reversible and asserts nothing. */
+export function claimEnquiry(id: string): ActionResult {
+  const map = new Map(enquiries().enquiries);
+  const e = map.get(id);
+  if (!e) {
+    return fail(`No line of enquiry "${id}".`, "Call list_enquiries for the open ones.");
+  }
+  if (e.status === "filed") {
+    return fail(
+      "That enquiry has been filed by the analyst and is closed.",
+      "Call list_enquiries to see what is still open."
+    );
+  }
+  map.set(id, { ...e, status: "claimed" });
+  useEnquiryStore.getState()._setEnquiries(map);
+  record("agent", "claimed", e.question.slice(0, 120), id);
+  return { ok: true, id };
+}
+
+export interface ResultEnquiryInput {
+  id: string;
+  outcome: EnquiryOutcome;
+  summary: string;
+  citations: Citation[];
+}
+
+/**
+ * Report back on an enquiry.
+ *
+ * `eliminated` is a first-class outcome: searching and finding nothing is the
+ * majority of real investigative work, and a product that treats it as failure
+ * teaches the agent to stretch for a weak link. `found` must be cited, for the
+ * same reason a proposal must be.
+ */
+export function resultEnquiry(input: ResultEnquiryInput): ActionResult {
+  const map = new Map(enquiries().enquiries);
+  const e = map.get(input.id);
+  if (!e) {
+    return fail(`No line of enquiry "${input.id}".`, "Call list_enquiries for valid ids.");
+  }
+  if (e.status === "filed") {
+    return fail("That enquiry has been filed by the analyst and is closed.");
+  }
+  if (!input.summary.trim()) {
+    return fail(
+      "A result needs a summary.",
+      "Say what you searched and what you found, in plain words. If you found nothing, say what you searched — that is a useful result."
+    );
+  }
+  if (input.outcome === "found" && input.citations.length === 0) {
+    return fail(
+      "An outcome of 'found' needs at least one citation.",
+      "Pass the doc_id and span that evidence it, or report 'eliminated' or 'partial' instead. An uncited finding is not a finding."
+    );
+  }
+
+  map.set(input.id, {
+    ...e,
+    status: "resulted",
+    result: {
+      outcome: input.outcome,
+      summary: input.summary.slice(0, 400),
+      citations: input.citations,
+      at: Date.now(),
+    },
+  });
+  useEnquiryStore.getState()._setEnquiries(map);
+  record(
+    "agent",
+    "resulted",
+    `${input.outcome} — ${input.summary.slice(0, 100)}`,
+    input.id
+  );
+  return { ok: true, id: input.id };
+}
+
+/**
+ * File an enquiry. **Human only, and there is no tool for it.**
+ *
+ * Closing a question is a judgement about whether the answer is sufficient.
+ * That is the Reader's call, and the agent does not get to make it about its
+ * own work.
+ */
+export function fileEnquiry(id: string, gesture?: HumanGesture): ActionResult {
+  if (!requireHumanGesture("file a line of enquiry", gesture)) {
+    return fail("Only the analyst can file a line of enquiry.");
+  }
+  const map = new Map(enquiries().enquiries);
+  const e = map.get(id);
+  if (!e) return fail("No line of enquiry with that id.");
+  map.set(id, { ...e, status: "filed" });
+  useEnquiryStore.getState()._setEnquiries(map);
+  record("human", "filed", e.question.slice(0, 120), id);
+  return { ok: true, id };
 }
 
 // --- Staging (the only thing a write tool can reach) ------------------------
@@ -313,6 +628,7 @@ export function stageNode(input: StageNodeInput): ActionResult {
     origin: input.origin ?? "agent",
   });
   useProposalStore.getState()._setProposals(map);
+  record(input.origin ?? "agent", "proposed", `${input.type} "${input.label}" — ${input.reason}`, id);
   return { ok: true, id };
 }
 
@@ -514,6 +830,15 @@ export function acceptProposal(proposalId: string, gesture?: HumanGesture): Acti
   map.set(proposalId, { ...p, status: "accepted" } as Proposal);
   useProposalStore.getState()._setProposals(map);
 
+  record(
+    "human",
+    "accepted",
+    p.kind === "node"
+      ? `${p.entityType} "${p.label}" onto the canvas — ${p.reason}`
+      : `${p.from_id} ${p.relation} ${p.to_id} — ${p.reason}`,
+    proposalId
+  );
+
   // The money shot: the spring tightens and the whole graph contracts around
   // the new fact. See docs/UI-3D.md, "the three animated moments".
   useGraphStore.getState()._bumpReheat();
@@ -532,16 +857,44 @@ export function rejectProposal(proposalId: string, gesture?: HumanGesture): Acti
   if (!p || p.status !== "pending") return fail("No pending proposal with that id.");
   map.set(proposalId, { ...p, status: "rejected" } as Proposal);
   useProposalStore.getState()._setProposals(map);
+  record(
+    "human",
+    "rejected",
+    p.kind === "node" ? `proposed ${p.entityType} "${p.label}"` : `proposed ${p.relation}`,
+    proposalId
+  );
   return { ok: true, id: proposalId };
 }
 
 // --- Boot -------------------------------------------------------------------
 
-/** Seed the canvas. Deliberately sparse and deliberately incomplete: the
- *  interesting entities are reachable but not present. */
+/**
+ * Seed the session.
+ *
+ * The canvas is deliberately sparse and deliberately incomplete: the
+ * interesting entities are reachable but not present. The reader queue is
+ * seeded from the filings those nodes came from, and the first one is opened,
+ * because the app opens on Read — the human reads first. See docs/METHOD.md.
+ */
 export function seedCanvas(): void {
-  const { seedNodeIds } = getCorpus();
+  const { seedNodeIds, seedDocIds, entities, documents } = getCorpus();
   for (const id of seedNodeIds) addCorpusNode(id);
+
+  const queue: string[] = [];
+  const push = (docId: string) => {
+    if (documents.has(docId) && !queue.includes(docId)) queue.push(docId);
+  };
+  for (const id of seedDocIds) push(id);
+  // Fall back to whatever the seed nodes cite, so the queue is never empty even
+  // if the corpus build did not nominate opening filings.
+  for (const id of seedNodeIds) {
+    for (const docId of entities.get(id)?.sources ?? []) push(docId);
+  }
+
+  useReaderStore.getState()._setQueue(queue);
+  if (queue.length) useReaderStore.getState()._setOpenDoc(queue[0]);
+
+  record("human", "opened", `session started with ${seedNodeIds.length} entities and ${queue.length} filings`);
 }
 
 /** Used by the test harness and the "reset" control. */
@@ -553,6 +906,17 @@ export function resetCanvas(): void {
   g._setSelection([]);
   g._setFocusRequest(null);
   useProposalStore.getState()._setProposals(new Map());
+
+  const r = useReaderStore.getState();
+  r._setQueue([]);
+  r._setOpenDoc(null);
+  r._setMarkings(new Map());
+  r._setSelection(null);
+  r._setVisibleSpan(null);
+  r._setScrollRequest(null);
+
+  useEnquiryStore.getState()._setEnquiries(new Map());
+  useDecisionLog.getState().clear();
 }
 
 export type { CanvasEdge, CanvasNode, Edge };

@@ -1,51 +1,70 @@
-/* Threadweaver palette — one accent, spent entirely on proposals.
-   Dark-committed by design: an investigation canvas is a dark room, and the
-   emissive materials on the 3D layer need a dark ground to read. The 2D panels
-   use the same tokens so the two layers feel like one product. */
+/* Threadweaver design tokens.
+   Kept in sync with src/canvas/palette.ts by hand — the canvas is drawn with
+   2D context calls, which cannot read custom properties.
+
+   Dark-committed. An investigation tool is read for an hour at a time, and the
+   canvas needs a dark ground for the node glow to mean anything. One accent,
+   spent entirely on the agent: teal is proposals, agent marks, agent rows in
+   the log, and nothing else. */
 
 :root {
-  --bg: #0b0e12;
-  --grid: #161b22;
-  --panel: #10151c;
-  --panel-2: #141a22;
-  --line: #212a35;
+  /* Surfaces, darkest to lightest */
+  --bg: #0d1117;
+  --surface: #11161e;
+  --surface-2: #151b24;
+  --surface-3: #1b222c;
+  --line: #232c38;
+  --line-soft: #1a222c;
 
-  --company: #7c8ca1;
-  --person: #d9a05b;
-  --address: #6e8577;
-  --document: #e6e8ea;
+  /* Entity colours. Also the marking colours — a person is the same hue
+     wherever they appear, on the canvas or in the margin. */
+  --company: #7aa2d4;
+  --person: #e0a458;
+  --address: #6fbfa0;
+  --document: #a99bd6;
+  --date: #8b97a6;
+  --question: #d98fa8;
+  --lead: #c9a227;
 
-  --proposed: #4fd1c5;
-  --confirmed: #e6e8ea;
-  --reject: #c2513f;
+  /* The agent's colour. Reserved. */
+  --agent: #4fd1c5;
+  --agent-dim: #2b6b66;
 
-  --text: #e6e8ea;
-  --text-dim: #8b97a6;
-  --text-faint: #5c6774;
+  --confirmed: #e6e9ef;
+  --reject: #e0655a;
+  --warn: #d9a05b;
 
-  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-  --sans: ui-sans-serif, -apple-system, "Segoe UI", Inter, system-ui, sans-serif;
+  --text: #e6e9ef;
+  --text-dim: #98a3b3;
+  --text-faint: #6a7686;
 
-  --r: 6px;
-  color-scheme: dark;
+  /* Type */
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, "Cascadia Mono", monospace;
+  --serif: ui-serif, Georgia, "Times New Roman", serif;
+
+  /* Spacing scale, 4px base */
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s5: 24px;
+  --s6: 32px;
+
+  --r1: 4px;
+  --r2: 7px;
+  --r3: 11px;
+
+  --rail-left: 236px;
+  --rail-right: 372px;
+  --topbar-h: 46px;
 }
 
-* { box-sizing: border-box; }
-
-html, body, #root {
-  height: 100%;
-  margin: 0;
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
-
-body {
-  background: var(--bg);
-  color: var(--text);
-  font-family: var(--sans);
-  font-size: 13px;
-  line-height: 1.5;
-  -webkit-font-smoothing: antialiased;
-}
-
-a { color: var(--proposed); }
-
-::selection { background: rgba(79, 209, 197, 0.3); }

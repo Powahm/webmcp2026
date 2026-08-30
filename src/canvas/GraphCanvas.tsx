@@ -1,62 +1,82 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import ForceGraph3D, { type ForceGraphMethods } from "react-force-graph-3d";
-import * as THREE from "three";
-import {
-  clearSelection,
-  setViewport,
-  toggleSelection,
-} from "../state/actions";
+import { clearSelection, setViewport, toggleSelection } from "../state/actions";
 import { useGraphStore } from "../state/graphStore";
 import { pendingProposals, useProposalStore } from "../state/proposalStore";
-import { focusTransitionMs, framePosition, placedPoints } from "./camera";
+import type { NodeKind } from "./palette";
+import { draw, hitTest, resizeCanvas, type DrawLink, type DrawNode, type Scene } from "./render";
 import {
-  linkColour,
-  linkWidthFor,
-  makeProposedLink,
-  tickDashes,
-  updateProposedLink,
-} from "./linkObjects";
-import { buildNodeObject, tickPulse, type NodeView } from "./nodeObjects";
-import { PALETTE, prefersReducedMotion, type NodeKind } from "./palette";
-import { acceptProgress, FORCE, linkDistanceFor, linkStrengthFor } from "./physics";
+  linkDistanceFor,
+  linkStrengthFor,
+  Simulation,
+  type SimLink,
+} from "./simulation";
+import {
+  easeInOutCubic,
+  frame,
+  identity,
+  lerpTransform,
+  prefersReducedMotion,
+  toWorld,
+  zoomAbout,
+  type Transform,
+} from "./viewport";
 
 /**
- * The spatial layer.
+ * The canvas.
  *
- * Everything that has to be *read carefully* lives in the 2D panels beside this
- * canvas. That split is what pays back the readability cost of 3D — see
- * docs/UI-3D.md.
+ * A flat 2D link chart — pan, zoom, drag, click — of the kind people already
+ * know how to use. It was 3D and force-directed in three dimensions; that cost
+ * more than it earned. Occlusion and depth ambiguity make a network genuinely
+ * harder to read, the camera had a failure mode that put the analyst inside the
+ * world, and the graph library pulled its own copy of three.js. None of that
+ * bought anything the product needed.
+ *
+ * What survives is the part that carried meaning: a proposal hangs on a weak,
+ * long spring and visibly floats unsettled at the edge of the cluster, and
+ * accepting it tightens the spring so the graph contracts around the new fact.
+ *
+ * Rendering is a single 2D canvas driven by src/canvas/simulation.ts. No graph
+ * library, no WebGL, no dependencies.
  */
 
-interface GNode {
-  id: string;
-  type: NodeKind;
-  label: string;
-  proposed: boolean;
-  degree: number;
-  justAccepted?: number;
-  x?: number;
-  y?: number;
-  z?: number;
-}
+const ACCEPT_MS = 700;
+const ACCEPT_MS_REDUCED = 200;
+const FLY_MS = 620;
 
-interface GLink {
-  source: string;
-  target: string;
-  relation: string;
-  proposed: boolean;
-  derived?: boolean;
-  analystAsserted?: boolean;
-  evidenceCount: number;
-  justAccepted?: number;
-}
+const acceptProgress = (justAccepted: number | undefined, now: number, reduced: boolean): number => {
+  if (!justAccepted) return 1;
+  const t = Math.min(1, (now - justAccepted) / (reduced ? ACCEPT_MS_REDUCED : ACCEPT_MS));
+  return 1 - Math.pow(1 - t, 3);
+};
 
 export default function GraphCanvas() {
-  const fgRef = useRef<ForceGraphMethods<GNode, GLink> | undefined>(undefined);
   const wrapRef = useRef<HTMLDivElement>(null);
-  const lastInteraction = useRef<number>(Date.now());
-  const framedOnce = useRef(false);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const simRef = useRef(new Simulation());
+  const transformRef = useRef<Transform>(identity());
+  const sizeRef = useRef({ w: 0, h: 0 });
+
+  /**
+   * True once the analyst has panned, zoomed or been flown somewhere.
+   *
+   * Until then the view keeps refitting to the whole graph every frame, so the
+   * chart is always framed no matter how the simulation moves — booting
+   * off-centre and small is the difference between "here is your case" and
+   * "your first action is a pan". After the analyst touches the canvas we stop
+   * touching it: nothing is more irritating than a view that keeps correcting
+   * you.
+   */
+  const userMovedView = useRef(false);
+
+  /** An in-flight fly-to. Interpolated in the render loop rather than by a
+   *  timer, so it cannot outlive the component or fight a user pan. */
+  const flightRef = useRef<{ from: Transform; to: Transform; start: number } | null>(null);
+
+  const dragRef = useRef<{ id: string; moved: boolean } | null>(null);
+  const panRef = useRef<{ x: number; y: number; tx: number; ty: number } | null>(null);
+
   const [hovered, setHovered] = useState<string | null>(null);
+  const [cursor, setCursor] = useState<"grab" | "grabbing" | "pointer">("grab");
 
   const nodes = useGraphStore((s) => s.nodes);
   const edges = useGraphStore((s) => s.edges);
@@ -67,8 +87,8 @@ export default function GraphCanvas() {
 
   const pending = useMemo(() => pendingProposals(proposalMap), [proposalMap]);
 
-  // --- Graph data: confirmed nodes and edges, plus pending proposals ---------
-  const data = useMemo(() => {
+  // --- Scene data: confirmed graph plus pending proposals -------------------
+  const scene = useMemo(() => {
     const degree = new Map<string, number>();
     const bump = (id: string) => degree.set(id, (degree.get(id) ?? 0) + 1);
     for (const e of edges.values()) {
@@ -76,338 +96,409 @@ export default function GraphCanvas() {
       bump(e.to_id);
     }
 
-    const gNodes: GNode[] = [...nodes.values()].map((n) => ({
-      id: n.id,
-      type: n.type as NodeKind,
-      label: n.label,
-      proposed: false,
-      degree: degree.get(n.id) ?? 0,
-      justAccepted: n.justAccepted,
-    }));
+    const drawNodes = new Map<string, DrawNode>();
+    for (const n of nodes.values()) {
+      drawNodes.set(n.id, {
+        id: n.id,
+        type: n.type as NodeKind,
+        label: n.label,
+        proposed: false,
+        weight: degree.get(n.id) ?? 0,
+        citations: n.citations.length,
+      });
+    }
 
-    const gLinks: GLink[] = [...edges.values()].map((e) => ({
-      source: e.from_id,
-      target: e.to_id,
-      relation: e.relation,
-      proposed: false,
-      derived: e.derived,
-      analystAsserted: e.analystAsserted,
-      evidenceCount: e.citations.length + (e.citations[0]?.corroborating?.length ?? 0),
-      justAccepted: e.justAccepted,
-    }));
+    const drawLinks: DrawLink[] = [];
+    const simLinks: SimLink[] = [];
+    const now = Date.now();
+    const reduced = prefersReducedMotion();
 
-    const present = new Set(gNodes.map((n) => n.id));
+    for (const e of edges.values()) {
+      const corroborated =
+        e.citations.length + (e.citations[0]?.corroborating?.length ?? 0) > 1;
+      drawLinks.push({
+        source: e.from_id,
+        target: e.to_id,
+        proposed: false,
+        asserted: e.analystAsserted === true,
+        corroborated,
+      });
+      const t = acceptProgress(e.justAccepted, now, reduced);
+      simLinks.push({
+        source: e.from_id,
+        target: e.to_id,
+        distance: linkDistanceFor(false, t),
+        strength: linkStrengthFor(false, t),
+      });
+    }
 
     for (const p of pending) {
-      if (p.kind === "node") {
-        if (present.has(p.node_id)) continue;
-        present.add(p.node_id);
-        gNodes.push({
-          id: p.node_id,
-          type: p.entityType as NodeKind,
-          label: p.label,
-          proposed: true,
-          degree: 0,
-        });
-      }
+      if (p.kind !== "node" || drawNodes.has(p.node_id)) continue;
+      drawNodes.set(p.node_id, {
+        id: p.node_id,
+        type: p.entityType as NodeKind,
+        label: p.label,
+        proposed: true,
+        weight: 0,
+        citations: 1,
+      });
     }
     for (const p of pending) {
       if (p.kind !== "edge") continue;
-      if (!present.has(p.from_id) || !present.has(p.to_id)) continue;
-      gLinks.push({
+      if (!drawNodes.has(p.from_id) || !drawNodes.has(p.to_id)) continue;
+      drawLinks.push({
         source: p.from_id,
         target: p.to_id,
-        relation: p.relation,
         proposed: true,
-        evidenceCount: 1,
+        asserted: false,
+        corroborated: false,
+      });
+      simLinks.push({
+        source: p.from_id,
+        target: p.to_id,
+        distance: linkDistanceFor(true),
+        strength: linkStrengthFor(true),
       });
     }
 
-    return { nodes: gNodes, links: gLinks };
+    return { drawNodes, drawLinks, simLinks };
   }, [nodes, edges, pending]);
 
-  /** The three highest-degree nodes carry a permanent label. Everything else is
-   *  labelled only when the analyst points at it or the agent proposes it. */
-  const hubs = useMemo(() => {
-    const ranked = [...data.nodes]
-      .filter((n) => !n.proposed)
-      .sort((a, b) => b.degree - a.degree)
-      .slice(0, 3)
-      .filter((n) => n.degree >= 2);
-    return new Set(ranked.map((n) => n.id));
-  }, [data.nodes]);
-
-  // --- Forces ---------------------------------------------------------------
-  useEffect(() => {
-    const fg = fgRef.current;
-    if (!fg) return;
-
-    const charge = fg.d3Force("charge");
-    charge?.strength(FORCE.charge).distanceMax(FORCE.chargeDistanceMax);
-
-    const center = fg.d3Force("center");
-    center?.strength?.(FORCE.centerStrength);
-
-    const link = fg.d3Force("link");
-    if (link) {
-      const now = () => Date.now();
-      const reduced = prefersReducedMotion();
-      link
-        .distance((l: GLink) =>
-          linkDistanceFor(l.proposed, acceptProgress(l.justAccepted, now(), reduced))
-        )
-        .strength((l: GLink) =>
-          linkStrengthFor(l.proposed, acceptProgress(l.justAccepted, now(), reduced))
-        );
+  /** Neighbours of the hovered node. Everything else dims, which is how a dense
+   *  chart stays readable without a mode to switch into. */
+  const adjacent = useMemo(() => {
+    const set = new Set<string>();
+    if (!hovered) return set;
+    for (const l of scene.drawLinks) {
+      if (l.source === hovered) set.add(l.target);
+      if (l.target === hovered) set.add(l.source);
     }
-  }, [data]);
+    return set;
+  }, [hovered, scene.drawLinks]);
 
-  /**
-   * The money shot. An accept changed a spring, so the simulation is reheated
-   * and the graph contracts around the new fact. Re-applied on a short interval
-   * for the length of the animation so the springs tighten gradually rather
-   * than snapping.
-   */
+  // --- Feed the simulation --------------------------------------------------
+  useEffect(() => {
+    const sim = simRef.current;
+    sim.setGraph(
+      [...scene.drawNodes.values()].map((n) => ({ id: n.id, weight: n.weight })),
+      scene.simLinks
+    );
+    sim.reheat(0.7);
+  }, [scene]);
+
   useEffect(() => {
     if (!reheat) return;
-    const fg = fgRef.current;
-    if (!fg) return;
-    fg.d3ReheatSimulation();
-    const started = Date.now();
-    const duration = prefersReducedMotion() ? 220 : 760;
-    const timer = window.setInterval(() => {
-      const fgNow = fgRef.current;
-      if (!fgNow || Date.now() - started > duration) {
-        window.clearInterval(timer);
-        return;
-      }
-      const link = fgNow.d3Force("link");
-      const reduced = prefersReducedMotion();
-      link
-        ?.distance((l: GLink) =>
-          linkDistanceFor(l.proposed, acceptProgress(l.justAccepted, Date.now(), reduced))
-        )
-        .strength((l: GLink) =>
-          linkStrengthFor(l.proposed, acceptProgress(l.justAccepted, Date.now(), reduced))
-        );
-      fgNow.d3ReheatSimulation();
-    }, 60);
-    return () => window.clearInterval(timer);
+    simRef.current.reheat(0.9);
   }, [reheat]);
 
-  /** Depth fog matched to the background, so distant nodes recede instead of
-   *  cluttering. One of the readability mitigations 3D has to pay for itself. */
+  // --- The render loop ------------------------------------------------------
+  // One rAF loop owns everything: the simulation step, the fly-to
+  // interpolation, and the draw. Nothing here is driven by setInterval, so
+  // there is no way for an animation to keep running after unmount.
   useEffect(() => {
-    const fg = fgRef.current;
-    if (!fg) return;
-    fg.scene().fog = new THREE.Fog(PALETTE.bg, 260, 900);
-  }, []);
+    let raf = 0;
+    const reduced = prefersReducedMotion();
 
-  /** Frame the seed once. Without it the graph boots off-centre and small, and
-   *  the analyst's first action is a pan rather than a question.
-   *
-   *  Done on a timer as well as on engine-stop: the simulation runs for several
-   *  seconds, and waiting that long to frame the view looks broken. */
-  const frameOnce = useCallback(() => {
-    if (framedOnce.current) return;
-    framedOnce.current = true;
-    fgRef.current?.zoomToFit(700, 80);
-  }, []);
+    const loop = () => {
+      raf = requestAnimationFrame(loop);
+      const canvas = canvasRef.current;
+      const wrap = wrapRef.current;
+      if (!canvas || !wrap) return;
 
+      const w = wrap.clientWidth;
+      const h = wrap.clientHeight;
+      if (w === 0 || h === 0) return;
+      if (w !== sizeRef.current.w || h !== sizeRef.current.h) {
+        sizeRef.current = { w, h };
+        resizeCanvas(canvas, w, h);
+      }
+
+      const sim = simRef.current;
+      sim.tick();
+
+      // Keep the whole graph framed until the analyst takes the view over.
+      // Easing towards the target rather than snapping means the settling
+      // layout reads as one continuous movement instead of a series of jumps.
+      if (!userMovedView.current && sim.nodes.length > 0) {
+        const box = sim.bounds();
+        if (box) {
+          const target = frame(box, w, h, 120, 1.9);
+          transformRef.current = sim.settled
+            ? target
+            : lerpTransform(transformRef.current, target, 0.08);
+        }
+      }
+
+      const flight = flightRef.current;
+      if (flight) {
+        const t = Math.min(1, (Date.now() - flight.start) / (reduced ? 1 : FLY_MS));
+        transformRef.current = lerpTransform(flight.from, flight.to, easeInOutCubic(t));
+        if (t >= 1) flightRef.current = null;
+      }
+
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+
+      const positions = new Map(sim.nodes.map((n) => [n.id, n]));
+      const s: Scene = {
+        nodes: scene.drawNodes,
+        links: scene.drawLinks,
+        positions,
+        selection: new Set(selection),
+        hovered,
+        adjacent,
+        time: performance.now(),
+        reducedMotion: reduced,
+      };
+      draw(ctx, s, transformRef.current, w, h);
+    };
+
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [scene, selection, hovered, adjacent]);
+
+  // --- Report the viewport, so get_viewport can answer honestly -------------
   useEffect(() => {
-    if (!data.nodes.length) return;
-    const t = window.setTimeout(frameOnce, 2400);
-    return () => window.clearTimeout(t);
-  }, [data.nodes.length, frameOnce]);
-
-  const flyTo = useCallback((ids: string[]): boolean => {
-    const fg = fgRef.current;
-    if (!fg) return false;
-    const points = placedPoints(data.nodes.filter((n) => ids.includes(n.id)));
-    const frame = framePosition(fg.camera(), points);
-    if (!frame) return false;
-    fg.cameraPosition(frame.position, frame.lookAt, focusTransitionMs());
-    return true;
-  }, [data.nodes]);
+    const timer = window.setInterval(() => {
+      const { w, h } = sizeRef.current;
+      if (!w || !h) return;
+      const t = transformRef.current;
+      const visible: string[] = [];
+      for (const n of simRef.current.nodes) {
+        const sx = n.x * t.k + t.tx;
+        const sy = n.y * t.k + t.ty;
+        if (sx >= 0 && sy >= 0 && sx <= w && sy <= h) visible.push(n.id);
+      }
+      setViewport({ visibleNodeIds: visible, zoom: Math.round(t.k * 100) / 100 });
+    }, 700);
+    return () => window.clearInterval(timer);
+  }, []);
 
   // --- focus(node_ids): the agent moves the analyst's view ------------------
-  // A node proposed a moment ago has no position until the simulation places
-  // it, so a focus that finds nothing placed yet retries rather than flying to
-  // the origin and showing the analyst an empty screen.
+  const flyTo = useCallback((ids: string[]): boolean => {
+    const { w, h } = sizeRef.current;
+    if (!w || !h) return false;
+    const box = simRef.current.bounds(ids);
+    if (!box) return false;
+
+    // A single node, or several stacked before the simulation has separated
+    // them, is a zero-extent box. viewport.frame() floors the extent, so it
+    // yields a valid transform rather than dividing by nothing — this is
+    // exactly the case that used to black the screen out.
+    flightRef.current = {
+      from: transformRef.current,
+      to: frame(box, w, h, 110, ids.length === 1 ? 1.5 : 1.3),
+      start: Date.now(),
+    };
+    userMovedView.current = true;
+    return true;
+  }, []);
+
   useEffect(() => {
     if (!focusRequest) return;
     if (flyTo(focusRequest.nodeIds)) return;
-    const retry = window.setTimeout(() => flyTo(focusRequest.nodeIds), 500);
+    // The node exists but the simulation has not placed it yet. Retry rather
+    // than flying somewhere arbitrary.
+    const retry = window.setTimeout(() => flyTo(focusRequest.nodeIds), 400);
     return () => window.clearTimeout(retry);
   }, [focusRequest, flyTo]);
 
-  // --- Per-frame: pulse the proposal materials, report the viewport ---------
-  const onEngineTick = useCallback(() => {
-    const t = performance.now();
-    tickPulse(t);
-    tickDashes(t);
-  }, []);
+  // --- Pointer interaction --------------------------------------------------
+  const localPoint = (e: React.PointerEvent | React.WheelEvent): [number, number] => {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    return [e.clientX - rect.left, e.clientY - rect.top];
+  };
 
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      const fg = fgRef.current;
-      if (!fg) return;
-      const cam = fg.camera();
-      const visible: string[] = [];
-      const frustum = new THREE.Frustum();
-      frustum.setFromProjectionMatrix(
-        new THREE.Matrix4().multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse)
-      );
-      for (const n of data.nodes) {
-        if (n.x === undefined) continue;
-        if (frustum.containsPoint(new THREE.Vector3(n.x, n.y, n.z))) visible.push(n.id);
+  const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const [x, y] = localPoint(e);
+    const positions = new Map(simRef.current.nodes.map((n) => [n.id, n]));
+    const hit = hitTest(
+      {
+        nodes: scene.drawNodes,
+        links: scene.drawLinks,
+        positions,
+        selection: new Set(selection),
+        hovered,
+        adjacent,
+        time: 0,
+        reducedMotion: true,
+      },
+      transformRef.current,
+      x,
+      y
+    );
+
+    e.currentTarget.setPointerCapture(e.pointerId);
+    flightRef.current = null;
+
+    if (hit) {
+      dragRef.current = { id: hit, moved: false };
+      const n = simRef.current.node(hit);
+      if (n) {
+        n.fx = n.x;
+        n.fy = n.y;
       }
-      setViewport({
-        visibleNodeIds: visible,
-        cameraDistance: Math.round(Math.hypot(cam.position.x, cam.position.y, cam.position.z)),
-      });
-    }, 600);
-    return () => window.clearInterval(timer);
-  }, [data.nodes]);
+      setCursor("grabbing");
+    } else {
+      const t = transformRef.current;
+      panRef.current = { x, y, tx: t.tx, ty: t.ty };
+      setCursor("grabbing");
+    }
+  };
 
-  // --- Idle auto-rotate -----------------------------------------------------
-  useEffect(() => {
-    if (prefersReducedMotion()) return;
-    let raf = 0;
-    let last = performance.now();
-    const loop = (now: number) => {
-      raf = requestAnimationFrame(loop);
-      const dt = (now - last) / 1000;
-      last = now;
-      const fg = fgRef.current;
-      if (!fg) return;
-      if (Date.now() - lastInteraction.current < 20_000) return;
-      const cam = fg.camera();
-      const angle = (0.3 * Math.PI * dt) / 180;
-      const { x, z } = cam.position;
-      cam.position.x = x * Math.cos(angle) - z * Math.sin(angle);
-      cam.position.z = x * Math.sin(angle) + z * Math.cos(angle);
-      cam.lookAt(0, 0, 0);
-    };
-    raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
-  }, []);
+  const onPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const [x, y] = localPoint(e);
 
-  // --- Interaction ----------------------------------------------------------
-  const noteInteraction = useCallback(() => {
-    lastInteraction.current = Date.now();
-  }, []);
+    const drag = dragRef.current;
+    if (drag) {
+      const [wx, wy] = toWorld(transformRef.current, x, y);
+      const n = simRef.current.node(drag.id);
+      if (n) {
+        n.fx = wx;
+        n.fy = wy;
+        drag.moved = true;
+        simRef.current.reheat(0.35);
+      }
+      return;
+    }
 
-  const handleNodeClick = useCallback(
-    (node: GNode) => {
-      noteInteraction();
-      toggleSelection(node.id);
-    },
-    [noteInteraction]
-  );
+    const pan = panRef.current;
+    if (pan) {
+      transformRef.current = {
+        ...transformRef.current,
+        tx: pan.tx + (x - pan.x),
+        ty: pan.ty + (y - pan.y),
+      };
+      userMovedView.current = true;
+      return;
+    }
 
-  const handleBackgroundClick = useCallback(() => {
-    noteInteraction();
-    clearSelection();
-  }, [noteInteraction]);
+    const positions = new Map(simRef.current.nodes.map((n) => [n.id, n]));
+    const hit = hitTest(
+      {
+        nodes: scene.drawNodes,
+        links: scene.drawLinks,
+        positions,
+        selection: new Set(selection),
+        hovered,
+        adjacent,
+        time: 0,
+        reducedMotion: true,
+      },
+      transformRef.current,
+      x,
+      y
+    );
+    if (hit !== hovered) setHovered(hit);
+    setCursor(hit ? "pointer" : "grab");
+  };
 
-  const handleNodeDoubleClick = useCallback(
-    (node: GNode) => {
-      noteInteraction();
-      flyTo([node.id]);
-    },
-    [noteInteraction, flyTo]
-  );
+  const endPointer = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
 
+    const drag = dragRef.current;
+    if (drag) {
+      const n = simRef.current.node(drag.id);
+      if (n) {
+        // Release the node back to the simulation. Pinning dragged nodes would
+        // let the analyst build a layout the physics then contradicts.
+        n.fx = undefined;
+        n.fy = undefined;
+      }
+      if (!drag.moved) toggleSelection(drag.id);
+      dragRef.current = null;
+      setCursor("pointer");
+      return;
+    }
+
+    const pan = panRef.current;
+    if (pan) {
+      const [x, y] = localPoint(e);
+      if (Math.hypot(x - pan.x, y - pan.y) < 4) clearSelection();
+      panRef.current = null;
+    }
+    setCursor("grab");
+  };
+
+  const onWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
+    const [x, y] = localPoint(e);
+    flightRef.current = null;
+    userMovedView.current = true;
+    transformRef.current = zoomAbout(
+      transformRef.current,
+      x,
+      y,
+      Math.pow(0.999, e.deltaY * (e.deltaMode === 1 ? 16 : 1))
+    );
+  };
+
+  // --- Keyboard -------------------------------------------------------------
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement)?.tagName === "INPUT") return;
+      const el = e.target as HTMLElement | null;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
       if (e.key === "Escape") clearSelection();
-      if (e.key.toLowerCase() === "f" && selection.length) flyTo(selection);
+      if (e.key.toLowerCase() === "f") {
+        flyTo(selection.length ? selection : [...scene.drawNodes.keys()]);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [selection, flyTo]);
+  }, [selection, flyTo, scene.drawNodes]);
 
-  // --- Rendering ------------------------------------------------------------
-  const nodeThreeObject = useCallback(
-    (node: GNode) => {
-      const view: NodeView = {
-        id: node.id,
-        type: node.type,
-        label: node.label,
-        proposed: node.proposed,
-        selected: selection.includes(node.id),
-        hovered: hovered === node.id,
-        isHub: hubs.has(node.id),
-        degree: node.degree,
-      };
-      return buildNodeObject(view);
-    },
-    [selection, hovered, hubs]
-  );
-
-  const linkColor = useCallback((l: GLink) => linkColour(l.proposed, l.analystAsserted), []);
-
-  const linkWidth = useCallback((l: GLink) => linkWidthFor(l.proposed, l.evidenceCount), []);
-
-  /** Only proposals get a custom object; returning null leaves the default
-   *  solid line in place for everything else. */
-  const linkThreeObject = useCallback(
-    (l: GLink) => (l.proposed ? makeProposedLink() : null),
-    []
-  );
-
-  const linkPositionUpdate = useCallback(
-    (
-      obj: THREE.Object3D,
-      coords: { start: { x: number; y: number; z: number }; end: { x: number; y: number; z: number } },
-      l: GLink
-    ) => {
-      if (!l.proposed) return false;
-      updateProposedLink(obj as THREE.Line, coords.start, coords.end);
-      return true;
-    },
-    []
-  );
+  const zoomBy = (factor: number) => {
+    const { w, h } = sizeRef.current;
+    flightRef.current = null;
+    userMovedView.current = true;
+    transformRef.current = zoomAbout(transformRef.current, w / 2, h / 2, factor);
+  };
 
   return (
-    <div
-      className="canvas-wrap"
-      ref={wrapRef}
-      onPointerDown={noteInteraction}
-      onWheel={noteInteraction}
-    >
-      <ForceGraph3D<GNode, GLink>
-        ref={fgRef as never}
-        graphData={data}
-        backgroundColor={PALETTE.bg}
-        showNavInfo={false}
-        nodeThreeObject={nodeThreeObject as never}
-        nodeLabel={(n: GNode) => `${n.label}`}
-        nodeRelSize={5}
-        linkColor={linkColor as never}
-        linkWidth={linkWidth as never}
-        linkOpacity={0.9}
-        // Dashes read as "being asserted"; a solid line reads as settled.
-        // react-force-graph-3d has no dashed-link prop, so proposals carry a
-        // real THREE.Line with a dash phase advanced every tick.
-        linkThreeObject={linkThreeObject as never}
-        linkPositionUpdate={linkPositionUpdate as never}
-        // Particles flow only on corroborated edges, so they mean something.
-        linkDirectionalParticles={((l: GLink) =>
-          !l.proposed && l.evidenceCount > 1 ? 2 : 0) as never}
-        linkDirectionalParticleSpeed={0.006}
-        linkDirectionalParticleWidth={1.4}
-        onNodeHover={((n: GNode | null) => setHovered(n?.id ?? null)) as never}
-        onNodeClick={handleNodeClick as never}
-        onNodeRightClick={handleNodeDoubleClick as never}
-        onBackgroundClick={handleBackgroundClick}
-        onEngineTick={onEngineTick}
-        onEngineStop={frameOnce}
-        enableNodeDrag
-        cooldownTime={8_000}
+    <div className="canvas-wrap" ref={wrapRef}>
+      <canvas
+        ref={canvasRef}
+        className="graph-canvas"
+        style={{ cursor }}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={endPointer}
+        onPointerCancel={endPointer}
+        onPointerLeave={() => setHovered(null)}
+        onWheel={onWheel}
       />
+
+      <div className="canvas-controls">
+        <button className="icon-btn" onClick={() => zoomBy(1.25)} title="Zoom in" aria-label="Zoom in">
+          +
+        </button>
+        <button className="icon-btn" onClick={() => zoomBy(0.8)} title="Zoom out" aria-label="Zoom out">
+          −
+        </button>
+        <button
+          className="icon-btn"
+          onClick={() => flyTo(selection.length ? selection : [...scene.drawNodes.keys()])}
+          title="Frame the selection (F)"
+          aria-label="Frame the selection"
+        >
+          ⤢
+        </button>
+      </div>
+
+      <div className="canvas-legend">
+        <span><i className="swatch company" /> company</span>
+        <span><i className="swatch person" /> person</span>
+        <span><i className="swatch address" /> address</span>
+        <span><i className="swatch proposed" /> proposed</span>
+      </div>
+
+      {scene.drawNodes.size === 0 && (
+        <div className="canvas-empty">
+          <p>Nothing on the canvas yet.</p>
+          <p className="dim">Search the corpus and add an entity, or mark one in a filing.</p>
+        </div>
+      )}
     </div>
   );
 }

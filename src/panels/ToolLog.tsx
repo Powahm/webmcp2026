@@ -15,7 +15,7 @@ export default function ToolLog() {
   const [expanded, setExpanded] = useState<string | null>(null);
 
   return (
-    <section className="toollog">
+    <section className={`toollog ${entries.length === 0 ? "idle" : ""}`}>
       <header className="toollog-head">
         <h2>WebMCP calls</h2>
         <span className="count">{entries.length}</span>
@@ -46,10 +46,11 @@ export default function ToolLog() {
                   title="Show full arguments"
                 >
                   <span className="time">
-                    {new Date(e.at).toLocaleTimeString([], {
+                    {new Date(e.at).toLocaleTimeString("en-GB", {
                       hour: "2-digit",
                       minute: "2-digit",
                       second: "2-digit",
+                      hour12: false,
                     })}
                   </span>
                   <span className={`kind ${e.readOnly ? "read" : "write"}`}>

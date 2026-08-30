@@ -8,16 +8,17 @@ import { errorResult, jsonResult, type McpToolDefinition } from "../mcpTypes";
 import { GET_ENTITY, NO_INPUT, QUERY_PATHS, SEARCH_DOCUMENTS } from "../schemas";
 
 /**
- * The six read-only tools.
+ * The canvas and corpus read-only tools. The reader ones live in
+ * readerTools.ts.
  *
  * All carry annotations.readOnlyHint so the browser doesn't gate them behind a
  * confirmation prompt — nothing here can change anything. They read the stores
  * and the corpus directly and never call actions.ts, because actions.ts is the
  * mutation API and these tools do not mutate.
  *
- * The three canvas-state tools are the whole argument for WebMCP over an API:
- * no server and no page-scraper can know what the analyst just decided to point
- * at.
+ * The canvas-state tools are half the argument for WebMCP over an API: no
+ * server and no page-scraper can know what the analyst just decided to point
+ * at. The other half — and the stronger one — is in readerTools.ts.
  */
 
 const READ_ONLY = { readOnlyHint: true } as const;
@@ -46,14 +47,14 @@ export const getSelection: McpToolDefinition = {
 export const getViewport: McpToolDefinition = {
   name: "get_viewport",
   description:
-    "Return which node ids are currently within the camera's view and the current zoom distance. Use it to judge what the analyst can actually see before describing the graph to them.",
+    "Return which node ids are currently visible in the canvas viewport, and the current zoom level. Use it to judge what the analyst can actually see before describing the graph to them.",
   inputSchema: NO_INPUT,
   annotations: READ_ONLY,
   execute: () => {
     const { viewport, nodes } = graph();
     return jsonResult({
       visibleNodeIds: viewport.visibleNodeIds,
-      cameraDistance: viewport.cameraDistance,
+      zoom: viewport.zoom,
       offscreenCount: Math.max(0, nodes.size - viewport.visibleNodeIds.length),
     });
   },

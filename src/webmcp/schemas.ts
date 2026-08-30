@@ -37,6 +37,116 @@ export const RELATIONS = [
   "filed",
 ] as const;
 
+export const MARKING_TYPE_ENUM = [
+  "person",
+  "company",
+  "address",
+  "date",
+  "question",
+  "lead",
+] as const;
+
+export const GET_MARKINGS: JsonSchema = {
+  type: "object",
+  properties: {
+    doc_id: { type: "string", description: "Optional. Restrict to one filing." },
+    type: {
+      type: "string",
+      enum: [...MARKING_TYPE_ENUM],
+      description: "Optional. Restrict to one kind of mark.",
+    },
+    origin: {
+      type: "string",
+      enum: ["human", "agent"],
+      description:
+        "Optional. Default is both. Use 'human' to see only what the analyst marked themselves.",
+    },
+  },
+  additionalProperties: false,
+};
+
+export const LIST_ENQUIRIES: JsonSchema = {
+  type: "object",
+  properties: {
+    status: {
+      type: "string",
+      enum: ["open", "claimed", "resulted", "filed"],
+      description: "Optional. Default returns open and claimed.",
+    },
+  },
+  additionalProperties: false,
+};
+
+export const HIGHLIGHT_SPAN: JsonSchema = {
+  type: "object",
+  properties: {
+    doc_id: { type: "string" },
+    span: SPAN as unknown as Record<string, unknown>,
+    type: { type: "string", enum: [...MARKING_TYPE_ENUM] },
+    note: {
+      type: "string",
+      maxLength: 200,
+      description: "One line, shown beside the mark in the margin.",
+    },
+  },
+  required: ["doc_id", "span", "type"],
+  additionalProperties: false,
+};
+
+export const OPEN_DOCUMENT: JsonSchema = {
+  type: "object",
+  properties: {
+    doc_id: { type: "string" },
+    scroll_to: SPAN as unknown as Record<string, unknown>,
+  },
+  required: ["doc_id"],
+  additionalProperties: false,
+};
+
+export const CLAIM_ENQUIRY: JsonSchema = {
+  type: "object",
+  properties: {
+    enquiry_id: { type: "string", description: "Id from list_enquiries." },
+  },
+  required: ["enquiry_id"],
+  additionalProperties: false,
+};
+
+export const RESULT_ENQUIRY: JsonSchema = {
+  type: "object",
+  properties: {
+    enquiry_id: { type: "string", description: "Id from list_enquiries." },
+    outcome: {
+      type: "string",
+      enum: ["found", "eliminated", "partial"],
+      description:
+        "'eliminated' means you searched and there is nothing to find; say what you searched in summary. 'found' requires at least one citation.",
+    },
+    summary: {
+      type: "string",
+      minLength: 1,
+      maxLength: 400,
+      description:
+        "What you did and what you found, in plain words. Structural facts about public records only — never a conclusion about a person.",
+    },
+    citations: {
+      type: "array",
+      maxItems: 8,
+      items: {
+        type: "object",
+        properties: {
+          doc_id: { type: "string" },
+          span: SPAN as unknown as Record<string, unknown>,
+        },
+        required: ["doc_id", "span"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["enquiry_id", "outcome", "summary"],
+  additionalProperties: false,
+};
+
 export const GET_ENTITY: JsonSchema = {
   type: "object",
   properties: {

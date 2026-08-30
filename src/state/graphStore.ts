@@ -29,7 +29,7 @@ interface GraphState {
   annotations: Annotation[];
   selection: string[];
   /** Maintained by the canvas so get_viewport can answer honestly. */
-  viewport: { visibleNodeIds: string[]; cameraDistance: number };
+  viewport: { visibleNodeIds: string[]; zoom: number };
   /** Bumped by actions.requestFocus; the canvas watches it and flies. */
   focusRequest: { nodeIds: string[]; nonce: number } | null;
   /** Bumped whenever the physics needs to re-settle (an accept). */
@@ -39,7 +39,7 @@ interface GraphState {
   _setEdges: (edges: Map<string, CanvasEdge>) => void;
   _setAnnotations: (a: Annotation[]) => void;
   _setSelection: (ids: string[]) => void;
-  _setViewport: (v: { visibleNodeIds: string[]; cameraDistance: number }) => void;
+  _setViewport: (v: { visibleNodeIds: string[]; zoom: number }) => void;
   _setFocusRequest: (f: { nodeIds: string[]; nonce: number } | null) => void;
   _bumpReheat: () => void;
 }
@@ -49,7 +49,7 @@ export const useGraphStore = create<GraphState>((set) => ({
   edges: new Map(),
   annotations: [],
   selection: [],
-  viewport: { visibleNodeIds: [], cameraDistance: 0 },
+  viewport: { visibleNodeIds: [], zoom: 1 },
   focusRequest: null,
   reheat: 0,
 
