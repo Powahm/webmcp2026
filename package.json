@@ -14,6 +14,7 @@
     "check": "tsx scripts/check-no-commit-tool.ts && tsx scripts/check-offsets.ts"
   },
   "dependencies": {
+    "@vercel/analytics": "^2.0.1",
     "minisearch": "^7.1.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

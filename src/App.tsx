@@ -19,6 +19,7 @@ import { useGraphStore } from "./state/graphStore";
 import { pendingProposals, useProposalStore } from "./state/proposalStore";
 import { useReaderStore } from "./state/readerStore";
 import { ALL_TOOLS } from "./webmcp/tools";
+import { Analytics } from "@vercel/analytics/react";
 
 /**
  * Two workspaces, one shared rail.
@@ -291,6 +292,8 @@ export default function App() {
           <kbd>Tab</kbd> switches workspace
         </span>
       </footer>
+
+      <Analytics />
     </div>
   );
 }
