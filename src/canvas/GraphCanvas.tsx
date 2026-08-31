@@ -51,6 +51,17 @@ const acceptProgress = (justAccepted: number | undefined, now: number, reduced: 
   return 1 - Math.pow(1 - t, 3);
 };
 
+/**
+ * A sim link plus the two facts the render loop needs to animate it: whether
+ * it is a proposal (constant physics) or confirmed (may be mid-accept), and
+ * when it was accepted, if recently. `distance`/`strength` on these objects
+ * are placeholders filled in at scene-build time; the render loop overwrites
+ * them every frame from the real clock, in place, on the same objects that
+ * `sim.links` holds — see the render loop below for why that has to happen
+ * there and not here.
+ */
+type AnimLink = SimLink & { proposed: boolean; justAccepted?: number };
+
 export default function GraphCanvas() {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -93,6 +104,17 @@ export default function GraphCanvas() {
 
   const pending = useMemo(() => pendingProposals(proposalMap), [proposalMap]);
 
+  // --- Verification hook, inert unless asked for ----------------------------
+  // Exposes the live Simulation on window so a test harness can read link
+  // distance/strength directly instead of screenshotting and guessing. Only
+  // runs when the page is loaded with ?debugSim in the URL — never in a
+  // normal session, and never something a build flag has to strip.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).has("debugSim")) {
+      (window as unknown as { __tw_sim?: Simulation }).__tw_sim = simRef.current;
+    }
+  }, []);
+
   // --- Scene data: confirmed graph plus pending proposals -------------------
   const scene = useMemo(() => {
     const degree = new Map<string, number>();
@@ -115,7 +137,7 @@ export default function GraphCanvas() {
     }
 
     const drawLinks: DrawLink[] = [];
-    const simLinks: SimLink[] = [];
+    const simLinks: AnimLink[] = [];
     const now = Date.now();
     const reduced = prefersReducedMotion();
 
@@ -133,6 +155,8 @@ export default function GraphCanvas() {
       simLinks.push({
         source: e.from_id,
         target: e.to_id,
+        proposed: false,
+        justAccepted: e.justAccepted,
         distance: linkDistanceFor(false, t),
         strength: linkStrengthFor(false, t),
       });
@@ -162,6 +186,8 @@ export default function GraphCanvas() {
       simLinks.push({
         source: p.from_id,
         target: p.to_id,
+        proposed: true,
+        justAccepted: undefined,
         distance: linkDistanceFor(true),
         strength: linkStrengthFor(true),
       });
@@ -242,6 +268,26 @@ export default function GraphCanvas() {
       }
 
       const sim = simRef.current;
+
+      // The accept animation lives here, not in the scene memo. Distance and
+      // strength are a function of wall-clock time (see acceptProgress), so a
+      // memo that only re-runs when the graph changes freezes them at
+      // whatever they were the instant the memo ran — that was the bug: an
+      // accepted edge sat at t=0 forever because nothing re-invoked it.
+      // Mutating the same SimLink objects sim.links already holds, on every
+      // frame, is what makes the spring actually tighten in front of tick().
+      const now = Date.now();
+      let animating = false;
+      for (const l of sim.links as AnimLink[]) {
+        const t = acceptProgress(l.justAccepted, now, reduced);
+        l.distance = linkDistanceFor(l.proposed, t);
+        l.strength = linkStrengthFor(l.proposed, t);
+        if (t < 1) animating = true;
+      }
+      // Without this, alpha can decay to its floor mid-animation and the
+      // contraction visibly stalls partway through instead of completing.
+      if (animating) sim.reheat(0.35);
+
       sim.tick();
 
       // Keep the whole graph framed until the analyst takes the view over.

@@ -75,6 +75,17 @@ export default function App() {
     };
   }, []);
 
+  // Verification hook, inert unless asked for: exposes the registered tool
+  // definitions on window so a test harness can stage a proposal exactly the
+  // way a WebMCP host would call it, without needing a real host present.
+  // Only runs with ?debugSim in the URL — see GraphCanvas.tsx for the
+  // matching Simulation exposure this pairs with.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).has("debugSim")) {
+      (window as unknown as { __tw_tools?: typeof ALL_TOOLS }).__tw_tools = ALL_TOOLS;
+    }
+  }, []);
+
   /**
    * Show a citation: open the filing in the reader at the right place *and*
    * fill the evidence panel. The analyst reads the record in context; the panel
