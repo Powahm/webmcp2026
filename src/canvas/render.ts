@@ -29,13 +29,54 @@ export interface DrawNode {
  * building and the postcode, which is what identifies them to a reader anyway.
  * The Inspector shows the whole thing.
  */
+/** A UK postcode, e.g. "SW16 6NR" or "IV15 9TS". */
+const UK_POSTCODE = /^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i;
+
+/** Bare country names Companies House addresses are routinely suffixed with.
+ *  Every address here is in the UK, so keeping one of these as the second
+ *  half of a node label carries no information. */
+const COUNTRY_SUFFIXES = new Set([
+  "UNITED KINGDOM",
+  "ENGLAND",
+  "SCOTLAND",
+  "WALES",
+  "NORTHERN IRELAND",
+]);
+
 export function shortLabel(label: string, type: NodeKind): string {
   if (type === "address") {
     const parts = label.split(",").map((p) => p.trim());
     if (parts.length >= 2) {
-      const postcode = parts[parts.length - 1];
       const head = parts[0];
-      return `${head}, ${postcode}`;
+
+      // The postcode is the single most identifying token on the node, and
+      // it is not reliably the last comma-separated part — real addresses
+      // are routinely suffixed with the country. Scan from the end for the
+      // first part that is actually shaped like a UK postcode.
+      let tail: string | undefined;
+      for (let i = parts.length - 1; i >= 1; i--) {
+        if (UK_POSTCODE.test(parts[i])) {
+          tail = parts[i];
+          break;
+        }
+      }
+
+      // No postcode-shaped part: fall back to the last part that is not a
+      // bare country name, so "UNITED KINGDOM" isn't what survives.
+      if (!tail) {
+        for (let i = parts.length - 1; i >= 1; i--) {
+          if (!COUNTRY_SUFFIXES.has(parts[i].toUpperCase())) {
+            tail = parts[i];
+            break;
+          }
+        }
+      }
+
+      // Every part was a country name (unexpected) — keep the original
+      // behaviour rather than producing an empty label.
+      if (!tail) tail = parts[parts.length - 1];
+
+      return `${head}, ${tail}`;
     }
   }
   return label.length > 30 ? `${label.slice(0, 28)}…` : label;
