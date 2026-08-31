@@ -5,7 +5,7 @@ something true about the graph, cut it — decoration is how a demo starts looki
 
 ## Layout
 
-Two workspaces, one shared rail, `Tab` toggles between them. Both stay mounted — switching loses no
+Two workspaces, one shared rail, `W` toggles between them. Both stay mounted — switching loses no
 state. **The app opens on READ**, because the human reads first.
 
 ```

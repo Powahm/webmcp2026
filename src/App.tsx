@@ -112,11 +112,15 @@ export default function App() {
     if (pendingCount > 0) setTab("proposals");
   }, [pendingCount]);
 
+  // Was bound to Tab, which meant focus could never move anywhere in the
+  // app (WCAG 2.1.1) — every Tab press was eaten here before it reached
+  // anything focusable. W is unbound, unmodified, and matches the style of
+  // F and Esc on the canvas.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null;
       if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
-      if (e.key === "Tab") {
+      if (e.key.toLowerCase() === "w" && !e.metaKey && !e.ctrlKey && !e.altKey) {
         e.preventDefault();
         setWorkspace((w) => (w === "read" ? "canvas" : "read"));
       }
@@ -300,7 +304,7 @@ export default function App() {
           )}
         </span>
         <span className="dim">
-          <kbd>Tab</kbd> switches workspace
+          <kbd>W</kbd> switches workspace
         </span>
       </footer>
 
