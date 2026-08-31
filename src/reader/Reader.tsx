@@ -5,6 +5,7 @@ import {
   captureSelection,
   clearScrollRequest,
   raiseEnquiry,
+  removeMarking,
   setVisibleSpan,
 } from "../state/actions";
 import { markingsFor, useReaderStore } from "../state/readerStore";
@@ -340,6 +341,14 @@ function MarginList({
     }
   };
 
+  // Applies to the agent's marks too: the analyst reads them alongside its
+  // own and must be able to clear either kind, the same way it can accept or
+  // reject the agent's other claims.
+  const remove = (markId: string, ev: React.MouseEvent<HTMLButtonElement>) => {
+    removeMarking(markId, ev.nativeEvent as unknown as { isTrusted: boolean });
+    if (asking === markId) setAsking(null);
+  };
+
   return (
     <aside className="margin" id="reader-margin">
       <header className="margin-head">
@@ -356,12 +365,23 @@ function MarginList({
       <ul className="margin-list">
         {marks.map((m) => (
           <li key={m.id} className={`margin-mark ${m.origin}`}>
-            <button className="margin-jump" onClick={() => onGoTo(m.span)}>
-              <span className={`swatch mk-${m.type}`} />
-              <span className="margin-type">{m.type}</span>
-              {m.origin === "agent" && <span className="by-agent">agent</span>}
-              <span className="margin-text">{m.text.slice(0, 90)}</span>
-            </button>
+            <div className="margin-row">
+              <button className="margin-jump" onClick={() => onGoTo(m.span)}>
+                <span className={`swatch mk-${m.type}`} />
+                <span className="margin-type">{m.type}</span>
+                {m.origin === "agent" && <span className="by-agent">agent</span>}
+                <span className="margin-text">{m.text.slice(0, 90)}</span>
+              </button>
+              <button
+                type="button"
+                className="margin-delete"
+                aria-label={`Delete this ${m.type} mark`}
+                title="Delete this mark"
+                onClick={(ev) => remove(m.id, ev)}
+              >
+                ×
+              </button>
+            </div>
             {m.note && <p className="margin-note">{m.note}</p>}
 
             {asking === m.id ? (

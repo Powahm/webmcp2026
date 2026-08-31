@@ -815,14 +815,37 @@ input::placeholder {
   border-bottom: 1px solid var(--line-soft);
 }
 
+.margin-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+
 .margin-jump {
   display: block;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   padding: 3px 0;
   text-align: left;
 }
 
 .margin-jump:hover .margin-text {
+  color: var(--text);
+}
+
+.margin-delete {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-top: 3px;
+  border-radius: 4px;
+  color: var(--text-faint);
+  font-size: 13px;
+  line-height: 1;
+}
+
+.margin-delete:hover {
+  background: var(--surface-3);
   color: var(--text);
 }
 
