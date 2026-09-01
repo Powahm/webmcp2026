@@ -14,3 +14,4 @@ _snapshot.tgz
 
 vite.config.ts.timestamp-*.mjs
 docs/PLAN-FOR-SONNET.md
+docs/SPEC-case-bar.md
