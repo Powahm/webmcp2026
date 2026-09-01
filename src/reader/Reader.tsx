@@ -12,6 +12,8 @@ import { markingsFor, useReaderStore } from "../state/readerStore";
 import { MARKING_TYPES, type MarkingType } from "../types";
 import { dominant, hasAgentMark, segment } from "./markings";
 import { readSelection } from "./selection";
+import { useReaderMode } from "./modeStore";
+import SelectionPopup from "./SelectionPopup";
 
 /**
  * The reader, the analyst's work surface.
@@ -57,6 +59,18 @@ export default function Reader() {
   const textRef = useRef<HTMLPreElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [flash, setFlash] = useState<{ start: number; end: number } | null>(null);
+  /** The live DOM selection, as the analyst sees it. Distinct from the store's
+   *  sticky copy; see the selectionchange handler for why both exist. */
+  const [liveSel, setLiveSel] = useState<{ start: number; end: number; text: string } | null>(null);
+  /** Where the popup goes, in the reader pane's own coordinates. */
+  const [selRect, setSelRect] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
+  /** Which mark's ask form is open. Lifted out of the margin so the selection
+   *  popup can open one directly. */
+  const [asking, setAsking] = useState<string | null>(null);
+  const paneRef = useRef<HTMLDivElement>(null);
+
+  const mode = useReaderMode((m) => m.mode);
+  const colour = useReaderMode((m) => m.colour);
 
   const doc = useMemo(
     () => (openDocId ? (getCorpus().documents.get(openDocId) ?? null) : null),
@@ -84,9 +98,36 @@ export default function Reader() {
       const el = textRef.current;
       if (!el) return;
       const read = readSelection(el, doc.text);
-      // A collapsed selection means the analyst clicked away, not that they
-      // withdrew what they highlighted. Keep the last real one.
-      if (read) captureSelection({ doc_id: doc.id, ...read });
+      if (read) {
+        captureSelection({ doc_id: doc.id, ...read });
+        setLiveSel({ ...read });
+
+        // Where the popup should sit. Measured against the pane rather than the
+        // viewport so it stays put when the filing scrolls under it.
+        const sel = document.getSelection();
+        const pane = paneRef.current;
+        if (sel && sel.rangeCount && pane) {
+          const r = sel.getRangeAt(0).getBoundingClientRect();
+          const p = pane.getBoundingClientRect();
+          setSelRect({ top: r.top - p.top, left: r.left - p.left, width: r.width, height: r.height });
+        }
+        return;
+      }
+      /**
+       * The selection went away. Two different things need to happen.
+       *
+       * The store keeps the last real selection, because by the time an agent
+       * calls get_reader_context the analyst has clicked into the browser's own
+       * chrome and reading the live selection there returns null exactly when
+       * it matters. That is deliberate and stays.
+       *
+       * The mark bar is the opposite case: it is in front of the analyst, and
+       * leaving it quoting a passage they have just deselected, still offering
+       * to "mark as", is a lie about what pressing 1 would do. So the bar
+       * follows a live copy that clears here.
+       */
+      setLiveSel(null);
+      setSelRect(null);
     };
     document.addEventListener("selectionchange", onChange);
     return () => document.removeEventListener("selectionchange", onChange);
@@ -140,13 +181,40 @@ export default function Reader() {
       const el = textRef.current;
       const live = el ? readSelection(el, doc.text) : null;
       const use = live ?? (selection?.doc_id === doc.id ? selection : null);
-      if (!use) return;
-      addMarking({ doc_id: doc.id, span: { start: use.start, end: use.end }, type, origin: "human" });
+      if (!use) return undefined;
+      const res = addMarking({
+        doc_id: doc.id,
+        span: { start: use.start, end: use.end },
+        type,
+        origin: "human",
+      });
       document.getSelection()?.removeAllRanges();
       captureSelection(null);
+      setSelRect(null);
+      return res.ok ? res.id : undefined;
     },
     [doc, selection]
   );
+
+  /**
+   * Highlighter mode. Marks on pointer-up rather than on selectionchange,
+   * because selectionchange fires continuously while the pointer is still down
+   * and would mark every intermediate word as the analyst drags.
+   */
+  useEffect(() => {
+    if (mode !== "highlight") return;
+    const onUp = () => {
+      // After the browser has settled the final selection.
+      window.setTimeout(() => {
+        const el = textRef.current;
+        if (!el || !doc) return;
+        if (readSelection(el, doc.text)) mark(colour);
+      }, 0);
+    };
+    const pane = paneRef.current;
+    pane?.addEventListener("pointerup", onUp);
+    return () => pane?.removeEventListener("pointerup", onUp);
+  }, [mode, colour, doc, mark]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -162,7 +230,9 @@ export default function Reader() {
     return () => window.removeEventListener("keydown", onKey);
   }, [mark]);
 
-  const pendingSelection = selection?.doc_id === doc?.id ? selection : null;
+  // The bar shows what is selected right now, never the sticky copy the tools
+  // read. `mark` still reads the DOM itself, so acting on it stays correct.
+  const pendingSelection = liveSel;
 
   /**
    * The margin costs 268px, and a filing is 78 columns of monospace that must
@@ -190,6 +260,12 @@ export default function Reader() {
    * analyst touches the toggle themselves, keeps the reading default and still
    * shows the result of the action that just happened.
    */
+  /** 1..n for the gutter. Recomputed only when the filing changes. */
+  const lineCount = useMemo(() => {
+    const n = doc ? doc.text.split("\n").length : 0;
+    return Array.from({ length: n }, (_, i) => i + 1);
+  }, [doc]);
+
   const marginTouched = useRef(false);
   useEffect(() => {
     if (!marginTouched.current && marks.length > 0) setMarginOpen(true);
@@ -235,7 +311,28 @@ export default function Reader() {
         </button>
       </header>
 
-      <div className={`reader-body ${marginOpen ? "" : "solo"}`}>
+      <div className={`reader-body ${marginOpen ? "" : "solo"}`} ref={paneRef}>
+        {/* Cursor mode asks what the passage is; highlighter mode has already
+            marked it by the time this would render. */}
+        {mode === "cursor" && selRect && liveSel && (
+          <SelectionPopup
+            rect={selRect}
+            onPick={(t) => mark(t)}
+            onAsk={() => {
+              const id = mark("question");
+              if (id) {
+                marginTouched.current = true;
+                setMarginOpen(true);
+                setAsking(id);
+              }
+            }}
+            onDismiss={() => {
+              document.getSelection()?.removeAllRanges();
+              setLiveSel(null);
+              setSelRect(null);
+            }}
+          />
+        )}
         {/* Focusable and named: without tabIndex a keyboard user cannot scroll
             the filing at all, which is an axe 'serious' and, more to the point,
             makes the primary reading surface unusable without a mouse. */}
@@ -247,6 +344,18 @@ export default function Reader() {
           aria-label={`Filing: ${doc.title}`}
         >
           {/* white-space: pre-wrap, and the string is never touched. */}
+          {/* A gutter of source line numbers.
+              Generated from the text itself rather than from the rendered
+              nodes, so marks that split a line into several spans cannot make
+              the numbering drift. It aligns because .filing-text is `pre`:
+              every source line is exactly one rendered line. */}
+          <div className="filing">
+          <ol className="line-numbers" aria-hidden="true">
+            {lineCount.map((n) => (
+              <li key={n}>{n}</li>
+            ))}
+          </ol>
+
           <pre className="filing-text" ref={textRef} data-tour="filing">
             {segments.map((seg) => {
               const top = dominant(seg.marks);
@@ -282,6 +391,7 @@ export default function Reader() {
               );
             })}
           </pre>
+          </div>
 
           <p className="provenance">
             Source: UK Companies House public records, rendered verbatim from the
@@ -289,7 +399,9 @@ export default function Reader() {
           </p>
         </div>
 
-        {marginOpen && <MarginList docId={doc.id} onGoTo={scrollToSpan} />}
+        {marginOpen && (
+          <MarginList docId={doc.id} onGoTo={scrollToSpan} asking={asking} setAsking={setAsking} />
+        )}
       </div>
 
       <MarkBar selection={pendingSelection} onMark={mark} />
@@ -332,6 +444,9 @@ function MarkBar({
             key={t}
             className={`type-btn t-${t}`}
             disabled={!selection}
+            // Pressing the button would otherwise collapse the very selection
+            // it is about to act on.
+            onMouseDown={(e) => e.preventDefault()}
             onClick={() => onMark(t)}
             title={`Mark as ${t} (${i + 1})`}
           >
@@ -350,13 +465,17 @@ function MarkBar({
 function MarginList({
   docId,
   onGoTo,
+  asking,
+  setAsking,
 }: {
   docId: string;
   onGoTo: (span: { start: number; end: number }) => void;
+  /** Lifted to the Reader so the selection popup can open a form directly. */
+  asking: string | null;
+  setAsking: (id: string | null) => void;
 }) {
   const markingMap = useReaderStore((s) => s.markings);
   const marks = useMemo(() => markingsFor(markingMap, docId), [markingMap, docId]);
-  const [asking, setAsking] = useState<string | null>(null);
   const [question, setQuestion] = useState("");
 
   const submit = (markId: string, ev: React.FormEvent<HTMLFormElement>) => {
