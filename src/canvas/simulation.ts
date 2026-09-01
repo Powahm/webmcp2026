@@ -69,6 +69,31 @@ export const SIM = {
    *  land on top of each other part firmly instead of exploding. */
   clusterMinDistance: 140,
   /**
+   * Beyond this, two components stop pushing each other altogether.
+   *
+   * Without a ceiling the inverse-square decays but never reaches zero, so
+   * every pair of clusters keeps accelerating apart for as long as the
+   * simulation is warm — and dragging holds it warm, because pointermove
+   * reheats on every event. Worse, clusters spread *symmetrically*, so the mean
+   * of the centroids barely moves and driftCorrection never sees a problem to
+   * correct. That combination is the drift off screen. A component that is
+   * already this far away is not crowding anything, so it needs no push.
+   */
+  clusterDistanceMax: 760,
+  /**
+   * How far a component's centroid may sit from the layout centroid before it
+   * is eased back.
+   *
+   * Scaled by sqrt(component count), so a six-cluster board is allowed to be
+   * wider than a two-cluster one. This is a budget the layout grows into, not a
+   * wall: nothing is ever clamped to a fixed box, which would break the moment
+   * the analyst added one more cluster than the box was sized for.
+   */
+  clusterSpreadRadius: 200,
+  /** Strength of that easing. Deliberately weak — it should read as the picture
+   *  settling back into view, never as a cluster being yanked. */
+  clusterContainment: 0.08,
+  /**
    * Recentring. Applied as one identical vector to every node, which makes it
    * a pure translation of the whole layout: it can move the picture back into
    * view, and it cannot change the shape of anything in it.
@@ -373,6 +398,10 @@ export class Simulation {
             dy = (i % 2 === 0 ? 1 : -1) * 0.6;
             d = Math.hypot(dx, dy);
           }
+          // Far-apart components are not crowding each other. Skipping them
+          // is what stops the runaway; see clusterDistanceMax.
+          if (d > SIM.clusterDistanceMax) continue;
+
           const clamped = Math.max(d, SIM.clusterMinDistance);
           const force = (SIM.clusterSeparation * a) / (clamped * clamped);
           const ux = dx / d;
@@ -388,6 +417,46 @@ export class Simulation {
         if (n.fx !== undefined) continue;
         n.vx += pushX[n.comp];
         n.vy += pushY[n.comp];
+      }
+    }
+
+    // Containment. A component whose centroid has wandered past the spread
+    // budget is eased back towards the middle of the layout — again as one
+    // shared vector per component, so it translates rather than deforms. This
+    // is the backstop: separation can no longer push a cluster to infinity, and
+    // anything that gets far out for another reason drifts back on its own.
+    if (count > 1) {
+      let cx = 0;
+      let cy = 0;
+      for (let c = 0; c < count; c++) {
+        cx += sumX[c];
+        cy += sumY[c];
+      }
+      cx /= count;
+      cy /= count;
+
+      const budget = SIM.clusterSpreadRadius * Math.sqrt(count);
+      const pullX = new Float64Array(count);
+      const pullY = new Float64Array(count);
+      let engaged = false;
+
+      for (let c = 0; c < count; c++) {
+        const dx = sumX[c] - cx;
+        const dy = sumY[c] - cy;
+        const d = Math.hypot(dx, dy);
+        if (d <= budget || d < 1e-3) continue;
+        const pull = (d - budget) * SIM.clusterContainment * a;
+        pullX[c] = -(dx / d) * pull;
+        pullY[c] = -(dy / d) * pull;
+        engaged = true;
+      }
+
+      if (engaged) {
+        for (const n of this.nodes) {
+          if (n.fx !== undefined) continue;
+          n.vx += pullX[n.comp];
+          n.vy += pullY[n.comp];
+        }
       }
     }
 
