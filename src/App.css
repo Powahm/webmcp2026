@@ -64,11 +64,15 @@ kbd {
    positioned: an absolute box still counts towards the page's scrollable
    overflow no matter how it is clipped, which showed up as 19px of horizontal
    scroll coming off the tab badges. One pixel in flow cannot. */
+/* The canonical visually-hidden. `position: absolute` is not decoration here:
+   without it the live region is a grid child of .app and reserves a full row,
+   which is the empty band that appeared above the tool log. */
 .sr-only {
-  display: inline-block;
+  position: absolute;
   width: 1px;
   height: 1px;
   padding: 0;
+  margin: -1px;
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;
@@ -575,8 +579,15 @@ input::placeholder {
 .filing {
   display: flex;
   align-items: flex-start;
-  justify-content: center;
+  /* `safe` matters: a filing-history line runs well past 78 columns, and plain
+     centring pushes the overflow out past the left edge of the scroll box where
+     it can never be scrolled back into view. */
+  justify-content: safe center;
   gap: var(--s3);
+  /* The row must be at least as wide as the scroller, or centring collapses
+     against the widest line instead of the pane. */
+  min-width: 100%;
+  width: max-content;
 }
 
 /* Notebook numbering. Right-aligned, dim, and never selectable: a number
@@ -584,6 +595,9 @@ input::placeholder {
    on, so user-select is off rather than merely discouraged. */
 .line-numbers {
   flex: none;
+  /* Fixed, not content-sized. A 9-line filing and a 900-line one must present
+     the same margin, or opening a document silently reflows the text column. */
+  width: 4ch;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -2697,4 +2711,61 @@ body.resizing-y * {
     transition: none;
     transform: none;
   }
+}
+
+/* --- The corpus panel before anyone has searched ---------------------------
+   The frontier: what the records attach to your canvas that is not on it yet.
+   The most useful thing to put in a search panel is the answer to the question
+   the analyst already has. */
+
+.frontier {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  margin-top: var(--s3);
+  border-top: 1px solid var(--line-soft);
+  padding-top: var(--s3);
+}
+
+.frontier h3 {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  margin: 0 var(--s3) 2px;
+  color: var(--text-dim);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.frontier h3 .count {
+  margin-left: auto;
+  color: var(--text-faint);
+  font-weight: 400;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.frontier-note {
+  margin: 0 var(--s3) var(--s2);
+  color: var(--text-faint);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+/* The hop count is the ranking, so it reads as a figure rather than a label. */
+.frontier .result-type {
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- The mode switch sits in the reader header too ------------------------- */
+
+.reader-head .mode-switch {
+  margin-left: auto;
+}
+
+.reader-head .mode-palette {
+  right: auto;
+  left: 0;
 }
