@@ -166,6 +166,9 @@ export interface Enquiry {
   from_marking_id?: string;
   result?: EnquiryResult;
   created_at: number;
+  /** When the agent took it. Used to count the calls made since, which is the
+   *  only honest progress signal the page has while it waits. */
+  claimed_at?: number;
 }
 
 // --- Decision log ----------------------------------------------------------

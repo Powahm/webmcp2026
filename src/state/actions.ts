@@ -535,7 +535,7 @@ export function claimEnquiry(id: string): ActionResult {
       "Call list_enquiries to see what is still open."
     );
   }
-  map.set(id, { ...e, status: "claimed" });
+  map.set(id, { ...e, status: "claimed", claimed_at: Date.now() });
   useEnquiryStore.getState()._setEnquiries(map);
   record("agent", "claimed", e.question.slice(0, 120), id);
   return { ok: true, id };

@@ -1,8 +1,10 @@
 import { useMemo, useState } from "react";
 import { getCorpus } from "../corpus/loadCorpus";
+import { useToolLogStore } from "../state/toolLogStore";
 import { fileEnquiry, raiseEnquiry } from "../state/actions";
 import { enquiryList, useEnquiryStore } from "../state/enquiryStore";
 import { useReaderStore } from "../state/readerStore";
+import { useWebMcpStatus } from "../webmcp/status";
 import type { Enquiry } from "../types";
 import type { EvidenceTarget } from "./EvidenceDrawer";
 
@@ -82,11 +84,39 @@ export default function EnquiryPanel({
 }
 
 const STATUS_COPY: Record<Enquiry["status"], string> = {
-  open: "open",
-  claimed: "with the agent",
-  resulted: "resulted",
+  open: "waiting for the agent",
+  claimed: "the agent is on it",
+  resulted: "answered — your call",
   filed: "filed",
 };
+
+/**
+ * What the page can honestly say about an enquiry in flight.
+ *
+ * There is no "the model is thinking" signal in WebMCP and inventing one would
+ * be theatre. What the page does know is real and nearly as reassuring: the
+ * agent has claimed this question, and it is calling tools right now. So a
+ * claimed enquiry shows a live pulse and a running count of the calls made
+ * since it was claimed — which is visible progress, sourced from something
+ * that actually happened.
+ */
+function Working({ since }: { since: number }) {
+  const inFlight = useWebMcpStatus((s) => s.inFlight);
+  const calls = useToolLogStore((s) => s.entries.filter((e) => e.at >= since).length);
+
+  return (
+    <p className={`enquiry-working ${inFlight > 0 ? "busy" : ""}`}>
+      <i className="pulse" aria-hidden />
+      <span role="status">
+        {inFlight > 0
+          ? `the agent is searching — ${calls} call${calls === 1 ? "" : "s"} so far`
+          : calls > 0
+            ? `the agent has it — ${calls} call${calls === 1 ? "" : "s"} so far, waiting for its report`
+            : "the agent has taken this and has not called anything yet"}
+      </span>
+    </p>
+  );
+}
 
 function Row({
   e,
@@ -114,6 +144,8 @@ function Row({
           from your <b>{from.type}</b> mark — “{from.text.slice(0, 70)}”
         </p>
       )}
+
+      {e.status === "claimed" && !e.result && <Working since={e.claimed_at ?? e.created_at} />}
 
       {e.result && (
         <div className={`enquiry-result ${e.result.outcome}`}>
