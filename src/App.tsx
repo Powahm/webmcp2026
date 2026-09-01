@@ -9,7 +9,6 @@ import EnquiryPanel from "./panels/EnquiryPanel";
 import EvidenceDrawer, { type EvidenceTarget } from "./panels/EvidenceDrawer";
 import HowItWorks from "./panels/HowItWorks";
 import Resizer from "./panels/Resizer";
-import ModeSwitch from "./reader/ModeSwitch";
 import Tour from "./tour/Tour";
 import { introSeen, useTourStore } from "./tour/tourStore";
 import Inspector from "./panels/Inspector";
@@ -298,9 +297,6 @@ export default function App() {
         <span data-tour="badge">
           <StatusBadge />
         </span>
-
-        {/* Only in Read: there is nothing to highlight on a chart. */}
-        {workspace === "read" && <ModeSwitch />}
 
         <button
           className="icon-btn help-btn"
