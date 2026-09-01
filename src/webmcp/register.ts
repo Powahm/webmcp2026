@@ -82,7 +82,7 @@ export async function registerWebMcpTools(
   // A host that rejected every tool is not a working host, and saying "live"
   // there would be the same lie the badge exists to stop telling.
   setWebMcpStatus(
-    registeredCount > 0 ? { kind: "active", where, count: registeredCount } : { kind: "absent" }
+    registeredCount > 0 ? { kind: "registered", where, count: registeredCount } : { kind: "absent" }
   );
 
   console.info(

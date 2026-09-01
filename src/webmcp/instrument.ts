@@ -1,3 +1,4 @@
+import { callEnded, callStarted } from "./status";
 import { toolLog } from "../state/toolLogStore";
 import { errorResult, type McpToolDefinition, type ToolResult } from "./mcpTypes";
 import { corpusReady } from "../corpus/loadCorpus";
@@ -43,6 +44,9 @@ export function instrument(tool: McpToolDefinition): McpToolDefinition {
     ...tool,
     execute: async (args) => {
       const started = performance.now();
+      // Bracketed here rather than inside the try, so the in-flight count is
+      // decremented on every path including a thrown tool.
+      callStarted();
       let result: ToolResult;
       try {
         if (!corpusReady()) {
@@ -59,6 +63,8 @@ export function instrument(tool: McpToolDefinition): McpToolDefinition {
           "This is a bug in the page rather than a problem with the arguments."
         );
       }
+
+      callEnded();
 
       toolLog()._push({
         id: `call:${Date.now().toString(36)}-${seq++}`,
