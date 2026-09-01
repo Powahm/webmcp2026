@@ -5,6 +5,7 @@ import { canvasEdges, canvasNodes } from "../../state/actions";
 import { graph } from "../../state/graphStore";
 import { pendingProposals, proposals } from "../../state/proposalStore";
 import { errorResult, jsonResult, type McpToolDefinition } from "../mcpTypes";
+import { openEnquiryNudge } from "../nudge";
 import { GET_ENTITY, NO_INPUT, QUERY_PATHS, SEARCH_DOCUMENTS } from "../schemas";
 
 /**
@@ -32,6 +33,7 @@ export const getSelection: McpToolDefinition = {
   execute: () => {
     const { nodes, selection } = graph();
     return jsonResult({
+      ...openEnquiryNudge(),
       nodes: selection
         .map((id) => nodes.get(id))
         .filter((n) => n !== undefined)
@@ -69,6 +71,7 @@ export const getVisibleSubgraph: McpToolDefinition = {
   execute: () => {
     const pending = pendingProposals(proposals().proposals);
     return jsonResult({
+      ...openEnquiryNudge(),
       nodes: canvasNodes().map((n) => ({
         id: n.id,
         type: n.type,
@@ -153,6 +156,7 @@ export const searchDocumentsTool: McpToolDefinition = {
 
     const results = searchDocuments(query, { entityIds, limit });
     return jsonResult({
+      ...openEnquiryNudge(),
       results,
       note: results.length
         ? "Each span is directly citable: pass source_doc_id and span to propose_node or propose_edge."

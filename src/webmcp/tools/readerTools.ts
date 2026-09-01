@@ -3,6 +3,7 @@ import { enquiryList, enquiries } from "../../state/enquiryStore";
 import { markingsFor, reader } from "../../state/readerStore";
 import type { EnquiryStatus, MarkingType } from "../../types";
 import { jsonResult, type McpToolDefinition } from "../mcpTypes";
+import { openEnquiryNudge } from "../nudge";
 import { GET_MARKINGS, LIST_ENQUIRIES, NO_INPUT } from "../schemas";
 
 /**
@@ -44,6 +45,7 @@ export const getReaderContext: McpToolDefinition = {
     }
 
     return jsonResult({
+      ...openEnquiryNudge(),
       doc_id: doc.id,
       title: doc.title,
       length: doc.text.length,
@@ -82,6 +84,7 @@ export const getMarkings: McpToolDefinition = {
       .sort((a, b) => a.created_at - b.created_at);
 
     return jsonResult({
+      ...openEnquiryNudge(),
       markings: all.map((m) => ({
         id: m.id,
         doc_id: m.doc_id,
