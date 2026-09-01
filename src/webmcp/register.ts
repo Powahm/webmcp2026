@@ -18,6 +18,7 @@
  */
 
 import type { McpToolDefinition, ModelContext } from "./mcpTypes";
+import { setWebMcpStatus } from "./status";
 import { ALL_TOOLS } from "./tools";
 
 let registered = false;
@@ -52,6 +53,7 @@ export async function registerWebMcpTools(
       "[threadweaver] running inside an iframe — WebMCP tools are not discovered " +
         "in frames, so registration was skipped. Open the page top-level."
     );
+    setWebMcpStatus({ kind: "framed" });
     return;
   }
 
@@ -62,17 +64,26 @@ export async function registerWebMcpTools(
         "Open in ChatGPT's browser, or Chrome 149+ with " +
         "chrome://flags/#enable-webmcp-testing."
     );
+    setWebMcpStatus({ kind: "absent" });
     return;
   }
 
   const { mc, where } = found;
+  let registeredCount = 0;
   for (const tool of tools) {
     try {
       await mc.registerTool!(tool);
+      registeredCount++;
     } catch (err) {
       console.error(`[threadweaver] failed to register ${tool.name}`, err);
     }
   }
+
+  // A host that rejected every tool is not a working host, and saying "live"
+  // there would be the same lie the badge exists to stop telling.
+  setWebMcpStatus(
+    registeredCount > 0 ? { kind: "active", where, count: registeredCount } : { kind: "absent" }
+  );
 
   console.info(
     `[threadweaver] registered ${tools.length} tool(s) on ${where}:`,

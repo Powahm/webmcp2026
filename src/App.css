@@ -291,6 +291,20 @@ input::placeholder {
   color: var(--agent);
   font-size: 11px;
   white-space: nowrap;
+  cursor: default;
+}
+
+/* Off is amber, not red: no agent host is a normal way to run this app, not a
+   fault. Red would tell the analyst something is broken when nothing is. */
+.tool-badge.off {
+  border-color: #6b4a22;
+  background: #2a1d0e;
+  color: var(--warn);
+}
+
+.tool-badge.checking {
+  border-color: var(--line);
+  color: var(--text-dim);
 }
 
 .fixture-warning {

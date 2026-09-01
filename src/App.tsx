@@ -18,6 +18,7 @@ import { openEnquiries, useEnquiryStore } from "./state/enquiryStore";
 import { useGraphStore } from "./state/graphStore";
 import { pendingProposals, useProposalStore } from "./state/proposalStore";
 import { useReaderStore } from "./state/readerStore";
+import StatusBadge from "./webmcp/StatusBadge";
 import { ALL_TOOLS } from "./webmcp/tools";
 import { Analytics } from "@vercel/analytics/react";
 
@@ -193,9 +194,7 @@ export default function App() {
           UK Companies House public records · structure, not accusation
         </span>
 
-        <span className="tool-badge" title={ALL_TOOLS.map((t) => t.name).join("\n")}>
-          {ALL_TOOLS.length} WebMCP tools
-        </span>
+        <StatusBadge />
 
         <div className="settings-anchor">
           <button
