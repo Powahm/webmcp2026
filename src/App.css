@@ -539,6 +539,9 @@ input::placeholder {
 }
 
 .reader-body {
+  /* The selection popup is positioned against this pane, so it must be the
+     nearest positioned ancestor or it escapes into the page. */
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 268px;
   flex: 1;
@@ -553,7 +556,7 @@ input::placeholder {
 .reader-scroll {
   min-height: 0;
   padding: var(--s5) var(--s5) var(--s6);
-  overflow-y: auto;
+  overflow: auto;
 }
 
 .reader-empty {
@@ -566,17 +569,53 @@ input::placeholder {
 /* The filing itself. Never reformatted: pre-wrap and nothing else, because
    every span in the corpus and every mark the analyst makes is an index into
    this exact string. */
-.filing-text {
-  max-width: 78ch;
-  /* Centred. The measure is fixed by readability, but the pane is as wide as
-     the window: left-aligning the column leaves most of the stage empty and the
-     filing marooned in a corner. */
-  margin: 0 auto;
+/* The gutter and the filing are one row. This must wrap them rather than sit
+   on .reader-scroll, or every other child of the scroller, the provenance note
+   included, becomes a column beside the text. */
+.filing {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: var(--s3);
+}
+
+/* Notebook numbering. Right-aligned, dim, and never selectable: a number
+   dragged into a quotation would corrupt the offsets the whole product rests
+   on, so user-select is off rather than merely discouraged. */
+.line-numbers {
+  flex: none;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  text-align: right;
   font-family: var(--mono);
   font-size: 12.5px;
   line-height: 1.85;
-  white-space: pre-wrap;
-  overflow-wrap: break-word;
+  /* No opacity: --text-faint at 55% measured under 4.5:1 against the reader
+     ground and failed axe. The gutter is still text and still has to be read. */
+  color: var(--text-faint);
+  user-select: none;
+  -webkit-user-select: none;
+  font-variant-numeric: tabular-nums;
+  border-right: 1px solid var(--line-soft);
+  padding-right: var(--s2);
+}
+
+.filing-text {
+  flex: 0 1 auto;
+  max-width: 78ch;
+  /* No auto margins any more. .filing centres the gutter and the text together;
+     leaving `margin: 0 auto` here pushed the text away from its own line
+     numbers and left a gap the width of the spare space. */
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.85;
+  /* `pre`, not `pre-wrap`: a wrapped line would render as two and the gutter
+     would drift by one for the rest of the filing. The record is 78 columns,
+     so this fits at the sizes the app supports, and .reader-scroll takes the
+     overflow on the rare line that does not. */
+  white-space: pre;
   color: #d3d9e2;
 }
 
@@ -1923,8 +1962,15 @@ input::placeholder {
    chrome, and a first-time analyst should not have to infer it from five
    nouns in a rail. */
 
+/* Not display:none. .app is a grid with a named row for this strip, and a
+   removed item shifts every later child up a track: .main landed on an `auto`
+   row and the tool log took the 1fr, which is the large gap under the canvas
+   that appears the moment the strip is dismissed. A zero-height block keeps
+   the row occupied and shows nothing. */
 .howto-slot {
-  display: none;
+  display: block;
+  height: 0;
+  overflow: hidden;
 }
 
 .howto {
@@ -2440,5 +2486,215 @@ body.resizing-y * {
 @media (prefers-reduced-motion: reduce) {
   .rail-drawers summary::before {
     transition: none;
+  }
+}
+
+/* --- Cursor and highlighter -----------------------------------------------
+   Two modes for the two things people do over a filing: quote it, or work
+   through it marking. The palette hangs off the highlighter and shows which
+   ink is loaded. */
+
+.mode-switch {
+  position: relative;
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.mode-btn {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 22px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.mode-btn:hover {
+  color: var(--text);
+  background: var(--surface-3);
+}
+
+.mode-btn.on {
+  background: var(--surface-3);
+  color: var(--agent);
+}
+
+.mode-btn:focus-visible {
+  outline: 2px solid var(--agent);
+  outline-offset: 1px;
+}
+
+/* The loaded ink, bottom right of the highlighter. */
+.mode-ink {
+  position: absolute;
+  right: 2px;
+  bottom: 1px;
+  width: 7px;
+  height: 3px;
+  border-radius: 1px;
+  background: var(--mk, var(--text-faint));
+}
+
+.mode-palette {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 60;
+  display: flex;
+  gap: 4px;
+  padding: 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5);
+}
+
+/* A colour chip you can press. Used by the palette and by the selection
+   popup, so the two never drift apart. */
+.swatch-btn {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: var(--mk, var(--text-faint));
+  color: #0b1016;
+  font-size: 9px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.swatch-btn:hover {
+  transform: translateY(-1px);
+}
+
+.swatch-btn.on {
+  border-color: var(--text);
+  box-shadow: 0 0 0 2px var(--surface-2), 0 0 0 3px var(--text);
+}
+
+.swatch-btn:focus-visible {
+  outline: 2px solid var(--agent);
+  outline-offset: 2px;
+}
+
+.swatch-key {
+  opacity: 0.75;
+}
+
+/* --- The selection popup ---------------------------------------------------
+   Sits over the passage, so the decision happens where the evidence is rather
+   than at a bar along the bottom of the pane. */
+
+.sel-popup {
+  position: absolute;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 9px 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.55);
+}
+
+.sel-popup-label {
+  margin: 0;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.sel-popup-types {
+  display: flex;
+  gap: 5px;
+}
+
+.sel-popup-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-top: 2px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.sel-popup-actions .ask-about {
+  margin-top: 4px;
+}
+
+/* --- Filings, one disclosure per company ---------------------------------- */
+
+.queue-group > summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.queue-group > summary::-webkit-details-marker {
+  display: none;
+}
+
+.queue-group > summary::before {
+  content: "";
+  flex: none;
+  width: 0;
+  height: 0;
+  border-left: 4px solid var(--text-faint);
+  border-top: 3.5px solid transparent;
+  border-bottom: 3.5px solid transparent;
+  transition: transform 130ms ease;
+}
+
+.queue-group[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.queue-group > summary:hover .queue-company {
+  color: var(--text);
+}
+
+.queue-group > summary:focus-visible {
+  outline: 2px solid var(--agent);
+  outline-offset: -2px;
+}
+
+.queue-group-count {
+  margin-left: auto;
+  color: var(--text-faint);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- A single-tab rail reads as a heading --------------------------------- */
+
+.rail-only-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  margin: 0;
+  padding: 9px var(--s3);
+  border-bottom: 1px solid var(--line);
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .queue-group > summary::before,
+  .swatch-btn:hover {
+    transition: none;
+    transform: none;
   }
 }
