@@ -8,6 +8,8 @@ import DecisionLog from "./panels/DecisionLog";
 import EnquiryPanel from "./panels/EnquiryPanel";
 import EvidenceDrawer, { type EvidenceTarget } from "./panels/EvidenceDrawer";
 import HowItWorks from "./panels/HowItWorks";
+import Tour from "./tour/Tour";
+import { introSeen, useTourStore } from "./tour/tourStore";
 import Inspector from "./panels/Inspector";
 import ProposalTray from "./panels/ProposalTray";
 import SearchPanel from "./panels/SearchPanel";
@@ -58,6 +60,19 @@ export default function App() {
   const openDocId = useReaderStore((s) => s.openDocId);
   const decisions = useDecisionLog((s) => s.entries);
 
+  const startTour = useTourStore((s) => s.start);
+  const tourOpen = useTourStore((s) => s.open);
+
+  /**
+   * The tour drives the real interface, so it needs a handle on the same state
+   * the chrome uses. Memoised: it is a dependency of the effect that runs each
+   * step's `before`, and a fresh object every render would re-run it forever.
+   */
+  const tourApi = useMemo(
+    () => ({ setWorkspace, setTab } as const),
+    []
+  );
+
   const pendingCount = useMemo(() => pendingProposals(proposalMap).length, [proposalMap]);
   const openCount = useMemo(() => openEnquiries(enquiryMap).length, [enquiryMap]);
 
@@ -84,6 +99,9 @@ export default function App() {
         }
 
         setBoot({ phase: "ready", fixture: corpus.isFixture });
+
+        // First visit ever, and only once the interface it describes exists.
+        if (!introSeen()) startTour();
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -92,7 +110,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [startTour]);
 
   /**
    * The agent staging its first proposal is the moment the whole product turns
@@ -242,7 +260,7 @@ export default function App() {
           <span className="brand-name">Threadweaver</span>
         </div>
 
-        <nav className="workspace-switch" aria-label="Workspace">
+        <nav className="workspace-switch" aria-label="Workspace" data-tour="workspace">
           <button
             className={workspace === "read" ? "on" : ""}
             onClick={() => setWorkspace("read")}
@@ -263,7 +281,18 @@ export default function App() {
           UK Companies House public records · structure, not accusation
         </span>
 
-        <StatusBadge />
+        <span data-tour="badge">
+          <StatusBadge />
+        </span>
+
+        <button
+          className="icon-btn help-btn"
+          onClick={startTour}
+          aria-label="Show the introduction again"
+          title="How Threadweaver works — replay the introduction"
+        >
+          ?
+        </button>
 
         <div className="settings-anchor">
           <button
@@ -291,7 +320,7 @@ export default function App() {
       <HowItWorks />
 
       <div className="main">
-        <aside className="rail-left">
+        <aside className="rail-left" data-tour="rail-left">
           {workspace === "read" ? <DocumentQueue /> : <SearchPanel />}
         </aside>
 
@@ -306,7 +335,7 @@ export default function App() {
         </section>
 
         <aside className="rail-right">
-          <div className="tabs" role="tablist" aria-label="Panels">
+          <div className="tabs" role="tablist" aria-label="Panels" data-tour="rail-tabs">
             {tabs.map((t) => (
               <button
                 key={t.id}
@@ -360,6 +389,8 @@ export default function App() {
       </div>
 
       <ToolLog />
+
+      {tourOpen && <Tour api={tourApi} />}
 
       <footer className="statusbar">
         <span className="dim">

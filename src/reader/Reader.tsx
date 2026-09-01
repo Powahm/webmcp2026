@@ -220,7 +220,7 @@ export default function Reader() {
       <div className={`reader-body ${marginOpen ? "" : "solo"}`}>
         <div className="reader-scroll" ref={scrollRef}>
           {/* white-space: pre-wrap, and the string is never touched. */}
-          <pre className="filing-text" ref={textRef}>
+          <pre className="filing-text" ref={textRef} data-tour="filing">
             {segments.map((seg) => {
               const top = dominant(seg.marks);
               if (!top) {
@@ -285,7 +285,7 @@ function MarkBar({
       : selection?.text;
 
   return (
-    <footer className={`markbar ${selection ? "armed" : ""}`}>
+    <footer className={`markbar ${selection ? "armed" : ""}`} data-tour="markbar">
       {selection ? (
         <>
           <span className="markbar-sel" title={selection.text}>
