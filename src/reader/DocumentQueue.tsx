@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from "react";
-import { getCorpus } from "../corpus/loadCorpus";
+import { TITLE_SEPARATOR, getCorpus } from "../corpus/loadCorpus";
 import { ingestDocument, openDocument } from "../state/actions";
 import { markingsFor, useReaderStore } from "../state/readerStore";
 import type { CorpusDocument } from "../types";
@@ -80,10 +80,11 @@ export default function DocumentQueue() {
       if (!doc) continue;
       if (q && !doc.title.toLowerCase().includes(q)) continue;
 
-      // "COMPANY, register of directors" -> the part after the dash is what
-      // distinguishes one row from another.
-      const dash = doc.title.indexOf(", ");
-      const kind = dash > -1 ? doc.title.slice(dash + 3) : doc.title;
+      // "COMPANY NAME: register of directors" -> under a company heading, only
+      // the kind of filing distinguishes one row from another, so repeating the
+      // company on every row is noise.
+      const cut = doc.title.indexOf(TITLE_SEPARATOR);
+      const kind = cut > -1 ? doc.title.slice(cut + TITLE_SEPARATOR.length) : doc.title;
 
       // Anything the analyst brought in has no owning entity. It goes first,
       // under its own heading, because it is theirs and not ours.
@@ -91,7 +92,7 @@ export default function DocumentQueue() {
       const ownerLabel =
         ownerId === "__yours__"
           ? "Your documents"
-          : (entities.get(ownerId)?.label ?? (dash > -1 ? doc.title.slice(0, dash) : ownerId));
+          : (entities.get(ownerId)?.label ?? (cut > -1 ? doc.title.slice(0, cut) : ownerId));
 
       const group = byOwner.get(ownerId);
       const row: QueueRow = { doc, kind, marks: markingsFor(markingMap, doc.id).length };

@@ -64,6 +64,22 @@ async function fetchJson<T>(path: string): Promise<T> {
   return (await res.json()) as T;
 }
 
+/**
+ * Document titles arrive as "COMPANY NAME — kind of filing".
+ *
+ * The separator is ours, not the registry's, so it is normalised here at the
+ * single point every consumer reads from: the queue splits on it to show only
+ * the kind under a company heading, and the reader prints the whole thing.
+ * Normalising on load rather than in the corpus files means no rebuild, and one
+ * definition of the separator instead of one per consumer.
+ */
+export const TITLE_SEPARATOR = ": ";
+
+const normaliseTitle = (d: CorpusDocument): CorpusDocument =>
+  d.title.includes(" \u2014 ")
+    ? { ...d, title: d.title.replace(" \u2014 ", TITLE_SEPARATOR) }
+    : d;
+
 async function loadReal(): Promise<Omit<Corpus, "isFixture">> {
   const [entities, edges, documents, indexJson, seed] = await Promise.all([
     fetchJson<Entity[]>("/corpus/entities.json"),
@@ -76,7 +92,7 @@ async function loadReal(): Promise<Omit<Corpus, "isFixture">> {
   return {
     entities: new Map(entities.map((e) => [e.id, e])),
     edges,
-    documents: new Map(documents.map((d) => [d.id, d])),
+    documents: new Map(documents.map((d) => [d.id, normaliseTitle(d)])),
     // Built offline by scripts/build-corpus.ts. Indexing 1000 documents at boot
     // would cost a second of blank screen for no reason.
     index: MiniSearch.loadJS(indexJson as never, MINISEARCH_OPTIONS as never),
@@ -121,7 +137,7 @@ async function loadFixture(): Promise<Omit<Corpus, "isFixture">> {
   return {
     entities: new Map(entities.map((e) => [e.id, e])),
     edges,
-    documents: new Map(documents.map((d) => [d.id, d])),
+    documents: new Map(documents.map((d) => [d.id, normaliseTitle(d)])),
     index,
     seedNodeIds,
     seedDocIds: seedDocIds ?? [],
