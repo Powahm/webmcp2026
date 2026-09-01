@@ -8,6 +8,7 @@ import DecisionLog from "./panels/DecisionLog";
 import EnquiryPanel from "./panels/EnquiryPanel";
 import EvidenceDrawer, { type EvidenceTarget } from "./panels/EvidenceDrawer";
 import HowItWorks from "./panels/HowItWorks";
+import Resizer from "./panels/Resizer";
 import Tour from "./tour/Tour";
 import { introSeen, useTourStore } from "./tour/tourStore";
 import Inspector from "./panels/Inspector";
@@ -17,6 +18,7 @@ import Settings from "./panels/Settings";
 import ToolLog from "./panels/ToolLog";
 import { openDocument, seedCanvas } from "./state/actions";
 import { restoreMarkings, startMarkingPersistence } from "./state/persist";
+import { RAIL_LEFT, RAIL_RIGHT, useLayoutStore } from "./state/layoutStore";
 import { useDecisionLog } from "./state/decisionLog";
 import { openEnquiries, useEnquiryStore } from "./state/enquiryStore";
 import { useGraphStore } from "./state/graphStore";
@@ -59,6 +61,10 @@ export default function App() {
   const scrollRequest = useReaderStore((s) => s.scrollRequest);
   const openDocId = useReaderStore((s) => s.openDocId);
   const decisions = useDecisionLog((s) => s.entries);
+
+  const railLeftW = useLayoutStore((s) => s.railLeft);
+  const railRightW = useLayoutStore((s) => s.railRight);
+  const toolLogH = useLayoutStore((s) => s.toolLog);
 
   const startTour = useTourStore((s) => s.start);
   const tourOpen = useTourStore((s) => s.open);
@@ -266,7 +272,16 @@ export default function App() {
 
 
   return (
-    <div className="app">
+    <div
+      className="app"
+      style={
+        {
+          ...(railLeftW !== null ? { "--rail-left": `${railLeftW}px` } : {}),
+          ...(railRightW !== null ? { "--rail-right": `${railRightW}px` } : {}),
+          ...(toolLogH !== null ? { "--toollog-h": `${toolLogH}px` } : {}),
+        } as React.CSSProperties
+      }
+    >
       <header className="topbar">
         <div className="brand">
           <span className="brand-mark" aria-hidden />
@@ -347,6 +362,13 @@ export default function App() {
           aria-label={workspace === "read" ? "Filings" : "Corpus search"}
         >
           {workspace === "read" ? <DocumentQueue /> : <SearchPanel />}
+          <Resizer
+            edge="left"
+            which="railLeft"
+            bounds={RAIL_LEFT}
+            current={railLeftW ?? 236}
+            label={workspace === "read" ? "Resize the filings list" : "Resize the corpus search"}
+          />
         </aside>
 
         <main className="stage">
@@ -360,6 +382,13 @@ export default function App() {
         </main>
 
         <aside className="rail-right" aria-label="Panels">
+          <Resizer
+            edge="right"
+            which="railRight"
+            bounds={RAIL_RIGHT}
+            current={railRightW ?? 372}
+            label="Resize the panel rail"
+          />
           <div className="tabs" role="tablist" aria-label="Panels" data-tour="rail-tabs">
             {tabs.map((t) => (
               <button

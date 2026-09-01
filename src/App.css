@@ -325,6 +325,7 @@ input::placeholder {
 
 .rail-left,
 .rail-right {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -1710,9 +1711,13 @@ input::placeholder {
 /* ---------------------------------------------------------- the tool log */
 
 .toollog {
+  position: relative;
   display: flex;
   flex-direction: column;
-  max-height: 178px;
+  /* Default until the analyst drags the handle; the inline custom property on
+     .app takes over from there. */
+  max-height: var(--toollog-h, 178px);
+  height: var(--toollog-h, auto);
   border-top: 1px solid var(--line);
   background: var(--surface);
 }
@@ -2145,4 +2150,89 @@ h1.brand-name {
   font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.01em;
+}
+
+
+/* --- Resize handles --------------------------------------------------------
+   Seven pixels of grab area over a one-pixel line: the visible seam stays
+   hairline, the target stays hittable. The line only colours on hover, focus
+   or drag, so the chrome is quiet until you reach for it. */
+
+.resizer {
+  position: absolute;
+  z-index: 20;
+  background: transparent;
+  touch-action: none;
+}
+
+.resizer::after {
+  content: "";
+  position: absolute;
+  background: transparent;
+  transition: background 120ms ease;
+}
+
+.resizer:hover::after,
+.resizer:focus-visible::after,
+body.resizing-x .resizer-left::after,
+body.resizing-x .resizer-right::after,
+body.resizing-y .resizer-bottom::after {
+  background: var(--agent);
+}
+
+.resizer:focus-visible {
+  outline: none;
+}
+
+.resizer-left,
+.resizer-right {
+  top: 0;
+  bottom: 0;
+  width: 7px;
+  cursor: col-resize;
+}
+
+.resizer-left::after,
+.resizer-right::after {
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 1px;
+}
+
+.resizer-left {
+  right: -4px;
+}
+
+.resizer-right {
+  left: -4px;
+}
+
+.resizer-bottom {
+  left: 0;
+  right: 0;
+  top: -4px;
+  height: 7px;
+  cursor: row-resize;
+}
+
+.resizer-bottom::after {
+  left: 0;
+  right: 0;
+  top: 3px;
+  height: 1px;
+}
+
+/* While dragging, the cursor must not flicker as it crosses other elements,
+   and nothing underneath should select. */
+body.resizing-x,
+body.resizing-x * {
+  cursor: col-resize !important;
+  user-select: none;
+}
+
+body.resizing-y,
+body.resizing-y * {
+  cursor: row-resize !important;
+  user-select: none;
 }

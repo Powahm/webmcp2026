@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { useToolLogStore } from "../state/toolLogStore";
+import { TOOL_LOG, useLayoutStore } from "../state/layoutStore";
+import Resizer from "./Resizer";
 
 /**
  * Live WebMCP calls.
@@ -13,6 +15,7 @@ export default function ToolLog() {
   const entries = useToolLogStore((s) => s.entries);
   const clear = useToolLogStore((s) => s.clear);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const height = useLayoutStore((s) => s.toolLog);
 
   return (
     <section
@@ -22,6 +25,13 @@ export default function ToolLog() {
       // which left the whole strip outside any landmark.
       aria-label="WebMCP calls"
     >
+      <Resizer
+        edge="bottom"
+        which="toolLog"
+        bounds={TOOL_LOG}
+        current={height ?? 178}
+        label="Resize the WebMCP call log"
+      />
       <header className="toollog-head">
         <h2>WebMCP calls</h2>
         <span className="count">{entries.length}</span>
