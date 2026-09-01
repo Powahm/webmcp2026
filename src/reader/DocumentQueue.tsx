@@ -174,11 +174,32 @@ export default function DocumentQueue() {
         {groups.map((g) => {
           const marks = g.rows.reduce((n, r) => n + r.marks, 0);
           return (
-            <section key={g.id} className={`queue-group ${g.id === "__yours__" ? "yours" : ""}`}>
-              <header className="queue-group-head">
+            /**
+             * One disclosure per company.
+             *
+             * Ninety-one filings under a dozen companies is a wall of near
+             * identical lines, and every company holds the same three kinds.
+             * Collapsed, the rail is a list of companies you can actually read;
+             * opened, it is the filings for the one you care about.
+             *
+             * Open by default only where the analyst is already working: the
+             * company whose filing is on screen, their own uploads, and
+             * anything a filter has narrowed to.
+             */
+            <details
+              key={g.id}
+              className={`queue-group ${g.id === "__yours__" ? "yours" : ""}`}
+              open={
+                g.id === "__yours__" ||
+                filter.trim().length > 0 ||
+                g.rows.some((r) => r.doc.id === openDocId)
+              }
+            >
+              <summary className="queue-group-head">
                 <span className="queue-company">{g.label}</span>
+                <span className="queue-group-count">{g.rows.length}</span>
                 {marks > 0 && <span className="queue-marks">{marks}</span>}
-              </header>
+              </summary>
               <ul className="queue-list">
                 {g.rows.map(({ doc, kind, marks: n }) => (
                   <li key={doc.id}>
@@ -193,7 +214,7 @@ export default function DocumentQueue() {
                   </li>
                 ))}
               </ul>
-            </section>
+            </details>
           );
         })}
       </div>
