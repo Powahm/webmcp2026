@@ -7,7 +7,7 @@ import Reader from "./reader/Reader";
 import DecisionLog from "./panels/DecisionLog";
 import EnquiryPanel from "./panels/EnquiryPanel";
 import EvidenceDrawer, { type EvidenceTarget } from "./panels/EvidenceDrawer";
-import HowItWorks from "./panels/HowItWorks";
+import CaseBar from "./case/CaseBar";
 import Resizer from "./panels/Resizer";
 import Tour from "./tour/Tour";
 import { introSeen, useTourStore } from "./tour/tourStore";
@@ -330,7 +330,7 @@ export default function App() {
         )}
       </header>
 
-      <HowItWorks />
+      <CaseBar />
 
       <div className="main">
         <aside

@@ -50,6 +50,13 @@ export const TOUR_STEPS: TourStep[] = [
     side: "center",
   },
   {
+    target: "casebar",
+    title: "Your case",
+    body:
+      "Two companies, and the question of whether anything connects them. The bar tracks how many links you have found, and always shows the next thing to ask.",
+    side: "bottom",
+  },
+  {
     target: "workspace",
     title: "Two workspaces",
     body:

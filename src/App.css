@@ -1982,83 +1982,174 @@ input::placeholder {
    row and the tool log took the 1fr, which is the large gap under the canvas
    that appears the moment the strip is dismissed. A zero-height block keeps
    the row occupied and shows nothing. */
-.howto-slot {
-  display: block;
-  height: 0;
-  overflow: hidden;
-}
+/* --- The case bar -------------------------------------------------------- */
 
-.howto {
-  position: relative;
-  display: flex;
+/* Always present, never dismissible. Styled as chrome rather than as a banner:
+   a boxed, tinted strip announcing an objective reads as an advertisement for
+   the feature, and gets ignored the same way.
+
+   Two rows, not one. The three zones measure 1,584px at 1280 and the question,
+   the prompt and the count are all fixed copy, so a single row could only fit
+   by truncating one of them, and the objective and the sentence to paste are
+   the two things the bar exists to show. Splitting costs about 15px of height
+   and nothing else: the grid track is auto. */
+.casebar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "case progress"
+    "next next";
   align-items: center;
-  gap: var(--s3);
-  padding: 7px var(--s4);
-  background: linear-gradient(to right, #131c26, var(--surface));
+  column-gap: var(--s4);
+  row-gap: 3px;
+  min-width: 0;
+  padding: 6px var(--s4) 7px;
+  background: var(--surface);
   border-bottom: 1px solid var(--line);
 }
 
-.howto ol {
+.casebar-case {
+  grid-area: case;
+  display: flex;
+  align-items: baseline;
+  gap: var(--s2);
+  min-width: 0;
+}
+
+.casebar-eyebrow {
+  flex: none;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--text-faint);
+}
+
+.casebar-question {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.casebar.is-complete .casebar-question {
+  font-weight: 600;
+}
+
+.casebar-progress {
+  grid-area: progress;
   display: flex;
   align-items: center;
-  gap: var(--s4);
-  flex-wrap: wrap;
+  flex: none;
+  gap: var(--s2);
+}
+
+.casebar-dots {
+  display: flex;
+  align-items: center;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.howto li {
+.casebar-dots li {
+  position: relative;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--line);
+  transition: background 160ms ease;
+}
+
+.casebar-dots li.on {
+  background: var(--agent);
+}
+
+/* The joins are drawn off the dots themselves rather than added as elements,
+   so the list stays exactly as long as the chain and cannot drift out of step
+   with the count beside it. */
+.casebar-dots li + li {
+  margin-left: 16px;
+}
+
+.casebar-dots li + li::before {
+  content: "";
+  position: absolute;
+  right: 100%;
+  top: 50%;
+  width: 16px;
+  height: 2px;
+  transform: translateY(-50%);
+  background: var(--line);
+  transition: background 160ms ease;
+}
+
+.casebar-dots li.on + li.on::before {
+  background: var(--agent-dim);
+}
+
+.casebar-count {
+  flex: none;
+  font-size: 11px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Left-aligned under the question rather than pushed right, so the eye runs
+   down the objective into the sentence that acts on it. The Copy button stays
+   beside the prompt it copies instead of at the far edge of the bar. */
+.casebar-next {
+  grid-area: next;
   display: flex;
-  align-items: baseline;
-  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  min-width: 0;
+}
+
+.casebar-instruction {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+/* Never truncated and never wrapped: the analyst has to be able to copy this
+   by eye when the clipboard is refused, and half a sentence is useless. */
+.casebar-prompt {
+  padding: 3px 8px;
+  border-radius: var(--r1);
+  background: var(--surface-3);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.casebar-copy {
+  flex: none;
+  display: flex;
+  align-items: center;
+  padding: 4px 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  color: var(--text-dim);
   font-size: 11px;
 }
 
-/* The arrow is decoration between steps, so it is drawn rather than typed.
-   A screen reader reads five list items, not five arrows. */
-.howto li + li::before {
-  content: "→";
-  color: var(--text-faint);
-  margin-right: 2px;
-}
-
-.howto b {
-  display: inline-grid;
-  place-items: center;
-  width: 15px;
-  height: 15px;
-  border-radius: 999px;
-  background: var(--agent-dim);
-  color: #041210;
-  font-size: 9px;
-  font-weight: 700;
-}
-
-.howto-verb {
-  color: var(--text);
-  font-weight: 600;
-}
-
-.howto-says {
-  color: var(--text-dim);
-}
-
-.howto-close {
-  margin-left: auto;
-  padding: 2px 7px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-dim);
-  font-size: 13px;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.howto-close:hover {
-  color: var(--text);
+.casebar-copy:hover {
   border-color: var(--text-faint);
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+.casebar-copy:focus-visible {
+  outline: 2px solid var(--agent);
+  outline-offset: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .casebar-dots li,
+  .casebar-dots li + li::before {
+    transition: none;
+  }
 }
 
 /* --- Rail: what this tab is for ------------------------------------------ */
