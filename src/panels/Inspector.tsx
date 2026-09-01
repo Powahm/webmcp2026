@@ -68,7 +68,7 @@ export default function Inspector({
     return (
       <section className="panel inspector">
         <header className="panel-head">
-          <h2>Inspector</h2>
+          <h2>Selection</h2>
         </header>
         <p className="empty">
           Click a node to inspect it. Click a second to select both, then connect
@@ -82,7 +82,7 @@ export default function Inspector({
     return (
       <section className="panel inspector">
         <header className="panel-head">
-          <h2>Inspector</h2>
+          <h2>Selection</h2>
           <span className="count">{selected.length} selected</span>
         </header>
         <ul className="selected-list">

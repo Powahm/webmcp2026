@@ -918,10 +918,17 @@ input::placeholder {
   display: flex;
   align-items: center;
   gap: var(--s3);
-  padding: var(--s2) var(--s5);
+  /* Was --s5 each side. At 1512px with both rails open the stage is 904px and
+     the bar wanted 976, so the six type buttons ran under the right rail. The
+     bar is chrome, not reading measure, so it gets the narrower gutter. */
+  padding: var(--s2) var(--s3);
   border-top: 1px solid var(--line);
   background: var(--surface);
   transition: background 160ms;
+  /* Last resort at very narrow stages: wrap rather than clip. Nothing here is
+     positional, so a second row costs nothing but height. */
+  flex-wrap: wrap;
+  row-gap: 6px;
 }
 
 .markbar.armed {
@@ -929,6 +936,10 @@ input::placeholder {
 }
 
 .markbar-sel {
+  /* Shrinks first: the quoted passage is the one thing on this bar that can
+     lose characters without losing meaning. */
+  min-width: 8ch;
+  flex: 0 1 auto;
   max-width: 34ch;
   overflow: hidden;
   color: var(--text);
@@ -948,8 +959,10 @@ input::placeholder {
    buttons wrap. */
 @media (max-width: 1500px) {
   .markbar-label.dim {
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }
 
@@ -957,6 +970,8 @@ input::placeholder {
   display: flex;
   gap: 4px;
   margin-left: auto;
+  /* The six buttons are the control. They never shrink and never clip. */
+  flex: 0 0 auto;
 }
 
 .type-btn {
@@ -2316,4 +2331,114 @@ body.resizing-y * {
 .legend-state .line-dashed {
   border-top-style: dashed;
   border-top-color: var(--warn);
+}
+
+
+/* --- The rail, restructured ------------------------------------------------
+   Two sections that are always on screen, and a footer of drawers that are
+   consulted rather than watched. Selection is sized to its content up to a
+   share of the rail; Agent takes what is left, because a queue is the thing
+   that grows. */
+
+.rail-selection {
+  flex: 0 0 auto;
+  max-height: 42%;
+  overflow-y: auto;
+  border-bottom: 1px solid var(--line);
+}
+
+.rail-agent {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* The panels inside a section bring their own headers, so the section adds a
+   line of purpose and nothing else. Two stacked headings would be chrome
+   competing with content in a 370px column. */
+.rail-section > .rail-hint {
+  border-bottom: 1px solid var(--line-soft);
+}
+
+/* Proposals and enquiries share the Agent column, separated by a rule rather
+   than by a tab the analyst has to find. */
+.rail-agent > .panel + .panel {
+  border-top: 1px solid var(--line-soft);
+}
+
+/* --- Footer drawers -------------------------------------------------------- */
+
+.rail-drawers {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--line);
+  background: var(--surface-2);
+  max-height: 52%;
+  overflow-y: auto;
+}
+
+.rail-drawers details + details {
+  border-top: 1px solid var(--line-soft);
+}
+
+.rail-drawers summary {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: 8px var(--s3);
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.rail-drawers summary::-webkit-details-marker {
+  display: none;
+}
+
+/* A drawn triangle rather than the OS marker, so it matches the rest of the
+   chrome and rotates when the drawer opens. */
+.rail-drawers summary::before {
+  content: "";
+  width: 0;
+  height: 0;
+  border-left: 4px solid var(--text-faint);
+  border-top: 3.5px solid transparent;
+  border-bottom: 3.5px solid transparent;
+  transition: transform 140ms ease;
+}
+
+.rail-drawers details[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.rail-drawers summary:hover {
+  color: var(--text);
+}
+
+.rail-drawers summary:focus-visible {
+  outline: 2px solid var(--agent);
+  outline-offset: -2px;
+}
+
+.drawer-note {
+  margin-left: auto;
+  color: var(--text-faint);
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.rail-drawers details[open] > summary {
+  border-bottom: 1px solid var(--line-soft);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rail-drawers summary::before {
+    transition: none;
+  }
 }

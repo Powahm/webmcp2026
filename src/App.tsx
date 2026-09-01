@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import "./App.css";
 import GraphCanvas from "./canvas/GraphCanvas";
 import { loadCorpus } from "./corpus/loadCorpus";
@@ -41,7 +41,9 @@ import { Analytics } from "@vercel/analytics/react";
  */
 
 type Workspace = "read" | "canvas";
-type Tab = "proposals" | "enquiries" | "evidence" | "details" | "log";
+/** The footer drawers. Only one is open at a time: the strip has room for
+ *  one, and two half-open drawers is worse than a choice. */
+type Drawer = "evidence" | "log" | null;
 
 type BootState =
   | { phase: "loading" }
@@ -51,7 +53,7 @@ type BootState =
 export default function App() {
   const [boot, setBoot] = useState<BootState>({ phase: "loading" });
   const [workspace, setWorkspace] = useState<Workspace>("read");
-  const [tab, setTab] = useState<Tab>("details");
+  const [drawer, setDrawer] = useState<Drawer>(null);
   const [evidence, setEvidence] = useState<EvidenceTarget | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -75,7 +77,7 @@ export default function App() {
    * step's `before`, and a fresh object every render would re-run it forever.
    */
   const tourApi = useMemo(
-    () => ({ setWorkspace, setTab } as const),
+    () => ({ setWorkspace, openDrawer: setDrawer } as const),
     []
   );
 
@@ -130,19 +132,6 @@ export default function App() {
     };
   }, [startTour]);
 
-  /**
-   * The agent staging its first proposal is the moment the whole product turns
-   * on, and it used to happen behind an unselected tab. Pull focus once, only
-   * on the transition from none to some, and never over the top of the analyst
-   * reading a citation in the Evidence panel.
-   */
-  const hadProposals = useRef(false);
-  useEffect(() => {
-    const has = pendingCount > 0;
-    if (has && !hadProposals.current && tab !== "evidence") setTab("proposals");
-    hadProposals.current = has;
-  }, [pendingCount, tab]);
-
   // Verification hook, inert unless asked for: exposes the registered tool
   // definitions on window so a test harness can stage a proposal exactly the
   // way a WebMCP host would call it, without needing a real host present.
@@ -161,7 +150,7 @@ export default function App() {
    */
   const showEvidence = useCallback((target: EvidenceTarget) => {
     setEvidence(target);
-    setTab("evidence");
+    setDrawer("evidence");
     setWorkspace("read");
     openDocument(target.citation.doc_id, target.citation.span);
   }, []);
@@ -175,10 +164,7 @@ export default function App() {
     if (scrollRequest) setWorkspace("read");
   }, [scrollRequest]);
 
-  // A new proposal or result should not silently pile up behind a tab.
-  useEffect(() => {
-    if (pendingCount > 0) setTab("proposals");
-  }, [pendingCount]);
+  // Nothing to steal focus for any more: proposals are always on screen.
 
   // Was bound to Tab, which meant focus could never move anywhere in the
   // app (WCAG 2.1.1), every Tab press was eaten here before it reached
@@ -225,50 +211,17 @@ export default function App() {
   }
 
   /**
-   * Rail order is a claim about what you touch most, and the old one was wrong.
+   * The rail no longer hides four panels behind a fifth.
    *
-   * Details went first because it is the only panel that answers to what you
-   * click, and because it holds the connect form. The one control a person
-   * uses to draw their own edge. Burying that in fourth position meant nobody
-   * found it without being told. Proposals still takes focus by itself the
-   * moment one arrives (see the effect below), so nothing from the agent is
-   * missed by demoting it one place.
-   *
-   * `hint` is what the tab is FOR, in one line, shown under the panel heading.
-   * Five nouns in a row explain nothing to someone who has never seen this.
+   * Five tabs meant that at any moment you could see one panel and not the
+   * other four, and a first-time analyst had to guess which noun held the
+   * control they wanted. Split by what the panels are actually for and there
+   * are only two things a person needs in front of them at all times: what
+   * they have selected, and what is waiting on them. Evidence and Decisions
+   * are consulted rather than watched, so they became drawers, and Evidence
+   * opens itself the moment a citation is clicked, which is the only time
+   * anyone wants it.
    */
-  const tabs: { id: Tab; label: string; badge?: number; hint: string }[] = [
-    {
-      id: "details",
-      label: "Details",
-      hint: "What you have selected. And where you draw your own connection between two nodes.",
-    },
-    {
-      id: "proposals",
-      label: "Proposals",
-      badge: pendingCount,
-      hint: "What the agent is suggesting. Nothing here is on the canvas until you accept it.",
-    },
-    {
-      id: "enquiries",
-      label: "Enquiries",
-      badge: openCount,
-      hint: "Questions you have asked, in your words. The agent works this queue; only you close one.",
-    },
-    {
-      id: "evidence",
-      label: "Evidence",
-      hint: "The filing behind a citation, with the exact words highlighted. Check rather than trust.",
-    },
-    {
-      id: "log",
-      label: "Decisions",
-      badge: decisions.length,
-      hint: "Every action by you and by the agent, in order. Exportable as plain text.",
-    },
-  ];
-
-  const activeHint = tabs.find((t) => t.id === tab)?.hint;
 
 
   return (
@@ -389,56 +342,60 @@ export default function App() {
             current={railRightW ?? 372}
             label="Resize the panel rail"
           />
-          <div className="tabs" role="tablist" aria-label="Panels" data-tour="rail-tabs">
-            {tabs.map((t) => (
-              <button
-                key={t.id}
-                id={`tab-${t.id}`}
-                role="tab"
-                type="button"
-                className={tab === t.id ? "on" : ""}
-                onClick={() => setTab(t.id)}
-                aria-selected={tab === t.id}
-                aria-controls="rail-panel"
-                // Only the active tab is in the tab order; arrow keys move
-                // between them, which is what a tablist is supposed to do.
-                tabIndex={tab === t.id ? 0 : -1}
-                onKeyDown={(e) => {
-                  const i = tabs.findIndex((x) => x.id === tab);
-                  const go = (n: number) => {
-                    e.preventDefault();
-                    const next = tabs[(n + tabs.length) % tabs.length];
-                    setTab(next.id);
-                    document.getElementById(`tab-${next.id}`)?.focus();
-                  };
-                  if (e.key === "ArrowRight") go(i + 1);
-                  if (e.key === "ArrowLeft") go(i - 1);
-                  if (e.key === "Home") go(0);
-                  if (e.key === "End") go(tabs.length - 1);
-                }}
-              >
-                {t.label}
-                {t.badge ? (
-                  <span className="tab-badge">
-                    <span aria-hidden="true">{t.badge}</span>
-                    <span className="sr-only">, {t.badge} waiting</span>
-                  </span>
-                ) : null}
-              </button>
-            ))}
-          </div>
+          {/* Always visible: what you have selected. It is the only panel that
+              answers to what you click, and it holds the connect form. */}
+          <section className="rail-section rail-selection" aria-label="Selection" data-tour="rail-selection">
+            {/* No lead-in line here: the Inspector's own empty state already
+                says "click a node, click a second to connect them", and a hint
+                above the panel's heading reads back to front. */}
+            <Inspector onShowEvidence={showEvidence} />
+          </section>
 
-          {activeHint && <p className="rail-hint">{activeHint}</p>}
+          {/* Always visible: what is waiting on you. Proposals and enquiries
+              are the same question from the analyst's side, so they share one
+              scrolling column rather than competing for a tab. */}
+          <section className="rail-section rail-agent" aria-label="Agent activity" data-tour="rail-agent">
+            <p className="rail-hint">
+              Waiting on you: what the agent has drawn, and the questions you set it. Nothing
+              reaches the canvas until you accept it, and only you close an enquiry.
+            </p>
+            <ProposalTray onShowEvidence={showEvidence} />
+            <EnquiryPanel onShowEvidence={showEvidence} />
+          </section>
 
-          <div className="rail-body" id="rail-panel" role="tabpanel" aria-labelledby={`tab-${tab}`}>
-            {tab === "proposals" && <ProposalTray onShowEvidence={showEvidence} />}
-            {tab === "enquiries" && <EnquiryPanel onShowEvidence={showEvidence} />}
-            {tab === "evidence" && (
+          {/* Consulted, not watched. Evidence opens itself when a citation is
+              clicked, which is the only moment anyone wants it. */}
+          <footer className="rail-drawers" data-tour="rail-drawers">
+            <details
+              open={drawer === "evidence"}
+              // Read synchronously: the state updater runs after the handler
+              // returns, and React has nulled currentTarget by then.
+              onToggle={(e) => {
+                const isOpen = e.currentTarget.open;
+                setDrawer((d) => (isOpen ? "evidence" : d === "evidence" ? null : d));
+              }}
+            >
+              <summary>
+                Evidence
+                <span className="drawer-note">{evidence ? "1 citation open" : "click any citation"}</span>
+              </summary>
               <EvidenceDrawer target={evidence} onClose={() => setEvidence(null)} />
-            )}
-            {tab === "details" && <Inspector onShowEvidence={showEvidence} />}
-            {tab === "log" && <DecisionLog />}
-          </div>
+            </details>
+
+            <details
+              open={drawer === "log"}
+              onToggle={(e) => {
+                const isOpen = e.currentTarget.open;
+                setDrawer((d) => (isOpen ? "log" : d === "log" ? null : d));
+              }}
+            >
+              <summary>
+                Decisions
+                <span className="drawer-note">{decisions.length}</span>
+              </summary>
+              <DecisionLog />
+            </details>
+          </footer>
         </aside>
       </div>
 

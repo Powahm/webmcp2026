@@ -28,7 +28,8 @@ export interface TourStep {
 
 export interface TourApi {
   setWorkspace: (w: "read" | "canvas") => void;
-  setTab: (t: "details" | "proposals" | "enquiries" | "evidence" | "log") => void;
+  /** The rail's two sections are always visible; only the footer opens. */
+  openDrawer: (d: "evidence" | "log" | null) => void;
 }
 
 export const TOUR_STEPS: TourStep[] = [
@@ -39,7 +40,7 @@ export const TOUR_STEPS: TourStep[] = [
     side: "center",
     before: (a) => {
       a.setWorkspace("read");
-      a.setTab("details");
+      a.openDrawer(null);
     },
   },
   {
@@ -78,44 +79,42 @@ export const TOUR_STEPS: TourStep[] = [
     side: "top",
   },
   {
-    target: "rail-tabs",
-    title: "Details: what you have selected",
+    target: "rail-selection",
+    title: "Selection: what you clicked",
     body:
       "Click a node and it appears here. Select a second and you can draw the connection yourself, with no agent involved.",
     side: "left",
-    before: (a) => a.setTab("details"),
+    before: (a) => a.openDrawer(null),
   },
   {
-    target: "rail-tabs",
-    title: "Proposals: suggested, not accepted",
+    target: "rail-agent",
+    title: "Agent: what is waiting on you",
     body:
-      "What the agent thinks belongs on the canvas, drawn dashed. Nothing here is real until you accept it, and there is no tool that lets the agent accept its own.",
+      "Proposals the agent has drawn dashed, and the questions you have set it. Nothing here is on the canvas until you accept it.",
     side: "left",
-    before: (a) => a.setTab("proposals"),
   },
   {
-    target: "rail-tabs",
-    title: "Enquiries: your questions",
+    target: "rail-agent",
+    title: "You set the agenda",
     body:
-      "Ask in your own words. The agent takes one, works it, and reports back. Including 'found nothing', which is a real result. Only you close an enquiry.",
+      "Ask in your own words. The agent takes a question, works it, and reports back, including 'found nothing', which is a real result. Only you close one.",
     side: "left",
-    before: (a) => a.setTab("enquiries"),
   },
   {
-    target: "rail-tabs",
+    target: "rail-drawers",
     title: "Evidence: check, don't trust",
     body:
-      "Click any citation and the filing opens here with the exact words highlighted. This is the step that separates checking from believing.",
+      "Click any citation and the filing opens here with the exact words highlighted. This drawer opens itself when you do.",
     side: "left",
-    before: (a) => a.setTab("evidence"),
+    before: (a) => a.openDrawer("evidence"),
   },
   {
-    target: "rail-tabs",
+    target: "rail-drawers",
     title: "Decisions: the audit trail",
     body:
       "Every action by you and by the agent, in order, exportable as plain text. It records who decided what, and on what evidence.",
     side: "left",
-    before: (a) => a.setTab("log"),
+    before: (a) => a.openDrawer("log"),
   },
   {
     target: "toollog",
@@ -138,7 +137,7 @@ export const TOUR_STEPS: TourStep[] = [
     side: "center",
     before: (a) => {
       a.setWorkspace("read");
-      a.setTab("details");
+      a.openDrawer(null);
     },
   },
 ];
