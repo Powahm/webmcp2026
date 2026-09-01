@@ -271,8 +271,15 @@ page at all:
 
 The Claude desktop app is not a WebMCP host and will not see the tools.
 
-There is no sign-in, no server and no persistence. Close the tab and the session is gone —
-export the decision log before you do.
+There is no sign-in and no server. The top bar says which of these you are in: **"19 WebMCP
+tools · live"** once a host has registered them, and **"WebMCP off · no agent host"** in an
+ordinary browser — where every part of this guide except the agent still works.
+
+Nothing is stored on a server, and closing the tab ends the session — export the decision log
+before you do. One exception: your **markings survive a refresh**, held in `sessionStorage` so
+a stray reload does not cost you ten minutes of reading. They die with the tab like everything
+else. The canvas, the enquiry queue and the decision log always start clean, because a
+half-restored audit trail is worse than an honest empty one.
 
 ---
 

@@ -13,6 +13,7 @@ import SearchPanel from "./panels/SearchPanel";
 import Settings from "./panels/Settings";
 import ToolLog from "./panels/ToolLog";
 import { openDocument, seedCanvas } from "./state/actions";
+import { restoreMarkings, startMarkingPersistence } from "./state/persist";
 import { useDecisionLog } from "./state/decisionLog";
 import { openEnquiries, useEnquiryStore } from "./state/enquiryStore";
 import { useGraphStore } from "./state/graphStore";
@@ -65,6 +66,22 @@ export default function App() {
       .then((corpus) => {
         if (cancelled) return;
         seedCanvas();
+
+        // Marks from an earlier life of this tab, then the subscription that
+        // keeps the store mirrored. Restore first so the subscription's first
+        // write is the restored set rather than an empty one.
+        const restored = restoreMarkings();
+        startMarkingPersistence();
+        if (restored) {
+          useDecisionLog.getState()._push({
+            id: `dec-restore-${Date.now()}`,
+            at: Date.now(),
+            actor: "human",
+            action: "opened",
+            detail: `restored ${restored} marking${restored === 1 ? "" : "s"} you made earlier in this tab`,
+          });
+        }
+
         setBoot({ phase: "ready", fixture: corpus.isFixture });
       })
       .catch((err: unknown) => {

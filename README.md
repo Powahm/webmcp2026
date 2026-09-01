@@ -103,8 +103,9 @@ These are decisions, not gaps:
 - **No graph database.** The canvas holds a working set of tens of nodes, not the corpus. Path
   finding is a hand-rolled BFS over an adjacency map, because `max_hops <= 4` does not justify a
   dependency.
-- **No accounts, no server, no persistence.** The page is the API. The agent can never reach data
-  the analyst cannot also see.
+- **No accounts, no server, no stored data.** The page is the API. The agent can never reach data
+  the analyst cannot also see. Markings are mirrored into `sessionStorage` so a refresh does not
+  lose them; they die with the tab, and nothing else is kept at all.
 - **No editing the corpus from the UI.** The records are the records.
 - **No mobile layout.**
 
