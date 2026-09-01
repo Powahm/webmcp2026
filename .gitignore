@@ -11,3 +11,5 @@ _snapshot.tgz
 *.tsbuildinfo
 
 .vercel
+
+vite.config.ts.timestamp-*.mjs
