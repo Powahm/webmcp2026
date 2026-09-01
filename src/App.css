@@ -579,13 +579,14 @@ input::placeholder {
 .filing {
   display: flex;
   align-items: flex-start;
-  /* `safe` matters: a filing-history line runs well past 78 columns, and plain
-     centring pushes the overflow out past the left edge of the scroll box where
-     it can never be scrolled back into view. */
-  justify-content: safe center;
+  /* Left aligned, not centred.
+     Centring the block made the gutter's position depend on the longest line in
+     the filing, so the numbers sat in a different place in every document and
+     jumped as you moved between them. A notebook's margin does not move. This
+     also removes the overflow trap that `safe center` was working around: with
+     the block pinned left, a line past 78 columns simply scrolls. */
+  justify-content: flex-start;
   gap: var(--s3);
-  /* The row must be at least as wide as the scroller, or centring collapses
-     against the widest line instead of the pane. */
   min-width: 100%;
   width: max-content;
 }
