@@ -218,7 +218,16 @@ export default function Reader() {
       </header>
 
       <div className={`reader-body ${marginOpen ? "" : "solo"}`}>
-        <div className="reader-scroll" ref={scrollRef}>
+        {/* Focusable and named: without tabIndex a keyboard user cannot scroll
+            the filing at all, which is an axe 'serious' and, more to the point,
+            makes the primary reading surface unusable without a mouse. */}
+        <div
+          className="reader-scroll"
+          ref={scrollRef}
+          tabIndex={0}
+          role="region"
+          aria-label={`Filing: ${doc.title}`}
+        >
           {/* white-space: pre-wrap, and the string is never touched. */}
           <pre className="filing-text" ref={textRef} data-tour="filing">
             {segments.map((seg) => {

@@ -597,6 +597,15 @@ export default function GraphCanvas() {
         </div>
       )}
 
+      {/* The chart cannot be driven from the keyboard, and building that
+          properly is a bigger job than this week allows. Rather than pretend
+          otherwise, point at the two surfaces that already are navigable. */}
+      <p className="sr-only">
+        This chart is a visual summary. To work through the same entities with a
+        keyboard, use the corpus search in the left rail and the Details panel,
+        which list every node and its connections as text.
+      </p>
+
       {/* A reminder, not a decoder ring. The glyph is on the node itself. */}
       <div className="canvas-legend">
         {NODE_KINDS.map((kind) => (

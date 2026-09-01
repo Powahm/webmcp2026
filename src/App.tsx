@@ -75,6 +75,18 @@ export default function App() {
 
   const pendingCount = useMemo(() => pendingProposals(proposalMap).length, [proposalMap]);
   const openCount = useMemo(() => openEnquiries(enquiryMap).length, [enquiryMap]);
+  /**
+   * What a screen reader is told when something arrives.
+   *
+   * Derived rather than pushed: the counts already exist, so there is no second
+   * source of truth to keep in step, and a re-render cannot miss an event.
+   */
+  const announcement = useMemo(() => {
+    const parts: string[] = [];
+    if (pendingCount) parts.push(`${pendingCount} proposal${pendingCount === 1 ? "" : "s"} waiting for you`);
+    if (openCount) parts.push(`${openCount} open line${openCount === 1 ? "" : "s"} of enquiry`);
+    return parts.join(", ");
+  }, [pendingCount, openCount]);
 
   useEffect(() => {
     let cancelled = false;
@@ -252,12 +264,21 @@ export default function App() {
 
   const activeHint = tabs.find((t) => t.id === tab)?.hint;
 
+
   return (
     <div className="app">
       <header className="topbar">
         <div className="brand">
           <span className="brand-mark" aria-hidden />
-          <span className="brand-name">Threadweaver</span>
+          {/* The page's only h1. Visible text stays the product name; the
+              hidden remainder gives a screen reader the sentence a sighted
+              user gets from the whole screen at a glance. */}
+          <h1 className="brand-name">
+            Threadweaver
+            <span className="sr-only">
+              : an investigative graph canvas over UK Companies House records
+            </span>
+          </h1>
         </div>
 
         <nav className="workspace-switch" aria-label="Workspace" data-tour="workspace">
@@ -320,11 +341,15 @@ export default function App() {
       <HowItWorks />
 
       <div className="main">
-        <aside className="rail-left" data-tour="rail-left">
+        <aside
+          className="rail-left"
+          data-tour="rail-left"
+          aria-label={workspace === "read" ? "Filings" : "Corpus search"}
+        >
           {workspace === "read" ? <DocumentQueue /> : <SearchPanel />}
         </aside>
 
-        <section className="stage">
+        <main className="stage">
           {/* Both mounted; only one shown. Switching loses nothing. */}
           <div className={`pane ${workspace === "read" ? "show" : ""}`}>
             <Reader />
@@ -332,9 +357,9 @@ export default function App() {
           <div className={`pane ${workspace === "canvas" ? "show" : ""}`}>
             <GraphCanvas />
           </div>
-        </section>
+        </main>
 
-        <aside className="rail-right">
+        <aside className="rail-right" aria-label="Panels">
           <div className="tabs" role="tablist" aria-label="Panels" data-tour="rail-tabs">
             {tabs.map((t) => (
               <button
@@ -387,6 +412,12 @@ export default function App() {
           </div>
         </aside>
       </div>
+
+      {/* Arrivals. A proposal appearing is the product's central event and it
+          was completely silent; one polite region covers all three sources. */}
+      <p className="sr-only" role="status">
+        {announcement}
+      </p>
 
       <ToolLog />
 

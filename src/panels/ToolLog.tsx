@@ -15,7 +15,13 @@ export default function ToolLog() {
   const [expanded, setExpanded] = useState<string | null>(null);
 
   return (
-    <section className={`toollog ${entries.length === 0 ? "idle" : ""}`} data-tour="toollog">
+    <section
+      className={`toollog ${entries.length === 0 ? "idle" : ""}`}
+      data-tour="toollog"
+      // Named, so it counts as a landmark. An unnamed <section> is not one,
+      // which left the whole strip outside any landmark.
+      aria-label="WebMCP calls"
+    >
       <header className="toollog-head">
         <h2>WebMCP calls</h2>
         <span className="count">{entries.length}</span>

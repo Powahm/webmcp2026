@@ -1637,9 +1637,36 @@ input::placeholder {
   text-transform: uppercase;
 }
 
+/* Left unstyled this renders as a light OS dropdown in the middle of a dark
+   panel, which reads as a bug rather than a control. The chevron is a data URI
+   because the page ships no image assets. */
 .connect select {
   min-width: 0;
   width: 100%;
+  appearance: none;
+  -webkit-appearance: none;
+  padding: 5px 26px 5px 9px;
+  background-color: var(--surface-3);
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='7' viewBox='0 0 10 7'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%2398a3b3' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 9px center;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+}
+
+.connect select:focus-visible {
+  outline: 2px solid var(--agent);
+  outline-offset: 1px;
+}
+
+/* The popup list is drawn by the OS; these are the only two properties it
+   honours, and without them the open list can be white text on white. */
+.connect select option {
+  background: var(--surface-3);
+  color: var(--text);
 }
 
 .connect .primary,
@@ -2110,4 +2137,12 @@ input::placeholder {
   .tour-scrim {
     transition: none;
   }
+}
+
+/* An h1 in the top bar must not inherit heading metrics. */
+h1.brand-name {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
 }
