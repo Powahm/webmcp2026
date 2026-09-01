@@ -130,21 +130,49 @@ export function resizeCanvas(canvas: HTMLCanvasElement, w: number, h: number): v
   canvas.style.height = `${h}px`;
 }
 
-/** A faint dot grid, so panning has something to move against. Without it an
- *  empty canvas feels broken rather than empty. */
+/**
+ * An infinite ruled grid.
+ *
+ * Two levels: a fine line every 60 world units and a heavier one every fifth.
+ * When the fine grid gets denser than a dozen pixels it is dropped and the
+ * major lines carry on alone, so the grid never turns into a grey wash and
+ * never disappears entirely however far you zoom. That is what makes the
+ * canvas read as a surface you are moving over rather than a flat panel: a
+ * plain background gives panning nothing to move against, and an empty canvas
+ * with nothing behind it looks broken rather than empty.
+ */
 function drawGrid(ctx: CanvasRenderingContext2D, t: Transform, w: number, h: number): void {
-  const step = 60 * t.k;
-  if (step < 16) return;
-  const alpha = Math.min(0.5, (step - 16) / 90);
-  ctx.fillStyle = PALETTE.grid;
-  ctx.globalAlpha = alpha;
-  const ox = t.tx % step;
-  const oy = t.ty % step;
-  for (let x = ox; x < w; x += step) {
-    for (let y = oy; y < h; y += step) {
-      ctx.fillRect(x, y, 1.4, 1.4);
+  const MINOR = 60;
+  const MAJOR = MINOR * 5;
+
+  const line = (stepWorld: number, colour: string, width: number, alpha: number) => {
+    const step = stepWorld * t.k;
+    if (step < 6 || alpha <= 0.01) return;
+    ctx.strokeStyle = colour;
+    ctx.lineWidth = width;
+    ctx.globalAlpha = alpha;
+    ctx.beginPath();
+    // Snapped to the half pixel, or a 1px line lands across two rows and
+    // renders as a 2px smear at half brightness.
+    const ox = ((t.tx % step) + step) % step;
+    const oy = ((t.ty % step) + step) % step;
+    for (let x = ox; x <= w; x += step) {
+      const px = Math.round(x) + 0.5;
+      ctx.moveTo(px, 0);
+      ctx.lineTo(px, h);
     }
-  }
+    for (let y = oy; y <= h; y += step) {
+      const py = Math.round(y) + 0.5;
+      ctx.moveTo(0, py);
+      ctx.lineTo(w, py);
+    }
+    ctx.stroke();
+  };
+
+  // The fine grid fades out as it crowds, rather than vanishing at a threshold.
+  const minorStep = MINOR * t.k;
+  line(MINOR, PALETTE.grid, 1, Math.min(1, Math.max(0, (minorStep - 10) / 26)));
+  line(MAJOR, PALETTE.gridMajor, 1, Math.min(1, Math.max(0, (MAJOR * t.k - 12) / 60)));
   ctx.globalAlpha = 1;
 }
 

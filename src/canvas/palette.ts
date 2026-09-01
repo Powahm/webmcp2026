@@ -2,7 +2,10 @@
  *  2D context calls, which cannot read CSS custom properties. */
 export const PALETTE = {
   bg: "#0d1117",
-  grid: "#151b24",
+  /* Two grid weights. Both are lifted from the old single #151b24, which was
+     so close to the ground that panning had nothing to move against. */
+  grid: "#1b2430",
+  gridMajor: "#28323f",
 
   /**
    * One ink for every confirmed entity on the canvas.
