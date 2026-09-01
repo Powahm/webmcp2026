@@ -3,10 +3,11 @@ import { findPaths } from "../corpus/paths";
 import { canvasEdges, clearSelection, setViewport, toggleSelection } from "../state/actions";
 import { useGraphStore } from "../state/graphStore";
 import { pendingProposals, useProposalStore } from "../state/proposalStore";
+import { acceptProposal, rejectProposal } from "../state/actions";
 import { NODE_KINDS, useGlyphStore } from "./glyphs";
 import type { NodeKind } from "./palette";
 import { draw, hitTest, linkKey, resizeCanvas, type DrawLink, type DrawNode, type Scene } from "./render";
-import {
+import { radiusFor,
   linkDistanceFor,
   linkStrengthFor,
   Simulation,
@@ -197,6 +198,34 @@ export default function GraphCanvas() {
   }, [nodes, edges, pending]);
 
   /**
+   * The pending proposal for the single selected node, if that is what it is.
+   *
+   * Accept and reject have lived only in the rail, which means the analyst has
+   * to look away from the thing they are judging to act on it. The decision
+   * belongs next to the dashed node it is about.
+   */
+  const overlayRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * Its own click state, not the graph selection.
+   *
+   * A proposal is not on the confirmed graph, so `toggleSelection` will not
+   * take it and every consumer of `selection` (query_paths, the Inspector,
+   * get_selection) is written against confirmed ids. Widening that to include
+   * proposals would leak an unconfirmed node into the tools, which is exactly
+   * the boundary this product exists to hold. So the canvas keeps a pointer of
+   * its own, purely for showing the verdict control.
+   */
+  const [verdictNode, setVerdictNode] = useState<string | null>(null);
+  const selectedProposal = useMemo(() => {
+    if (!verdictNode) return null;
+    for (const p of pending) {
+      if (p.kind === "node" && p.node_id === verdictNode) return p;
+    }
+    return null;
+  }, [verdictNode, pending]);
+
+  /**
    * The route between the two nodes the analyst selected, if one exists.
    *
    * Two selections is the gesture that means "how are these related?", so it
@@ -331,11 +360,31 @@ export default function GraphCanvas() {
         reducedMotion: reduced,
       };
       draw(ctx, s, transformRef.current, w, h);
+
+      // The overlay tracks a node that the physics is still moving, so it is
+      // positioned here and written straight to the element. Putting it in
+      // React state would re-render the whole canvas sixty times a second to
+      // move one small box.
+      const overlay = overlayRef.current;
+      if (overlay) {
+        const node = overlay.dataset.node ? positions.get(overlay.dataset.node) : undefined;
+        if (node) {
+          const t = transformRef.current;
+          overlay.style.transform =
+            `translate(-50%, 0) translate(${node.x * t.k + t.tx}px, ` +
+            // Clears the node's own label, which the renderer draws directly
+            // beneath it; sitting on top of it hid the thing being judged.
+            `${node.y * t.k + t.ty + radiusFor(node.weight, true) * t.k + 34}px)`;
+          overlay.style.visibility = "visible";
+        } else {
+          overlay.style.visibility = "hidden";
+        }
+      }
     };
 
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [scene, selection, hovered, adjacent, path]);
+  }, [scene, selection, hovered, adjacent, path, selectedProposal]);
 
   // --- Report the viewport, so get_viewport can answer honestly -------------
   useEffect(() => {
@@ -489,7 +538,16 @@ export default function GraphCanvas() {
         n.fx = undefined;
         n.fy = undefined;
       }
-      if (!drag.moved) toggleSelection(drag.id);
+      if (!drag.moved) {
+        // A dashed node opens its verdict control; a confirmed one selects.
+        const proposed = pending.some((p) => p.kind === "node" && p.node_id === drag.id);
+        if (proposed) {
+          setVerdictNode((cur) => (cur === drag.id ? null : drag.id));
+        } else {
+          setVerdictNode(null);
+          toggleSelection(drag.id);
+        }
+      }
       dragRef.current = null;
       setCursor("pointer");
       return;
@@ -498,7 +556,10 @@ export default function GraphCanvas() {
     const pan = panRef.current;
     if (pan) {
       const [x, y] = localPoint(e);
-      if (Math.hypot(x - pan.x, y - pan.y) < 4) clearSelection();
+      if (Math.hypot(x - pan.x, y - pan.y) < 4) {
+        setVerdictNode(null);
+        clearSelection();
+      }
       panRef.current = null;
     }
     setCursor("grab");
@@ -521,7 +582,10 @@ export default function GraphCanvas() {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null;
       if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
-      if (e.key === "Escape") clearSelection();
+      if (e.key === "Escape") {
+        setVerdictNode(null);
+        clearSelection();
+      }
       if (e.key.toLowerCase() === "f") {
         flyTo(selection.length ? selection : [...scene.drawNodes.keys()]);
       }
@@ -607,6 +671,27 @@ export default function GraphCanvas() {
       </p>
 
       {/* A reminder, not a decoder ring. The glyph is on the node itself. */}
+      {selectedProposal && (
+        <div
+          className="node-verdict"
+          ref={overlayRef}
+          data-node={selectedProposal.node_id}
+          style={{ visibility: "hidden" }}
+        >
+          <span className="node-verdict-why" title={selectedProposal.reason}>
+            {selectedProposal.reason}
+          </span>
+          <div className="node-verdict-actions">
+            <button className="primary sm" onClick={(ev) => acceptProposal(selectedProposal.id, ev)}>
+              Accept
+            </button>
+            <button className="reject sm" onClick={(ev) => rejectProposal(selectedProposal.id, ev)}>
+              Reject
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="canvas-legend">
         {NODE_KINDS.map((kind) => (
           <span key={kind}>
@@ -616,8 +701,13 @@ export default function GraphCanvas() {
             {kind}
           </span>
         ))}
-        <span>
-          <i className="swatch proposed" /> proposed
+        {/* Type is only half of what a node says. Solid versus dashed is the
+            product's whole argument, and the legend never mentioned it. */}
+        <span className="legend-state">
+          <i className="swatch line-solid" aria-hidden /> accepted by you
+        </span>
+        <span className="legend-state">
+          <i className="swatch line-dashed" aria-hidden /> proposed, not yet yours
         </span>
       </div>
 

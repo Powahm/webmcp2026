@@ -181,6 +181,20 @@ export default function Reader() {
     return () => mq.removeEventListener("change", sync);
   }, []);
 
+  /**
+   * Open the margin the first time this filing has a mark in it.
+   *
+   * On a wide screen it starts folded, which is right for reading, and wrong
+   * the moment you mark something: the mark lands in a list you cannot see, so
+   * marking appears to do nothing at all. Opening once, and only until the
+   * analyst touches the toggle themselves, keeps the reading default and still
+   * shows the result of the action that just happened.
+   */
+  const marginTouched = useRef(false);
+  useEffect(() => {
+    if (!marginTouched.current && marks.length > 0) setMarginOpen(true);
+  }, [marks.length]);
+
   if (!doc) {
     return (
       <div className="reader">
@@ -208,7 +222,11 @@ export default function Reader() {
         <button
           className={`margin-toggle ${marginOpen ? "on" : ""}`}
           type="button"
-          onClick={() => setMarginOpen((o) => !o)}
+          onClick={() => {
+            // Once the analyst has an opinion, stop having one for them.
+            marginTouched.current = true;
+            setMarginOpen((o) => !o);
+          }}
           aria-expanded={marginOpen}
           aria-controls="reader-margin"
         >
@@ -409,17 +427,20 @@ function MarginList({
                 </button>
               </form>
             ) : (
-              m.origin === "human" && (
-                <button
-                  className="ghost sm"
-                  onClick={() => {
-                    setAsking(m.id);
-                    setQuestion("");
-                  }}
-                >
-                  raise a line of enquiry
-                </button>
-              )
+              /* Available on the agent's marks too: a passage it pointed at is
+                 exactly the kind of thing worth asking a question about, and
+                 restricting this to your own marks made the agent's read-only.
+                 Promoted from a quiet ghost link because raising an enquiry
+                 from a mark is the best move in the app and looked optional. */
+              <button
+                className="ask-about sm"
+                onClick={() => {
+                  setAsking(m.id);
+                  setQuestion("");
+                }}
+              >
+                Ask about this
+              </button>
             )}
           </li>
         ))}

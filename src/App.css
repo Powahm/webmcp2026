@@ -2236,3 +2236,84 @@ body.resizing-y * {
   cursor: row-resize !important;
   user-select: none;
 }
+
+
+/* --- Ask about this --------------------------------------------------------
+   Raising an enquiry from a mark is the strongest move in the app. It used to
+   read as an optional afterthought, so it now looks like the action it is,
+   in the human amber rather than the agent teal. */
+
+.ask-about {
+  margin-top: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--warn);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--warn);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.ask-about:hover {
+  background: #33240f;
+}
+
+.ask-about:focus-visible {
+  outline: 2px solid var(--agent);
+  outline-offset: 1px;
+}
+
+/* --- Accept or reject, on the node itself ---------------------------------
+   The decision belongs beside the dashed node it is about, not only in a rail
+   the analyst has to look away to reach. Positioned every frame from the
+   render loop, so it follows a node the physics is still settling. */
+
+.node-verdict {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 12;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 260px;
+  padding: 8px 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--warn);
+  border-radius: 8px;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.5);
+  pointer-events: auto;
+}
+
+.node-verdict-why {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.node-verdict-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* --- Legend: state, not only type ---------------------------------------- */
+
+.legend-state .swatch {
+  width: 18px;
+  height: 0;
+  border-radius: 0;
+  border-top-width: 2px;
+  border-top-style: solid;
+  border-top-color: var(--text-dim);
+  background: none;
+}
+
+.legend-state .line-dashed {
+  border-top-style: dashed;
+  border-top-color: var(--warn);
+}
