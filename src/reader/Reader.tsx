@@ -14,6 +14,7 @@ import { dominant, hasAgentMark, segment } from "./markings";
 import { readSelection } from "./selection";
 import { useReaderMode } from "./modeStore";
 import SelectionPopup from "./SelectionPopup";
+import ModeSwitch from "./ModeSwitch";
 
 /**
  * The reader, the analyst's work surface.
@@ -294,6 +295,12 @@ export default function Reader() {
             <span> · {marks.length} mark{marks.length === 1 ? "" : "s"}</span>
           </p>
         </div>
+
+        {/* Also here, not only in the top bar. These are tools for the document
+            in front of you, and reaching for the far corner of the window to
+            change highlighter colour breaks the rhythm of working through a
+            filing. Both controls drive the same store, so they cannot disagree. */}
+        <ModeSwitch />
 
         <button
           className={`margin-toggle ${marginOpen ? "on" : ""}`}
