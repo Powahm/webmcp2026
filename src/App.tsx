@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
 import GraphCanvas from "./canvas/GraphCanvas";
 import { loadCorpus } from "./corpus/loadCorpus";
@@ -9,6 +9,7 @@ import EnquiryPanel from "./panels/EnquiryPanel";
 import EvidenceDrawer, { type EvidenceTarget } from "./panels/EvidenceDrawer";
 import HowItWorks from "./panels/HowItWorks";
 import Resizer from "./panels/Resizer";
+import ModeSwitch from "./reader/ModeSwitch";
 import Tour from "./tour/Tour";
 import { introSeen, useTourStore } from "./tour/tourStore";
 import Inspector from "./panels/Inspector";
@@ -45,6 +46,10 @@ type Workspace = "read" | "canvas";
  *  one, and two half-open drawers is worse than a choice. */
 type Drawer = "evidence" | "log" | null;
 
+/** The tabbed half of the rail. Evidence and Decisions are not here: they are
+ *  consulted rather than watched, so they stayed drawers. */
+type Tab = "selection" | "proposals" | "enquiries";
+
 type BootState =
   | { phase: "loading" }
   | { phase: "ready"; fixture: boolean }
@@ -54,6 +59,7 @@ export default function App() {
   const [boot, setBoot] = useState<BootState>({ phase: "loading" });
   const [workspace, setWorkspace] = useState<Workspace>("read");
   const [drawer, setDrawer] = useState<Drawer>(null);
+  const [tab, setTab] = useState<Tab>("enquiries");
   const [evidence, setEvidence] = useState<EvidenceTarget | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -77,7 +83,7 @@ export default function App() {
    * step's `before`, and a fresh object every render would re-run it forever.
    */
   const tourApi = useMemo(
-    () => ({ setWorkspace, openDrawer: setDrawer } as const),
+    () => ({ setWorkspace, openDrawer: setDrawer, setTab } as const),
     []
   );
 
@@ -164,7 +170,14 @@ export default function App() {
     if (scrollRequest) setWorkspace("read");
   }, [scrollRequest]);
 
-  // Nothing to steal focus for any more: proposals are always on screen.
+  // A proposal arriving is the moment the product turns on. Take the tab for
+  // it, but only on the canvas, where a proposal can actually be judged.
+  const hadProposals = useRef(false);
+  useEffect(() => {
+    const has = pendingCount > 0;
+    if (has && !hadProposals.current && workspace === "canvas") setTab("proposals");
+    hadProposals.current = has;
+  }, [pendingCount, workspace]);
 
   // Was bound to Tab, which meant focus could never move anywhere in the
   // app (WCAG 2.1.1), every Tab press was eaten here before it reached
@@ -211,18 +224,30 @@ export default function App() {
   }
 
   /**
-   * The rail no longer hides four panels behind a fifth.
+   * The rail's tabs, and which of them this workspace has any use for.
    *
-   * Five tabs meant that at any moment you could see one panel and not the
-   * other four, and a first-time analyst had to guess which noun held the
-   * control they wanted. Split by what the panels are actually for and there
-   * are only two things a person needs in front of them at all times: what
-   * they have selected, and what is waiting on them. Evidence and Decisions
-   * are consulted rather than watched, so they became drawers, and Evidence
-   * opens itself the moment a citation is clicked, which is the only time
-   * anyone wants it.
+   * Reading is not the same job as building the graph. A Selection panel in the
+   * Read workspace describes a canvas the analyst cannot see, and a proposal is
+   * a thing you judge on the chart, not over a filing. Showing either there is
+   * chrome that can never be acted on. So Read gets the one panel that belongs
+   * to reading, the questions you are raising from what you mark, and Canvas
+   * gets all three.
+   *
+   * A single tab renders as a heading rather than a tablist: one tab is not a
+   * choice, and a tablist of one is a control that does nothing.
    */
+  const tabs: { id: Tab; label: string; badge?: number }[] =
+    workspace === "canvas"
+      ? [
+          { id: "selection", label: "Selection" },
+          { id: "proposals", label: "Proposals", badge: pendingCount },
+          { id: "enquiries", label: "Enquiries", badge: openCount },
+        ]
+      : [{ id: "enquiries", label: "Lines of enquiry", badge: openCount }];
 
+  // Read has no Selection or Proposals tab, so a tab chosen on the canvas must
+  // not leave the rail rendering nothing.
+  const activeTab: Tab = tabs.some((t) => t.id === tab) ? tab : "enquiries";
 
   return (
     <div
@@ -273,6 +298,9 @@ export default function App() {
         <span data-tour="badge">
           <StatusBadge />
         </span>
+
+        {/* Only in Read: there is nothing to highlight on a chart. */}
+        {workspace === "read" && <ModeSwitch />}
 
         <button
           className="icon-btn help-btn"
@@ -342,34 +370,64 @@ export default function App() {
             current={railRightW ?? 372}
             label="Resize the panel rail"
           />
-          {/* Always visible: what you have selected. It is the only panel that
-              answers to what you click, and it holds the connect form. */}
-          <section className="rail-section rail-selection" aria-label="Selection" data-tour="rail-selection">
-            {/* No lead-in line here: the Inspector's own empty state already
-                says "click a node, click a second to connect them", and a hint
-                above the panel's heading reads back to front. */}
-            <Inspector onShowEvidence={showEvidence} />
-          </section>
+          {tabs.length > 1 ? (
+            <div className="tabs" role="tablist" aria-label="Panels" data-tour="rail-tabs">
+              {tabs.map((t) => (
+                <button
+                  key={t.id}
+                  id={`tab-${t.id}`}
+                  role="tab"
+                  type="button"
+                  className={activeTab === t.id ? "on" : ""}
+                  onClick={() => setTab(t.id)}
+                  aria-selected={activeTab === t.id}
+                  aria-controls="rail-panel"
+                  tabIndex={activeTab === t.id ? 0 : -1}
+                  onKeyDown={(e) => {
+                    const i = tabs.findIndex((x) => x.id === activeTab);
+                    const go = (n: number) => {
+                      e.preventDefault();
+                      const next = tabs[(n + tabs.length) % tabs.length];
+                      setTab(next.id);
+                      document.getElementById(`tab-${next.id}`)?.focus();
+                    };
+                    if (e.key === "ArrowRight") go(i + 1);
+                    if (e.key === "ArrowLeft") go(i - 1);
+                    if (e.key === "Home") go(0);
+                    if (e.key === "End") go(tabs.length - 1);
+                  }}
+                >
+                  {t.label}
+                  {t.badge ? (
+                    <span className="tab-badge">
+                      <span aria-hidden="true">{t.badge}</span>
+                      <span className="sr-only">, {t.badge} waiting</span>
+                    </span>
+                  ) : null}
+                </button>
+              ))}
+            </div>
+          ) : null}
 
-          {/* Always visible: what is waiting on you. Proposals and enquiries
-              are the same question from the analyst's side, so they share one
-              scrolling column rather than competing for a tab. */}
-          <section className="rail-section rail-agent" aria-label="Agent activity" data-tour="rail-agent">
-            <p className="rail-hint">
-              Waiting on you: what the agent has drawn, and the questions you set it. Nothing
-              reaches the canvas until you accept it, and only you close an enquiry.
-            </p>
-            <ProposalTray onShowEvidence={showEvidence} />
-            <EnquiryPanel onShowEvidence={showEvidence} />
-          </section>
+          <div
+            className="rail-body"
+            id="rail-panel"
+            // With one panel there is no tablist to label it, and the panel
+            // carries its own heading. A second heading above it was noise.
+            role={tabs.length > 1 ? "tabpanel" : undefined}
+            aria-labelledby={tabs.length > 1 ? `tab-${activeTab}` : undefined}
+            data-tour="rail-panel"
+          >
+            {activeTab === "selection" && <Inspector onShowEvidence={showEvidence} />}
+            {activeTab === "proposals" && <ProposalTray onShowEvidence={showEvidence} />}
+            {activeTab === "enquiries" && <EnquiryPanel onShowEvidence={showEvidence} />}
+          </div>
 
           {/* Consulted, not watched. Evidence opens itself when a citation is
               clicked, which is the only moment anyone wants it. */}
           <footer className="rail-drawers" data-tour="rail-drawers">
             <details
               open={drawer === "evidence"}
-              // Read synchronously: the state updater runs after the handler
-              // returns, and React has nulled currentTarget by then.
               onToggle={(e) => {
                 const isOpen = e.currentTarget.open;
                 setDrawer((d) => (isOpen ? "evidence" : d === "evidence" ? null : d));

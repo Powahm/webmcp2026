@@ -28,8 +28,8 @@ export interface TourStep {
 
 export interface TourApi {
   setWorkspace: (w: "read" | "canvas") => void;
-  /** The rail's two sections are always visible; only the footer opens. */
   openDrawer: (d: "evidence" | "log" | null) => void;
+  setTab: (t: "selection" | "proposals" | "enquiries") => void;
 }
 
 export const TOUR_STEPS: TourStep[] = [
@@ -79,26 +79,32 @@ export const TOUR_STEPS: TourStep[] = [
     side: "top",
   },
   {
-    target: "rail-selection",
+    target: "rail-panel",
     title: "Selection: what you clicked",
     body:
       "Click a node and it appears here. Select a second and you can draw the connection yourself, with no agent involved.",
     side: "left",
-    before: (a) => a.openDrawer(null),
+    before: (a) => {
+      a.openDrawer(null);
+      a.setWorkspace("canvas");
+      a.setTab("selection");
+    },
   },
   {
-    target: "rail-agent",
-    title: "Agent: what is waiting on you",
+    target: "rail-panel",
+    title: "Proposals: suggested, not accepted",
     body:
-      "Proposals the agent has drawn dashed, and the questions you have set it. Nothing here is on the canvas until you accept it.",
+      "What the agent has drawn dashed. Nothing here is on the canvas until you accept it, and there is no tool that lets the agent accept its own.",
     side: "left",
+    before: (a) => a.setTab("proposals"),
   },
   {
-    target: "rail-agent",
-    title: "You set the agenda",
+    target: "rail-panel",
+    title: "Enquiries: you set the agenda",
     body:
       "Ask in your own words. The agent takes a question, works it, and reports back, including 'found nothing', which is a real result. Only you close one.",
     side: "left",
+    before: (a) => a.setTab("enquiries"),
   },
   {
     target: "rail-drawers",
@@ -106,7 +112,10 @@ export const TOUR_STEPS: TourStep[] = [
     body:
       "Click any citation and the filing opens here with the exact words highlighted. This drawer opens itself when you do.",
     side: "left",
-    before: (a) => a.openDrawer("evidence"),
+    before: (a) => {
+      a.setWorkspace("read");
+      a.openDrawer("evidence");
+    },
   },
   {
     target: "rail-drawers",
