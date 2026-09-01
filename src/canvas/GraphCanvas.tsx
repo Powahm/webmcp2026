@@ -296,7 +296,12 @@ export default function GraphCanvas() {
       if (!userMovedView.current && sim.nodes.length > 0) {
         const box = sim.bounds();
         if (box) {
-          const target = frame(box, w, h, 120, 1.9);
+          // 120px of padding on every side threw away a third of a 900px-tall
+          // canvas, and the seed graph then framed at roughly k=0.4 — twelve
+          // unreadable dots in the middle of a black field, which is the first
+          // thing anyone sees. Tighter padding and a higher ceiling let the
+          // opening shot fill the space it has.
+          const target = frame(box, w, h, 64, 2.6);
           transformRef.current = sim.settled
             ? target
             : lerpTransform(transformRef.current, target, 0.08);

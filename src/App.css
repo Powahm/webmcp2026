@@ -225,7 +225,7 @@ input::placeholder {
 
 .app {
   display: grid;
-  grid-template-rows: var(--topbar-h) minmax(0, 1fr) auto auto;
+  grid-template-rows: var(--topbar-h) auto minmax(0, 1fr) auto auto;
   height: 100%;
 }
 
@@ -1867,5 +1867,157 @@ input::placeholder {
   }
   .reader-scroll {
     padding: var(--s4) var(--s3) var(--s5);
+  }
+}
+
+
+/* --- Getting started strip ------------------------------------------------
+   Five steps, one row, dismissible. The method is not guessable from the
+   chrome, and a first-time analyst should not have to infer it from five
+   nouns in a rail. */
+
+.howto-slot {
+  display: none;
+}
+
+.howto {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  padding: 7px var(--s4);
+  background: linear-gradient(to right, #131c26, var(--surface));
+  border-bottom: 1px solid var(--line);
+}
+
+.howto ol {
+  display: flex;
+  align-items: center;
+  gap: var(--s4);
+  flex-wrap: wrap;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.howto li {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 11px;
+}
+
+/* The arrow is decoration between steps, so it is drawn rather than typed —
+   a screen reader reads five list items, not five arrows. */
+.howto li + li::before {
+  content: "→";
+  color: var(--text-faint);
+  margin-right: 2px;
+}
+
+.howto b {
+  display: inline-grid;
+  place-items: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 999px;
+  background: var(--agent-dim);
+  color: #041210;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.howto-verb {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.howto-says {
+  color: var(--text-dim);
+}
+
+.howto-close {
+  margin-left: auto;
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.howto-close:hover {
+  color: var(--text);
+  border-color: var(--text-faint);
+}
+
+/* --- Rail: what this tab is for ------------------------------------------ */
+
+.rail-hint {
+  margin: 0;
+  padding: 8px var(--s3) 9px;
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+/* --- Agent activity ------------------------------------------------------- */
+
+.tool-badge.idle {
+  border-color: var(--line);
+  color: var(--text-dim);
+}
+
+.tool-badge.working {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-color: var(--agent);
+  background: #10312e;
+  color: var(--agent);
+}
+
+.enquiry-working {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 6px 0 0;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.pulse {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 999px;
+  background: var(--agent);
+  animation: tw-pulse 1.4s ease-in-out infinite;
+}
+
+/* Idle-but-claimed reads as held, not running. */
+.enquiry-working:not(.busy) .pulse {
+  animation: none;
+  opacity: 0.5;
+}
+
+@keyframes tw-pulse {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pulse {
+    animation: none;
   }
 }
