@@ -69,7 +69,7 @@ export interface CaseStep {
  * Pure, and importing nothing from the stores, so the ladder can be reasoned
  * about and tested without a browser or a mounted component.
  *
- * Two of the seven rules deliberately return no prompt. When a proposal is
+ * Two of the eight rules deliberately return no prompt. When a proposal is
  * waiting or the agent has claimed a question, the next move belongs to the
  * human, and a bar that offered something to type there would be telling them
  * to hand work back to an agent that already has it.
@@ -80,6 +80,7 @@ export function nextStep(input: {
   pendingProposalCount: number;
   hasClaimedEnquiry: boolean;
   hasOpenEnquiry: boolean;
+  hasResultedEnquiry: boolean;
 }): CaseStep {
   if (input.found === CASE_HOPS.length) {
     return {
@@ -103,6 +104,20 @@ export function nextStep(input: {
     return {
       instruction:
         "The agent has proposed something. Click its citation to check the source, then accept or reject.",
+    };
+  }
+  // An agent that answers a line of enquiry in prose has told the analyst
+  // something true and left the canvas exactly as it was, which is the one
+  // outcome that makes the page look like a chat window with a chart beside
+  // it. Ranked below the pending-proposal rule on purpose: an agent that
+  // reported back *and* proposed has already done this, and judging the
+  // proposal is then the live move.
+  if (input.hasResultedEnquiry) {
+    return {
+      instruction:
+        "The agent has reported back. Check its citations, then have it draw what it found:",
+      prompt:
+        "Propose those nodes and edges on the canvas, each with its citation, so I can accept them.",
     };
   }
   if (input.found > 0) {

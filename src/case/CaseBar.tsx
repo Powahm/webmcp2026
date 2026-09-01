@@ -44,6 +44,7 @@ export default function CaseBar() {
         pendingProposalCount: pendingCount,
         hasClaimedEnquiry: enquiries.some((e) => e.status === "claimed"),
         hasOpenEnquiry: enquiries.some((e) => e.status === "open"),
+        hasResultedEnquiry: enquiries.some((e) => e.status === "resulted"),
       }),
     [foundCount, selection.length, pendingCount, enquiries]
   );
