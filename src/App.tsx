@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
 import GraphCanvas from "./canvas/GraphCanvas";
 import { loadCorpus } from "./corpus/loadCorpus";
@@ -7,6 +7,7 @@ import Reader from "./reader/Reader";
 import DecisionLog from "./panels/DecisionLog";
 import EnquiryPanel from "./panels/EnquiryPanel";
 import EvidenceDrawer, { type EvidenceTarget } from "./panels/EvidenceDrawer";
+import HowItWorks from "./panels/HowItWorks";
 import Inspector from "./panels/Inspector";
 import ProposalTray from "./panels/ProposalTray";
 import SearchPanel from "./panels/SearchPanel";
@@ -46,7 +47,7 @@ type BootState =
 export default function App() {
   const [boot, setBoot] = useState<BootState>({ phase: "loading" });
   const [workspace, setWorkspace] = useState<Workspace>("read");
-  const [tab, setTab] = useState<Tab>("proposals");
+  const [tab, setTab] = useState<Tab>("details");
   const [evidence, setEvidence] = useState<EvidenceTarget | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -92,6 +93,19 @@ export default function App() {
       cancelled = true;
     };
   }, []);
+
+  /**
+   * The agent staging its first proposal is the moment the whole product turns
+   * on, and it used to happen behind an unselected tab. Pull focus once — only
+   * on the transition from none to some, and never over the top of the analyst
+   * reading a citation in the Evidence panel.
+   */
+  const hadProposals = useRef(false);
+  useEffect(() => {
+    const has = pendingCount > 0;
+    if (has && !hadProposals.current && tab !== "evidence") setTab("proposals");
+    hadProposals.current = has;
+  }, [pendingCount, tab]);
 
   // Verification hook, inert unless asked for: exposes the registered tool
   // definitions on window so a test harness can stage a proposal exactly the
@@ -174,13 +188,51 @@ export default function App() {
     );
   }
 
-  const tabs: { id: Tab; label: string; badge?: number }[] = [
-    { id: "proposals", label: "Proposals", badge: pendingCount },
-    { id: "enquiries", label: "Enquiries", badge: openCount },
-    { id: "evidence", label: "Evidence" },
-    { id: "details", label: "Details" },
-    { id: "log", label: "Decisions", badge: decisions.length },
+  /**
+   * Rail order is a claim about what you touch most, and the old one was wrong.
+   *
+   * Details went first because it is the only panel that answers to what you
+   * click, and because it holds the connect form — the one control a person
+   * uses to draw their own edge. Burying that in fourth position meant nobody
+   * found it without being told. Proposals still takes focus by itself the
+   * moment one arrives (see the effect below), so nothing from the agent is
+   * missed by demoting it one place.
+   *
+   * `hint` is what the tab is FOR, in one line, shown under the panel heading.
+   * Five nouns in a row explain nothing to someone who has never seen this.
+   */
+  const tabs: { id: Tab; label: string; badge?: number; hint: string }[] = [
+    {
+      id: "details",
+      label: "Details",
+      hint: "What you have selected — and where you draw your own connection between two nodes.",
+    },
+    {
+      id: "proposals",
+      label: "Proposals",
+      badge: pendingCount,
+      hint: "What the agent is suggesting. Nothing here is on the canvas until you accept it.",
+    },
+    {
+      id: "enquiries",
+      label: "Enquiries",
+      badge: openCount,
+      hint: "Questions you have asked, in your words. The agent works this queue; only you close one.",
+    },
+    {
+      id: "evidence",
+      label: "Evidence",
+      hint: "The filing behind a citation, with the exact words highlighted. Check rather than trust.",
+    },
+    {
+      id: "log",
+      label: "Decisions",
+      badge: decisions.length,
+      hint: "Every action by you and by the agent, in order. Exportable as plain text.",
+    },
   ];
+
+  const activeHint = tabs.find((t) => t.id === tab)?.hint;
 
   return (
     <div className="app">
@@ -236,6 +288,8 @@ export default function App() {
         )}
       </header>
 
+      <HowItWorks />
+
       <div className="main">
         <aside className="rail-left">
           {workspace === "read" ? <DocumentQueue /> : <SearchPanel />}
@@ -290,6 +344,8 @@ export default function App() {
               </button>
             ))}
           </div>
+
+          {activeHint && <p className="rail-hint">{activeHint}</p>}
 
           <div className="rail-body" id="rail-panel" role="tabpanel" aria-labelledby={`tab-${tab}`}>
             {tab === "proposals" && <ProposalTray onShowEvidence={showEvidence} />}
