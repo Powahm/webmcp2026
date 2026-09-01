@@ -13,3 +13,4 @@ _snapshot.tgz
 .vercel
 
 vite.config.ts.timestamp-*.mjs
+docs/PLAN-FOR-SONNET.md
