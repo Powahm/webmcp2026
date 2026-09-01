@@ -28,7 +28,7 @@ import {
 /**
  * The nine write tools.
  *
- * Every one of these calls actions.ts — the same entry point the analyst's
+ * Every one of these calls actions.ts. The same entry point the analyst's
  * clicks use. They fall into three kinds and none can alter the confirmed
  * graph:
  *
@@ -49,8 +49,8 @@ import {
  * guidance and what makes the browser's confirmation prompt read sensibly.
  */
 
-/** Translate an actions.ts result into a tool result, preserving the hint —
- *  an agent that gets told what to do differently will retry correctly rather
+/** Translate an actions.ts result into a tool result, preserving the hint.
+ *  An agent that gets told what to do differently will retry correctly rather
  *  than give up or invent a workaround. */
 function reply(result: ActionResult, ok: (id?: string) => Record<string, unknown>) {
   if (!result.ok) return errorResult(result.error, result.hint);
@@ -65,7 +65,7 @@ const asSpan = (v: unknown): Span => {
 export const proposeNode: McpToolDefinition = {
   name: "propose_node",
   description:
-    "Propose adding an entity to the canvas. Creates a dashed, unconfirmed node that the analyst must accept — it does not add anything to the confirmed graph. Requires a source document and the span within it that supports the claim; proposals without a source are rejected.",
+    "Propose adding an entity to the canvas. Creates a dashed, unconfirmed node that the analyst must accept. It does not add anything to the confirmed graph. Requires a source document and the span within it that supports the claim; proposals without a source are rejected.",
   inputSchema: PROPOSE_NODE,
   execute: (args) =>
     reply(
@@ -113,7 +113,7 @@ export const proposeEdge: McpToolDefinition = {
 export const pinEvidenceTool: McpToolDefinition = {
   name: "pin_evidence",
   description:
-    "Attach an additional citation to a node or edge already on the canvas. Use it to corroborate something the analyst has already accepted. It only ever adds a citation — it cannot change or remove one, and it cannot change what the node or edge asserts.",
+    "Attach an additional citation to a node or edge already on the canvas. Use it to corroborate something the analyst has already accepted. It only ever adds a citation. It cannot change or remove one, and it cannot change what the node or edge asserts.",
   inputSchema: PIN_EVIDENCE,
   execute: (args) =>
     reply(
@@ -136,7 +136,7 @@ export const annotateTool: McpToolDefinition = {
 export const focusTool: McpToolDefinition = {
   name: "focus",
   description:
-    "Move the analyst's view on the canvas to frame these nodes. Use it after proposing something so they can see it without hunting for it. It changes the view only — it asserts nothing and changes no data.",
+    "Move the analyst's view on the canvas to frame these nodes. Use it after proposing something so they can see it without hunting for it. It changes the view only. It asserts nothing and changes no data.",
   inputSchema: FOCUS,
   execute: (args) => {
     const ids = Array.isArray(args.node_ids) ? (args.node_ids as unknown[]).map(String) : [];
@@ -159,7 +159,7 @@ export const focusTool: McpToolDefinition = {
 export const highlightSpanTool: McpToolDefinition = {
   name: "highlight_span",
   description:
-    "Mark a passage in a filing so the analyst sees it in their reader, shown as your mark rather than theirs. Use it to point at the exact words that support what you are about to propose or report. It asserts nothing and adds nothing to the canvas — the analyst can clear it.",
+    "Mark a passage in a filing so the analyst sees it in their reader, shown as your mark rather than theirs. Use it to point at the exact words that support what you are about to propose or report. It asserts nothing and adds nothing to the canvas. The analyst can clear it.",
   inputSchema: HIGHLIGHT_SPAN,
   execute: (args) =>
     reply(
@@ -180,7 +180,7 @@ export const highlightSpanTool: McpToolDefinition = {
 export const openDocumentTool: McpToolDefinition = {
   name: "open_document",
   description:
-    "Open a filing in the analyst's reader and scroll it to a passage. Use it after finding something so they can read it in place rather than hunting for it. It changes the view only — it asserts nothing and changes no data.",
+    "Open a filing in the analyst's reader and scroll it to a passage. Use it after finding something so they can read it in place rather than hunting for it. It changes the view only. It asserts nothing and changes no data.",
   inputSchema: OPEN_DOCUMENT,
   execute: (args) => {
     const scroll = args.scroll_to ? asSpan(args.scroll_to) : undefined;
@@ -206,7 +206,7 @@ export const claimEnquiryTool: McpToolDefinition = {
 };
 
 /**
- * Reporting back — including with nothing.
+ * Reporting back, including with nothing.
  *
  * The description says outright that finding nothing is a valid result. Without
  * that, a model keeps searching rather than admitting an empty answer, and
@@ -217,7 +217,7 @@ export const claimEnquiryTool: McpToolDefinition = {
 export const resultEnquiryTool: McpToolDefinition = {
   name: "result_enquiry",
   description:
-    "Report back on a line of enquiry the analyst raised. Finding nothing is a valid and useful result: report 'eliminated' with what you searched rather than stretching for a weak link. 'found' requires at least one citation. The analyst reviews every result — you cannot close an enquiry yourself.",
+    "Report back on a line of enquiry the analyst raised. Finding nothing is a valid and useful result: report 'eliminated' with what you searched rather than stretching for a weak link. 'found' requires at least one citation. The analyst reviews every result. You cannot close an enquiry yourself.",
   inputSchema: RESULT_ENQUIRY,
   execute: (args) => {
     const raw = Array.isArray(args.citations) ? (args.citations as unknown[]) : [];

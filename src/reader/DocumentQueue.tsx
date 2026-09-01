@@ -31,8 +31,8 @@ export default function DocumentQueue() {
   /**
    * The analyst's own interaction with the drop zone.
    *
-   * `ingestDocument` requires a trusted gesture, and the natural candidate —
-   * the file input's `change` event — is the wrong one: it fires after the
+   * `ingestDocument` requires a trusted gesture, and the natural candidate.
+   * The file input's `change` event. Is the wrong one: it fires after the
    * browser's file dialog, and in some contexts arrives untrusted even though
    * a real person picked the file. The gesture that actually means "I am
    * adding this" is the pointer going down on the drop zone, so that is what
@@ -65,7 +65,7 @@ export default function DocumentQueue() {
   /**
    * Grouped by the company the filing belongs to.
    *
-   * Ninety filings titled "COMPANY NAME — persons with significant control" is
+   * Ninety filings titled "COMPANY NAME. Persons with significant control" is
    * ninety repetitions of the company name and nothing else to read. Grouping
    * says the name once and leaves the row to say which record it is, which is
    * the only part that differs.
@@ -80,9 +80,9 @@ export default function DocumentQueue() {
       if (!doc) continue;
       if (q && !doc.title.toLowerCase().includes(q)) continue;
 
-      // "COMPANY — register of directors" -> the part after the dash is what
+      // "COMPANY, register of directors" -> the part after the dash is what
       // distinguishes one row from another.
-      const dash = doc.title.indexOf(" — ");
+      const dash = doc.title.indexOf(", ");
       const kind = dash > -1 ? doc.title.slice(dash + 3) : doc.title;
 
       // Anything the analyst brought in has no owning entity. It goes first,
@@ -145,7 +145,7 @@ export default function DocumentQueue() {
           Drop a document, or browse
         </button>
         <span className="dropzone-note">
-          Text or Markdown. It stays in this browser — there is no server.
+          Text or Markdown. It stays in this browser, there is no server.
         </span>
       </div>
 

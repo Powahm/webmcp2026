@@ -1,14 +1,14 @@
 /**
  * ★ THE ONLY MUTATION API ★
  *
- * Every change to the graph goes through this file — the analyst clicking a
+ * Every change to the graph goes through this file, the analyst clicking a
  * panel and the agent calling a WebMCP tool take exactly the same path. A tool
  * never touches a store directly, and never contains logic the UI doesn't also
  * use.
  *
  * This is not tidiness. It is what makes the product's claim true: the human
  * and the agent are equal actors on one model, not a UI with a bot bolted on.
- * It is also precisely what the site-tools guidance asks for — reuse your
+ * It is also precisely what the site-tools guidance asks for, reuse your
  * existing application logic and permissions.
  *
  * Two asymmetries are deliberate and they are the whole safety argument:
@@ -82,7 +82,7 @@ function record(
 
 /**
  * A proposal without a source is rejected here, in the mutation layer, not just
- * in the JSON Schema — a schema stops a well-formed agent, and this stops every
+ * in the JSON Schema, a schema stops a well-formed agent, and this stops every
  * other path as well. The error is written to be acted on: it says which
  * argument was wrong and what to call to get a good value.
  */
@@ -102,7 +102,7 @@ export function validateCitation(
   if (!doc) {
     return fail(
       `No document with id "${source_doc_id}" exists in the corpus.`,
-      "Use a doc_id exactly as returned by search_documents or get_entity — ids look like 'doc:officers:09876543'."
+      "Use a doc_id exactly as returned by search_documents or get_entity. Ids look like 'doc:officers:09876543'."
     );
   }
 
@@ -154,7 +154,7 @@ function resolvableNodeId(id: string): boolean {
 /**
  * Pull an entity out of the corpus and onto the canvas, confirmed.
  *
- * Only the analyst does this — via the search panel or by expanding a node.
+ * Only the analyst does this. Via the search panel or by expanding a node.
  * There is no tool that reaches it, because an agent that could add confirmed
  * nodes could add wrong ones silently.
  */
@@ -211,8 +211,8 @@ export function removeNode(nodeId: string): ActionResult {
  * The analyst draws an edge by hand.
  *
  * If the corpus already evidences this relationship we promote the real edge,
- * citations and all. If it does not, the edge is still created — the analyst is
- * allowed to assert a hypothesis — but it is marked `analystAsserted` and the
+ * citations and all. If it does not, the edge is still created, the analyst is
+ * allowed to assert a hypothesis. But it is marked `analystAsserted` and the
  * UI says so, because an uncited line must never look like a cited one.
  */
 export function drawEdge(fromId: string, toId: string, relation: Relation): ActionResult {
@@ -246,7 +246,7 @@ export function drawEdge(fromId: string, toId: string, relation: Relation): Acti
     analystAsserted: true,
   });
   useGraphStore.getState()._setEdges(edges);
-  record("human", "asserted", `${fromId} ${relation} ${toId} — no filing found, drawn by hand`, id);
+  record("human", "asserted", `${fromId} ${relation} ${toId}. No filing found, drawn by hand`, id);
   return { ok: true, id };
 }
 
@@ -334,7 +334,7 @@ export function openDocument(docId: string, scrollTo?: Span): ActionResult {
  * set is the Receiver's judgement, and an agent that could add its own
  * material to the record could quietly shape what the analyst reads. It goes
  * through the same store, the same offsets and the same marking system as an
- * ingested filing — the only difference is where it came from, which the UI
+ * ingested filing, the only difference is where it came from, which the UI
  * says plainly.
  */
 export function ingestDocument(
@@ -361,7 +361,7 @@ export function ingestDocument(
   addUploadedDocument({
     id,
     title,
-    // Rendered verbatim. No wrapping, no normalising — the marking offsets and
+    // Rendered verbatim. No wrapping, no normalising, the marking offsets and
     // any citation the agent makes both index this exact string.
     text: body,
     mentions: [],
@@ -377,7 +377,7 @@ export function ingestDocument(
   return { ok: true, id, data: id };
 }
 
-/** Captured on `selectionchange`, not read at tool-call time — see readerStore. */
+/** Captured on `selectionchange`, not read at tool-call time, see readerStore. */
 export function captureSelection(sel: { doc_id: string; start: number; end: number; text: string } | null): void {
   useReaderStore.getState()._setSelection(sel);
 }
@@ -403,7 +403,7 @@ export interface AddMarkingInput {
  *
  * The analyst dragging across a paragraph and the agent's `highlight_span` are
  * the *same* call, differing only in `origin`. There is no agent-flavoured
- * write path — if one ever appears, the product has stopped being what
+ * write path, if one ever appears, the product has stopped being what
  * docs/METHOD.md says it is.
  */
 export function addMarking(input: AddMarkingInput): ActionResult<Marking> {
@@ -462,7 +462,7 @@ export function addMarking(input: AddMarkingInput): ActionResult<Marking> {
   record(
     origin,
     "marked",
-    `${input.type} — "${shown}" in ${doc.title}`,
+    `${input.type}, "${shown}" in ${doc.title}`,
     marking.id
   );
   return { ok: true, id: marking.id, data: marking };
@@ -568,7 +568,7 @@ export function resultEnquiry(input: ResultEnquiryInput): ActionResult {
   if (!input.summary.trim()) {
     return fail(
       "A result needs a summary.",
-      "Say what you searched and what you found, in plain words. If you found nothing, say what you searched — that is a useful result."
+      "Say what you searched and what you found, in plain words. If you found nothing, say what you searched. That is a useful result."
     );
   }
   if (input.outcome === "found" && input.citations.length === 0) {
@@ -592,7 +592,7 @@ export function resultEnquiry(input: ResultEnquiryInput): ActionResult {
   record(
     "agent",
     "resulted",
-    `${input.outcome} — ${input.summary.slice(0, 100)}`,
+    `${input.outcome}, ${input.summary.slice(0, 100)}`,
     input.id
   );
   return { ok: true, id: input.id };
@@ -637,7 +637,7 @@ export function stageNode(input: StageNodeInput): ActionResult {
   if (!input.reason?.trim()) {
     return fail(
       "A proposal needs a reason.",
-      "Give one sentence explaining why this belongs on the canvas — the analyst reads it on the proposal card before accepting."
+      "Give one sentence explaining why this belongs on the canvas. The analyst reads it on the proposal card before accepting."
     );
   }
 
@@ -685,7 +685,7 @@ export function stageNode(input: StageNodeInput): ActionResult {
     origin: input.origin ?? "agent",
   });
   useProposalStore.getState()._setProposals(map);
-  record(input.origin ?? "agent", "proposed", `${input.type} "${input.label}" — ${input.reason}`, id);
+  record(input.origin ?? "agent", "proposed", `${input.type} "${input.label}", ${input.reason}`, id);
   return { ok: true, id };
 }
 
@@ -706,7 +706,7 @@ export function stageEdge(input: StageEdgeInput): ActionResult {
   if (!input.reason?.trim()) {
     return fail(
       "A proposal needs a reason.",
-      "Give one sentence explaining what this relationship means — the analyst reads it before accepting."
+      "Give one sentence explaining what this relationship means. The analyst reads it before accepting."
     );
   }
   if (input.from_id === input.to_id) {
@@ -815,7 +815,7 @@ export function annotate(
  * scripts/check-no-commit-tool.ts fails the build if that stops being true.
  *
  * This is the second, independent guarantee. Promotion requires a DOM event
- * with `isTrusted === true` — an event the browser itself dispatched from a
+ * with `isTrusted === true`, an event the browser itself dispatched from a
  * real input device. `isTrusted` is read-only and is false on any event
  * constructed in script, and a tool call has no event at all, so a bug that
  * wired promotion into a tool fails closed rather than silently committing.
@@ -837,7 +837,7 @@ function requireHumanGesture(what: string, gesture: HumanGesture | undefined): b
   if (isTrustedGesture(gesture)) return true;
   console.error(
     `[threadweaver] refused to ${what}: not a trusted user event. Only the ` +
-      "analyst can promote a proposal — see docs/TOOLS.md, 'Why there is no commit tool'."
+      "analyst can promote a proposal. See docs/TOOLS.md, 'Why there is no commit tool'."
   );
   return false;
 }
@@ -891,8 +891,8 @@ export function acceptProposal(proposalId: string, gesture?: HumanGesture): Acti
     "human",
     "accepted",
     p.kind === "node"
-      ? `${p.entityType} "${p.label}" onto the canvas — ${p.reason}`
-      : `${p.from_id} ${p.relation} ${p.to_id} — ${p.reason}`,
+      ? `${p.entityType} "${p.label}" onto the canvas, ${p.reason}`
+      : `${p.from_id} ${p.relation} ${p.to_id}, ${p.reason}`,
     proposalId
   );
 
@@ -931,14 +931,14 @@ export function rejectProposal(proposalId: string, gesture?: HumanGesture): Acti
  * The canvas is deliberately sparse and deliberately incomplete: the
  * interesting entities are reachable but not present. The reader queue is
  * seeded from the filings those nodes came from, and the first one is opened,
- * because the app opens on Read — the human reads first. See docs/METHOD.md.
+ * because the app opens on Read, the human reads first. See docs/METHOD.md.
  */
 export function seedCanvas(): void {
   const { seedNodeIds, seedDocIds, entities, documents } = getCorpus();
 
   // The seed is the state the session starts in, not twelve decisions somebody
   // made. Logging each one as `human · added` fills the top of an audit trail
-  // with actions no human took — which is exactly the kind of claim this log
+  // with actions no human took. Which is exactly the kind of claim this log
   // exists to make impossible. One `opened` entry below says the true thing.
   seeding = true;
   try {

@@ -9,7 +9,7 @@ import type { Citation } from "../types";
  *
  * The text rendered here is byte-for-byte the text scripts/build-corpus.ts
  * indexed and recorded offsets against. It is never reformatted at display
- * time — if it were, every span in the corpus would point at the wrong words.
+ * time, if it were, every span in the corpus would point at the wrong words.
  */
 
 export interface EvidenceTarget {
@@ -88,14 +88,14 @@ export default function EvidenceDrawer({
       {corroborating.length > 0 && (
         <p className="derived-note">
           This is a derived relationship. It rests on {corroborating.length + 1} filings,
-          not one — both are shown below.
+          not one, both are shown below.
         </p>
       )}
 
       <article className="filing">
         <h3>{primary.title}</h3>
         <p className="doc-id">
-          <code>{primary.id}</code> · characters {span.start}–{span.end}
+          <code>{primary.id}</code> · characters {span.start}-{span.end}
         </p>
         <pre className="filing-text">
           {primary.text.slice(0, span.start)}
@@ -108,7 +108,7 @@ export default function EvidenceDrawer({
         <article className="filing" key={doc.id + s.start}>
           <h3>{doc.title}</h3>
           <p className="doc-id">
-            <code>{doc.id}</code> · characters {s.start}–{s.end}
+            <code>{doc.id}</code> · characters {s.start}-{s.end}
           </p>
           <pre className="filing-text">
             {doc.text.slice(0, s.start)}

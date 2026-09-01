@@ -2,13 +2,13 @@
 
 A document reader and a link canvas where a human and an AI agent work the same case.
 
-**You read.** Open a filing, read it, drag across a passage and mark it — an address, a name, a
+**You read.** Open a filing, read it, drag across a passage and mark it. An address, a name, a
 date, a question. Raise a line of enquiry in your own words. This is the Document Reader's job in a
 police major incident room, and in this app it is yours.
 
 **The agent indexes.** Through [WebMCP](https://webmcp.devpost.com) site tools it can see the filing
 you have open, the passage you just highlighted, every mark you have left and the working set on
-your canvas — then cross-references all of it against a corpus you could not hold in your head. It
+your canvas, then cross-references all of it against a corpus you could not hold in your head. It
 comes back with **proposals**: dashed, glowing, unsettled, each carrying a citation, plus its own
 highlights laid alongside yours in the document you are still reading. Click a citation, check the
 filing with the exact span highlighted, then accept or reject. Accepted knowledge locks into the
@@ -18,7 +18,7 @@ That split is not ours. Major incident rooms have run it since 1981, for the sam
 capacity that reads well is not the human capacity that cross-references exhaustively. See
 [`docs/METHOD.md`](docs/METHOD.md).
 
-Built on real UK Companies House public records. No backend — the corpus is static, every tool runs
+Built on real UK Companies House public records. No backend. The corpus is static, every tool runs
 in the page.
 
 **Take the agent away and this is still a document reader with typed highlights, an enquiry queue
@@ -40,7 +40,7 @@ It is guaranteed twice over:
 - **Structurally.** No registered tool promotes anything, and nothing under `src/webmcp/` imports
   `acceptProposal` or `rejectProposal`. `scripts/check-no-commit-tool.ts` runs as part of
   `npm run build` and fails the build if that ever stops being true.
-- **At runtime.** Promotion requires a DOM event with `isTrusted === true` — an event only the
+- **At runtime.** Promotion requires a DOM event with `isTrusted === true`, an event only the
   browser can produce from a real input device. A synthetic `MouseEvent`, an `element.click()`, and
   a tool call all fail it.
 
@@ -60,7 +60,7 @@ Chrome 149+ works too with `chrome://flags/#enable-webmcp-testing`.
 
 ### Building the corpus
 
-`public/corpus/*.json` is what the app serves — there is no backend, so it has to be in the repo
+`public/corpus/*.json` is what the app serves. There is no backend, so it has to be in the repo
 that gets deployed. To rebuild it from source records:
 
 ```bash
@@ -88,7 +88,7 @@ Then commit the result:
 git add public/corpus                   # the deployed site has no records without it
 ```
 
-If the header shows an orange **DEV FIXTURE — not real records** badge, the corpus did not load and
+If the header shows an orange **DEV FIXTURE. Not real records** badge, the corpus did not load and
 you are looking at the development stand-in.
 
 `raw/` and `.env` are gitignored. `CH_API_KEY` is read only by `scripts/`; the built bundle contains
@@ -111,8 +111,8 @@ These are decisions, not gaps:
 
 ## A note on the data
 
-Everything here is a UK public record. The product surfaces **structure** — "these companies share a
-registered address and a common person with significant control, here are the filings" — and leaves
+Everything here is a UK public record. The product surfaces **structure**, "these companies share a
+registered address and a common person with significant control, here are the filings", and leaves
 the conclusion to the human. It does not make accusations about named living individuals, and the UI
 copy is written to keep that true. Dates of birth are published by Companies House and are used for
 identity matching, but they are never rendered anywhere in the interface.
@@ -125,7 +125,7 @@ identity matching, but they are never rendered anywhere in the interface.
 | [`docs/PLAN.md`](docs/PLAN.md) | Features by priority, the reasoning behind each decision, day-by-day schedule, definition of done |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | System diagrams, full file tree, the one architectural rule that matters |
 | [`docs/TOOLS.md`](docs/TOOLS.md) | All 19 WebMCP tool contracts with JSON Schemas |
-| [`docs/UI.md`](docs/UI.md) | The visual and physics spec — what each force, colour and animation means, and why the canvas is 2D |
+| [`docs/UI.md`](docs/UI.md) | The visual and physics spec. What each force, colour and animation means, and why the canvas is 2D |
 | [`docs/DATA.md`](docs/DATA.md) | Companies House ingestion pipeline and how to find the demo chain |
 
 ## Licence

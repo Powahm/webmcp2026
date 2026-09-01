@@ -1,11 +1,11 @@
-# UI — visual and physics spec
+# UI, visual and physics spec
 
 Every effect here earns its place by *encoding state*. If an animation doesn't tell the analyst
-something true about the graph, cut it — decoration is how a demo starts looking generated.
+something true about the graph, cut it. Decoration is how a demo starts looking generated.
 
 ## Layout
 
-Two workspaces, one shared rail, `W` toggles between them. Both stay mounted — switching loses no
+Two workspaces, one shared rail, `W` toggles between them. Both stay mounted, switching loses no
 state. **The app opens on READ**, because the human reads first.
 
 ```
@@ -21,7 +21,7 @@ READ  (the human's work)                CANVAS  (the shared picture)
 │        ├─────────────┴──────┤ Deci.│  │        │                │ Deci.│
 │        │ mark bar  1..6     │      │  │        │                │      │
 ├────────┴────────────────────┴──────┤  ├────────┴────────────────┴──────┤
-│  Tool log — live WebMCP calls      │  │  Tool log                      │
+│  Tool log, live WebMCP calls      │  │  Tool log                      │
 └────────────────────────────────────┘  └────────────────────────────────┘
 ```
 
@@ -42,17 +42,17 @@ It was 3D, force-directed in three dimensions, on `react-force-graph-3d`. That i
 reasoning is worth keeping written down so nobody re-adds it.
 
 - **3D genuinely costs legibility.** Occlusion and depth ambiguity make a network harder to read and
-  harder to click, and every mitigation for that — fog, camera-facing labels, dim-the-rest — is
+  harder to click, and every mitigation for that (fog, camera-facing labels, dim-the-rest) is
   effort spent buying back something 2D never took away.
 - **The camera had a failure mode with no 2D equivalent.** Framing was computed along the vector
   from the world origin to the target. That vector collapses when the target is near the origin,
   which is exactly where a freshly proposed node sits before the simulation places it: the camera
   ended up at the origin looking at the origin and the screen went black. In 2D, framing is
-  "centre the box, pick a scale" — there is no direction to compute.
+  "centre the box, pick a scale". There is no direction to compute.
 - **The library pulled its own copy of three.js.** A version skew put two three.js builds on the
   page and one called a method on a matrix from the other. Hard error on every load.
-- **We lost nothing that carried meaning.** The physics metaphor — a proposal on a weak, long
-  spring, contracting when accepted — works identically in two dimensions, and you can actually
+- **We lost nothing that carried meaning.** The physics metaphor. A proposal on a weak, long
+  spring, contracting when accepted, works identically in two dimensions, and you can actually
   see it happen.
 
 The canvas is now a single 2D context driven by a hand-rolled simulation in
@@ -70,7 +70,7 @@ performance one.
 | Address | muted green | Reads as a place |
 | Document | soft violet | A page |
 
-Every node is a disc with a soft radial glow bleeding into the background — the Obsidian read.
+Every node is a disc with a soft radial glow bleeding into the background, the Obsidian read.
 Radius by degree, clamped, so a hub genuinely looks like a hub and nothing dwarfs the rest.
 
 ### State
@@ -78,9 +78,9 @@ Radius by degree, clamped, so a hub genuinely looks like a hub and nothing dwarf
 | State | Treatment |
 |---|---|
 | Confirmed | filled disc, full opacity |
-| **Proposed** | **hollow** — background fill, dashed teal ring, glow breathing on a slow sine |
+| **Proposed** | **hollow**, background fill, dashed teal ring, glow breathing on a slow sine |
 | Selected | a ring *outside* the disc, so selecting never changes a node's size |
-| Dimmed | opacity 0.22 — everything that is not the hovered node or its neighbours |
+| Dimmed | opacity 0.22, everything that is not the hovered node or its neighbours |
 
 A proposal is a shape waiting to be filled in. It is hollow, it is dashed, and it is the only thing
 on the canvas that moves when nothing is happening.
@@ -91,7 +91,7 @@ on the canvas that moves when nothing is happening.
 |---|---|
 | Confirmed | solid, 1.4px |
 | Corroborated (more than one citation) | solid, 2.1px, lighter |
-| **Proposed** | dashed teal, dash offset advancing — "live, being asserted" |
+| **Proposed** | dashed teal, dash offset advancing, "live, being asserted" |
 | Analyst-asserted, no filing found | a warm line. An uncited edge must never look like a cited one |
 
 ## Labels
@@ -102,15 +102,15 @@ Labels are where a link chart looks broken, so they get more care than anything 
   renderer can only test a label against labels drawn before it, which is how you end up with text
   across a node.
 - **Collision means drop, not shrink.** A label that would overlap anything already placed is
-  skipped. Nothing is lost — the node is still there and hovering brings its name straight back.
+  skipped. Nothing is lost, the node is still there and hovering brings its name straight back.
 - **Priority order:** hovered, then selected, then proposals, then hubs. The node the analyst is
   pointing at always keeps its name.
 - **Addresses are shortened** to building plus postcode. A full registered office string is longer
   than the rest of the chart put together; the Inspector shows the whole thing.
-- **A halo, not a box.** Stroked background text rather than a filled rectangle — boxes turn the
+- **A halo, not a box.** Stroked background text rather than a filled rectangle, boxes turn the
   canvas into a wall of rectangles as the working set grows.
 
-## Physics — where the metaphor lives
+## Physics, where the metaphor lives
 
 `src/canvas/simulation.ts`. Every number is a claim about how much the analyst believes something.
 
@@ -124,26 +124,26 @@ Labels are where a link chart looks broken, so they get more care than anything 
 
 ### The animated moments
 
-**1. A proposal arrives.** Seeded beside a neighbour that already has a position — never at the
+**1. A proposal arrives.** Seeded beside a neighbour that already has a position, never at the
 origin, which flings it across the screen on its first frames. Weak spring, so it settles far out
 and stays slightly restless. The view does not move unless the agent calls `focus`.
 
-**2. Accept — the money shot.** Link strength animates 0.06 → 0.55 and distance 280 → 150 over
+**2. Accept, the money shot.** Link strength animates 0.06 → 0.55 and distance 280 → 150 over
 ~700ms on an ease-out cubic, with the simulation reheated. The graph contracts and re-settles
 around the new fact. Do not shorten it to feel snappy; it is the thing people remember.
 
-**3. The agent's mark appears.** A 200ms fade in the reader and nothing else. No pulse, no motion —
-it lands in text the analyst is reading, and animation in text someone is reading is hostile. It
+**3. The agent's mark appears.** A 200ms fade in the reader and nothing else. No pulse, no motion.
+It lands in text the analyst is reading, and animation in text someone is reading is hostile. It
 earns its effect by being the quietest thing in the app.
 
 ## The view
 
 - **It frames itself until you touch it.** The transform eases towards a fit of the whole graph
-  every frame until the analyst pans, zooms, or is flown somewhere — then the app stops touching
+  every frame until the analyst pans, zooms, or is flown somewhere. Then the app stops touching
   the view entirely. Booting off-centre and small is the difference between "here is your case" and
   "your first action is a pan"; a view that keeps correcting you afterwards is worse than either.
 - `focus(node_ids)` eases to a fit of those nodes over ~620ms. A single node, or several stacked
-  before the simulation separates them, is a zero-extent box — `viewport.frame()` floors the extent
+  before the simulation separates them, is a zero-extent box. `viewport.frame()` floors the extent
   before dividing, so it yields a valid transform instead of the black screen the 3D camera gave.
 - `F` frames the selection, or everything if nothing is selected. `Esc` clears. Drag a node to move
   it; releasing hands it back to the simulation rather than pinning it, so the analyst can never
@@ -163,7 +163,7 @@ analyst's own reading visually primary. Teal is the agent's colour and appears n
 application.
 
 The filing itself is `white-space: pre-wrap` and nothing else. No wrapping, trimming, smart quotes
-or whitespace collapsing — every span in the corpus and every mark the analyst makes is an index
+or whitespace collapsing, every span in the corpus and every mark the analyst makes is an index
 into that exact string.
 
 ## Palette
@@ -181,5 +181,5 @@ viewport are culled before drawing. The simulation stops when alpha reaches its 
 ## Reduced motion
 
 `prefers-reduced-motion` collapses the accept animation to 200ms, stops the proposal breathing and
-the dash offset, and makes the fly-to instant. Nothing is removed — every state stays legible
+the dash offset, and makes the fly-to instant. Nothing is removed, every state stays legible
 without motion, which is the test.

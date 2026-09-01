@@ -4,7 +4,7 @@ import type { Proposal } from "../types";
 /**
  * Staged, unconfirmed claims. Write tools reach only this store, and only
  * through actions.ts. Nothing here is part of the graph until a human accepts
- * it — see the note at the bottom of docs/TOOLS.md on why there is no commit
+ * it, see the note at the bottom of docs/TOOLS.md on why there is no commit
  * tool.
  */
 

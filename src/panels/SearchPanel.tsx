@@ -79,7 +79,7 @@ export default function SearchPanel() {
 
       <p className="hint">
         {nodes.size} node{nodes.size === 1 ? "" : "s"} on the canvas. The corpus holds
-        far more — the canvas is only what you have chosen to look at.
+        far more, the canvas is only what you have chosen to look at.
       </p>
     </section>
   );

@@ -1,7 +1,7 @@
 import type { JsonSchema } from "./mcpTypes";
 
 /**
- * JSON Schema for every tool. Not TypeScript types, not Python kwargs — JSON
+ * JSON Schema for every tool. Not TypeScript types, not Python kwargs, JSON
  * Schema, which is what the host validates against.
  *
  * Every schema sets `additionalProperties: false`. Narrow inputs are the
@@ -127,7 +127,7 @@ export const RESULT_ENQUIRY: JsonSchema = {
       minLength: 1,
       maxLength: 400,
       description:
-        "What you did and what you found, in plain words. Structural facts about public records only — never a conclusion about a person.",
+        "What you did and what you found, in plain words. Structural facts about public records only. Never a conclusion about a person.",
     },
     citations: {
       type: "array",

@@ -5,7 +5,7 @@ import type { Edge } from "../types";
  *
  * Traversal only. It will not infer, weight, or guess: if it returns nothing,
  * that is a real answer, and it is usually the answer that starts the
- * investigation — "there is no path yet, go and find one."
+ * investigation, "there is no path yet, go and find one."
  *
  * Hand-rolled on purpose. A graph library is not worth its weight for
  * max_hops <= 4 over a working set of forty nodes.

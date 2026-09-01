@@ -28,7 +28,7 @@ interface ReaderState {
   /**
    * The last non-empty selection the analyst made inside the reader.
    *
-   * Captured on `selectionchange` and *kept* — deliberately not read at
+   * Captured on `selectionchange` and *kept*, deliberately not read at
    * tool-call time. By the time an agent invokes a tool the analyst has clicked
    * into another surface and `document.getSelection()` is collapsed, so reading
    * it there returns null exactly when it matters. Cleared only when a
@@ -67,7 +67,7 @@ export const useReaderStore = create<ReaderState>((set) => ({
   _setScrollRequest: (scrollRequest) => set({ scrollRequest }),
 }));
 
-/** Read from outside React — the tool layer runs in no component. */
+/** Read from outside React, the tool layer runs in no component. */
 export const reader = () => useReaderStore.getState();
 
 /** Markings for one document, in reading order. */

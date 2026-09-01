@@ -1,5 +1,5 @@
 /* Threadweaver design tokens.
-   Kept in sync with src/canvas/palette.ts by hand — the canvas is drawn with
+   Kept in sync with src/canvas/palette.ts by hand. The canvas is drawn with
    2D context calls, which cannot read custom properties.
 
    Dark-committed. An investigation tool is read for an hour at a time, and the
@@ -16,7 +16,7 @@
   --line: #232c38;
   --line-soft: #1a222c;
 
-  /* Entity colours. Also the marking colours — a person is the same hue
+  /* Entity colours. Also the marking colours. A person is the same hue
      wherever they appear, on the canvas or in the margin. */
   --company: #7aa2d4;
   --person: #e0a458;

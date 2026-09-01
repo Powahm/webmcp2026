@@ -10,7 +10,7 @@ Depth is itself a judging signal: nineteen narrow, well-described tools score be
 ones, and broad "do the thinking for me" tools are the documented anti-pattern.
 
 Each tool below is marked **P0** (ships or we do not submit) or **P1** (cut first). If Tuesday goes
-badly, cut every P1 before touching a P0 — the tool count is a scoring signal but a broken flagship
+badly, cut every P1 before touching a P0. The tool count is a scoring signal but a broken flagship
 is not.
 
 ## Read this first
@@ -19,7 +19,7 @@ The three tools that carry the WebMCP argument are `get_reader_context`, `get_ma
 `get_selection`, in that order. They return state that exists nowhere but the live page: the
 document the analyst has open, the passage they just highlighted, the marks they left in the last
 ten minutes, the nodes they chose to point at. No server has it. No API exposes it. No page-scrape
-reconstructs it — the reader's text is client-rendered from memory and the offsets are into a string
+reconstructs it, the reader's text is client-rendered from memory and the offsets are into a string
 that never travelled over the wire.
 
 Lead the write-up with `get_reader_context`. See `docs/METHOD.md` for why the *human* holds the
@@ -54,7 +54,7 @@ Set `additionalProperties: false` on every schema. Narrow inputs are explicitly 
 All nine carry `annotations: { readOnlyHint: true }` so the browser doesn't gate them behind a
 confirmation prompt. They read the stores and the corpus directly and never call `actions.ts`.
 
-### `get_reader_context` — P0, the flagship
+### `get_reader_context`, P0, the flagship
 
 What the analyst is reading right now, and what they just highlighted. Everything in `METHOD.md`
 comes down to this tool: the human is the Document Reader, and this is how the agent takes
@@ -73,7 +73,7 @@ Returns:
 {
   doc_id: string | null,
   title: string | null,
-  // The live, uncommitted selection. Best-effort — see the note below.
+  // The live, uncommitted selection. Best-effort, see the note below.
   selection: { start: number, end: number, text: string } | null,
   // Roughly what is on screen, so the agent doesn't describe text they can't see.
   visible_span: { start: number, end: number } | null,
@@ -91,7 +91,7 @@ filing.
 Return `selection: null` honestly when there isn't one. An agent that gets a stale span will cite
 the wrong words, and a wrong citation is worse here than no citation.
 
-### `get_markings` — P0
+### `get_markings`, P0
 
 The durable half of the same idea: everything the analyst has deliberately marked, typed.
 
@@ -120,10 +120,10 @@ The durable half of the same idea: everything the analyst has deliberately marke
 ```
 Returns `{ markings: [{ id, doc_id, span, text, type, note?, origin, created_at }] }`.
 
-Include `text` — the substring itself — even though the agent could derive it from the span. It
+Include `text`, the substring itself, even though the agent could derive it from the span. It
 halves the round trips and it makes the tool log readable on video.
 
-### `list_enquiries` — P0
+### `list_enquiries`, P0
 
 The queue the human wrote. An agent that reads this is taking instruction, not initiative, and that
 is the point.
@@ -148,7 +148,7 @@ is the point.
 ```
 Returns `{ enquiries: [{ id, question, status, raised_by, from_marking_id?, created_at }] }`.
 
-### `get_selection` — P0
+### `get_selection`, P0
 
 The canvas-side twin of `get_reader_context`. No server and no page-scraper knows what the analyst
 just decided to point at. It is what makes "find the link between these two" mean anything.
@@ -163,7 +163,7 @@ just decided to point at. It is what makes "find the link between these two" mea
 ```
 Returns `{ nodes: [{ id, type, label }] }`.
 
-### `get_viewport` — P1
+### `get_viewport`, P1
 
 ```json
 {
@@ -175,7 +175,7 @@ Returns `{ nodes: [{ id, type, label }] }`.
 ```
 Returns `{ visibleNodeIds: string[], zoom: number, offscreenCount: number }`.
 
-### `get_visible_subgraph` — P0
+### `get_visible_subgraph`, P0
 
 ```json
 {
@@ -187,7 +187,7 @@ Returns `{ visibleNodeIds: string[], zoom: number, offscreenCount: number }`.
 ```
 Returns `{ nodes: Entity[], edges: Edge[], proposalCount: number }`.
 
-### `get_entity` — P0
+### `get_entity`, P0
 
 ```json
 {
@@ -203,7 +203,7 @@ Returns `{ nodes: Entity[], edges: Edge[], proposalCount: number }`.
 }
 ```
 
-### `search_documents` — P0
+### `search_documents`, P0
 
 Returns **document ids and matching spans, never prose.** If it returned summaries the agent would
 be reading our paraphrase instead of the record, and the citation would be worthless.
@@ -211,7 +211,7 @@ be reading our paraphrase instead of the record, and the citation would be worth
 ```json
 {
   "name": "search_documents",
-  "description": "Full-text search across the filing corpus. Returns document ids with the character offsets of each match, so results can be cited exactly. Does not search the canvas — use get_visible_subgraph for that.",
+  "description": "Full-text search across the filing corpus. Returns document ids with the character offsets of each match, so results can be cited exactly. Does not search the canvas. Use get_visible_subgraph for that.",
   "inputSchema": {
     "type": "object",
     "properties": {
@@ -230,9 +230,9 @@ be reading our paraphrase instead of the record, and the citation would be worth
 ```
 Returns `{ results: [{ doc_id, title, score, spans: [{ start, end, text }] }] }`.
 
-### `query_paths` — P0
+### `query_paths`, P0
 
-Pure traversal of the confirmed canvas graph. No inference — if it returns nothing, that is a real
+Pure traversal of the confirmed canvas graph. No inference. If it returns nothing, that is a real
 answer, and it is usually the answer that starts the investigation.
 
 ```json
@@ -258,17 +258,17 @@ answer, and it is usually the answer that starts the investigation.
 These call `actions.ts`. Nothing here can alter the confirmed graph. They fall into three kinds,
 and the distinction is worth keeping straight in your head while building:
 
-- **Staged claims** — `propose_node`, `propose_edge`, `pin_evidence`, `propose_enquiry`. Land in
+- **Staged claims**, `propose_node`, `propose_edge`, `pin_evidence`, `propose_enquiry`. Land in
   `proposalStore` as dashed, unconfirmed, awaiting a human gesture. These assert something.
-- **Pointing** — `highlight_span`, `open_document`, `focus`, `annotate`. They change what the human
+- **Pointing**, `highlight_span`, `open_document`, `focus`, `annotate`. They change what the human
   is looking at, and assert nothing. No acceptance needed; all of them are trivially reversible by
   the analyst, and all are visibly attributed to the agent.
-- **Reporting** — `result_enquiry`. Answers a question the human asked. The human files it.
+- **Reporting**, `result_enquiry`. Answers a question the human asked. The human files it.
 
-Describe the side effect in the description — that is explicit guidance, and it is also what makes
+Describe the side effect in the description. That is explicit guidance, and it is also what makes
 the browser's confirmation prompt read sensibly to the user.
 
-### `propose_node` — P0
+### `propose_node`, P0
 
 **The page rejects any proposal without a source.** Enforce it in `actions.ts`, not just in the
 schema, and return a useful error so the agent retries correctly rather than giving up.
@@ -297,7 +297,7 @@ schema, and return a useful error so the agent retries correctly rather than giv
 }
 ```
 
-### `propose_edge` — P0
+### `propose_edge`, P0
 
 ```json
 {
@@ -326,7 +326,7 @@ schema, and return a useful error so the agent retries correctly rather than giv
 }
 ```
 
-### `pin_evidence` — P1
+### `pin_evidence`, P1
 
 ```json
 {
@@ -349,7 +349,7 @@ schema, and return a useful error so the agent retries correctly rather than giv
 }
 ```
 
-### `annotate` — P1
+### `annotate`, P1
 
 ```json
 {
@@ -367,7 +367,7 @@ schema, and return a useful error so the agent retries correctly rather than giv
 }
 ```
 
-### `focus` — P0
+### `focus`, P0
 
 The return leg of the loop: the agent moves the analyst's view to what it found.
 
@@ -386,14 +386,14 @@ The return leg of the loop: the agent moves the analyst's view to what it found.
 }
 ```
 
-### `highlight_span` — P0
+### `highlight_span`, P0
 
 The agent marks a passage *in the document the analyst is currently reading*, in the agent's own
 colour, alongside their marks. Two actors annotating one surface, live. It is the single best
 screenshot in the project and it is one store write.
 
-It is a staged write, not a read: it changes what the human sees. It does not need accepting — a
-highlight asserts nothing, it only points — but it is listed in the margin as the agent's and the
+It is a staged write, not a read: it changes what the human sees. It does not need accepting, a
+highlight asserts nothing, it only points. But it is listed in the margin as the agent's and the
 analyst can clear it.
 
 ```json
@@ -424,7 +424,7 @@ analyst can clear it.
 Validate the span against the document length in `actions.ts` and fail with a hint. An out-of-range
 span from the agent must not render as a silently empty `<mark>`.
 
-### `open_document` — P0
+### `open_document`, P0
 
 The reading-side twin of `focus`. The agent brings a filing up in the analyst's reader, scrolled to
 the right place. Cheap, and it makes the loop feel like two people working rather than a request and
@@ -450,10 +450,10 @@ a response.
 }
 ```
 
-### `result_enquiry` — P0
+### `result_enquiry`, P0
 
 The agent reports back on a line of enquiry the human raised. **Reporting nothing is a valid
-result** — say so in the description, or the agent will keep searching rather than admit an empty
+result**, say so in the description, or the agent will keep searching rather than admit an empty
 answer, which is the exact failure mode the whole design is built against.
 
 The human marks it filed. The agent cannot.
@@ -461,7 +461,7 @@ The human marks it filed. The agent cannot.
 ```json
 {
   "name": "result_enquiry",
-  "description": "Report back on a line of enquiry the analyst raised. Finding nothing is a valid and useful result — report 'eliminated' with what you searched, rather than stretching for a weak link. The analyst reviews every result; you cannot close an enquiry yourself.",
+  "description": "Report back on a line of enquiry the analyst raised. Finding nothing is a valid and useful result. Report 'eliminated' with what you searched, rather than stretching for a weak link. The analyst reviews every result; you cannot close an enquiry yourself.",
   "inputSchema": {
     "type": "object",
     "properties": {
@@ -471,7 +471,7 @@ The human marks it filed. The agent cannot.
         "enum": ["found", "eliminated", "partial"],
         "description": "'eliminated' means you searched and there is nothing to find. Say what you searched in 'summary'."
       },
-      "summary": { "type": "string", "maxLength": 400, "description": "What you did and what you found, in plain words. Structural facts only — never a conclusion about a person." },
+      "summary": { "type": "string", "maxLength": 400, "description": "What you did and what you found, in plain words. Structural facts only. Never a conclusion about a person." },
       "citations": {
         "type": "array",
         "maxItems": 8,
@@ -498,7 +498,7 @@ The human marks it filed. The agent cannot.
 `outcome: "found"` requires at least one citation. Enforce it in `actions.ts` and return a hint, the
 same as proposals.
 
-### `claim_enquiry` — P0
+### `claim_enquiry`, P0
 
 Takes a line of enquiry off the analyst's queue so they can see it is being worked. Reversible,
 asserts nothing, and it is what makes the Enquiries panel show movement while the agent is thinking.
@@ -516,16 +516,16 @@ asserts nothing, and it is what makes the Enquiries panel show movement while th
 }
 ```
 
-### `propose_enquiry` — P1, not built
+### `propose_enquiry`, P1, not built
 
 The agent suggests a line of enquiry; it lands in the panel greyed, and the human raises it for
-real or discards it. Nice symmetry, genuinely cuttable — the human writing the questions is the
+real or discards it. Nice symmetry, genuinely cuttable. The human writing the questions is the
 point, and this is the tool that dilutes it. Build it last, if at all.
 
 ```json
 {
   "name": "propose_enquiry",
-  "description": "Suggest a line of enquiry for the analyst to consider. It is not opened until they accept it. Use sparingly — the analyst decides what is worth chasing.",
+  "description": "Suggest a line of enquiry for the analyst to consider. It is not opened until they accept it. Use sparingly. The analyst decides what is worth chasing.",
   "inputSchema": {
     "type": "object",
     "properties": {
@@ -562,6 +562,6 @@ feature, it answers the "how do I know the agent isn't hallucinating links about
 question before a judge has to ask it, and it satisfies the requirement that consequential actions
 get human review.
 
-It is also the structural defence against automation bias — see `docs/METHOD.md` §4. Nothing here
+It is also the structural defence against automation bias, see `docs/METHOD.md` §4. Nothing here
 relies on the analyst being disciplined; the product is shaped so that not checking is not an
 option.

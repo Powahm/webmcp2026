@@ -34,7 +34,7 @@ export const TYPE_LABEL: Record<EntityType, string> = {
 };
 
 /** Attribute keys the Inspector is allowed to render, in order. Anything not
- *  on this list stays out of the UI — which is how dates of birth stay off
+ *  on this list stays out of the UI. Which is how dates of birth stay off
  *  screen even though we use them for identity matching. */
 export const VISIBLE_ATTRS: { key: string; label: string }[] = [
   { key: "company_number", label: "Company number" },

@@ -11,7 +11,7 @@ import { RELATION_LABEL, TYPE_LABEL } from "./labels";
  *
  * These two buttons are the only way anything an agent says becomes part of the
  * graph. The agent has no tool that reaches them, and acceptProposal requires
- * the trusted DOM event these onClick handlers pass it — an event only the
+ * the trusted DOM event these onClick handlers pass it, an event only the
  * browser can produce. This component is not merely the convenient path to
  * promotion; it is the only one.
  */
@@ -35,8 +35,8 @@ export default function ProposalTray({
 
   const claimOf = (p: Proposal): string =>
     p.kind === "node"
-      ? `${TYPE_LABEL[p.entityType]} — ${p.label}`
-      : `${labelOf(p.from_id)} — ${RELATION_LABEL[p.relation]} — ${labelOf(p.to_id)}`;
+      ? `${TYPE_LABEL[p.entityType]}, ${p.label}`
+      : `${labelOf(p.from_id)} · ${RELATION_LABEL[p.relation]} · ${labelOf(p.to_id)}`;
 
   return (
     <section className="panel tray">
@@ -48,7 +48,7 @@ export default function ProposalTray({
       {pending.length === 0 && (
         <p className="empty">
           Nothing staged. The agent can propose nodes and threads, each carrying a
-          citation — but only you can accept one.
+          citation, but only you can accept one.
         </p>
       )}
 

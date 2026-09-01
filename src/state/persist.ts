@@ -6,8 +6,8 @@ import { useReaderStore } from "./readerStore";
  * Markings survive a refresh, and nothing else does.
  *
  * `sessionStorage`, deliberately, not `localStorage`: the store is scoped to
- * the tab, so a reload — accidental, or the one the analyst does after enabling
- * a browser flag — keeps their marks, and closing the tab ends the session for
+ * the tab, so a reload. Accidental, or the one the analyst does after enabling
+ * a browser flag, keeps their marks, and closing the tab ends the session for
  * good. That is the same promise the project already makes ("no persistence
  * beyond a session"); losing ten minutes of reading to a stray Cmd-R was never
  * part of it.
@@ -15,14 +15,14 @@ import { useReaderStore } from "./readerStore";
  * Only marks. The canvas, the enquiry queue and the decision log still start
  * clean, because a half-restored investigation is worse than an honest empty
  * one: an audit trail that survived a reload with gaps in it is not an audit
- * trail. A mark is different — it is a note about a document, and the document
+ * trail. A mark is different. It is a note about a document, and the document
  * is still there.
  *
  * Every restored mark is re-checked against the corpus before it is trusted,
  * which is the same discipline scripts/check-offsets.ts applies at build time:
  * a span that no longer quotes the text it claims to quote is dropped rather
- * than shown. That is what makes an uploaded file's marks disappear correctly —
- * the upload does not survive the reload, so neither can a mark into it.
+ * than shown. That is what makes an uploaded file's marks disappear correctly.
+ * The upload does not survive the reload, so neither can a mark into it.
  */
 
 const KEY = "threadweaver:markings:v1";
@@ -55,7 +55,7 @@ function isMarking(v: unknown): v is Marking {
 }
 
 /**
- * Rehydrate. Call once, after the corpus has loaded and after seedCanvas — the
+ * Rehydrate. Call once, after the corpus has loaded and after seedCanvas, the
  * seed does not touch markings, but the corpus check below needs the documents.
  *
  * Returns how many marks came back, so the caller can say so in the log.

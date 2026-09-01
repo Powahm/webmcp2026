@@ -5,7 +5,7 @@ import type { Span } from "../types";
  *
  * Kept apart from search.ts, which reaches the loaded corpus, because these two
  * functions are pure and the offsets they produce are the thing every citation
- * in the product is made of — so they are checked directly, outside a browser,
+ * in the product is made of. So they are checked directly, outside a browser,
  * by scripts/check-offsets.ts.
  */
 
@@ -23,7 +23,7 @@ export function matchTerms(match: Record<string, string[]> | undefined): string[
 
 /**
  * Locate the matched terms in the document's exact text. The text here is the
- * text the evidence drawer renders — build-corpus.ts wrote both — so these
+ * text the evidence drawer renders (build-corpus.ts wrote both), so these
  * offsets are directly citable.
  */
 export function locate(text: string, terms: string[]): (Span & { text: string })[] {
@@ -38,14 +38,14 @@ export function locate(text: string, terms: string[]): (Span & { text: string })
       if (at < 0) break;
       from = at + term.length;
 
-      // Whole words only — a match inside another word is noise in a citation.
+      // Whole words only, a match inside another word is noise in a citation.
       const before = at === 0 ? " " : text[at - 1];
       const after = at + term.length >= text.length ? " " : text[at + term.length];
       if (/[a-z0-9]/i.test(before) || /[a-z0-9]/i.test(after)) continue;
 
       // Widen to the whole line: a citation the analyst can read in context
       // beats four characters of a company number. Then pull the boundaries
-      // back off the indentation — filings are laid out in columns, so a
+      // back off the indentation, filings are laid out in columns, so a
       // line-wide span otherwise underlines a stretch of empty margin, and the
       // span's own text would no longer be what its offsets slice.
       let start = text.lastIndexOf("\n", at) + 1;

@@ -1,10 +1,10 @@
-# Data — real records, no planted links
+# Data, real records, no planted links
 
 ## The rule that governs this whole file
 
 **Nothing is invented.** Every entity and every relationship comes from UK public records. The
-"hidden" links the agent finds are hidden only in the sense that they were not yet on the canvas —
-they were always in the filings.
+"hidden" links the agent finds are hidden only in the sense that they were not yet on the canvas.
+They were always in the filings.
 
 This exists because the impact criterion scores whether the solution addresses the problem *based on
 what's demonstrated*. A planted fraud ring only demonstrates that the app finds links we put there,
@@ -20,11 +20,11 @@ human draws the conclusion. Keep this true in the UI copy and in the video narra
 | Product | Contents | Format | Frequency | Cost |
 |---|---|---|---|---|
 | **Free Company Data Product** | All live UK companies: number, name, registered office address, status, SIC codes | CSV | Monthly | Free |
-| **PSC snapshot** | Persons with Significant Control — who ultimately controls each company, nature of control | JSON | Daily | Free |
+| **PSC snapshot** | Persons with Significant Control. Who ultimately controls each company, nature of control | JSON | Daily | Free |
 | **REST API** (`api.company-information.service.gov.uk`) | Officers, filing history, per company | JSON | Live | Free with an API key |
-| Accounts Data Product | Electronically filed accounts since 2008 | XML / iXBRL | Daily–yearly | Free |
+| Accounts Data Product | Electronically filed accounts since 2008 | XML / iXBRL | Daily-yearly | Free |
 
-Officers are **not** available as a free bulk download — bulk officer data is a restricted product
+Officers are **not** available as a free bulk download. Bulk officer data is a restricted product
 you have to request. That is fine: we only need officers for the ~300 companies we select, which is
 comfortably inside the API's rate limit (600 requests per 5 minutes). Register for a free API key at
 the Companies House developer portal on Saturday, before you need it.
@@ -36,7 +36,7 @@ on Sunday.
 
 ### `scripts/fetch-companies.ts`
 
-1. Stream the Company Data Product CSV — do **not** load it into memory, it is millions of rows.
+1. Stream the Company Data Product CSV. Do **not** load it into memory, it is millions of rows.
 2. Select a seed set. The good selection strategies, in order of demo quality:
    - **Shared registered address.** Group by normalised address, keep addresses hosting an unusual
      number of companies. Mass-registration addresses are a well-documented, entirely public
@@ -44,7 +44,7 @@ on Sunday.
    - **Shared PSC across nominally unrelated companies**, joined from the PSC snapshot.
    - A single SIC code in one postcode, as a fallback if the above is too noisy.
 3. Expand one hop: every company sharing an address or a PSC with the seed set.
-4. Cap at **~300 companies**. More is worse — a judge who can follow the chain is worth more than
+4. Cap at **~300 companies**. More is worse. A judge who can follow the chain is worth more than
    a big number, and the demo stays fast.
 5. For each selected company, pull officers and filing history from the REST API. Cache to `raw/`
    so you never re-fetch; the API is rate-limited and you will re-run this.
@@ -57,10 +57,10 @@ destroy your best links.
 
 Emits four files into `public/corpus/`:
 
-- **`entities.json`** — companies, people, addresses. Stable ids: `company:09876543`,
+- **`entities.json`**, companies, people, addresses. Stable ids: `company:09876543`,
   `person:<slug>-<birth-yyyy-mm>`, `address:<normalised-hash>`. Include a `sources` array on every
   entity pointing at the documents it came from.
-- **`documents.json`** — each filing rendered as **readable plain text with stable character
+- **`documents.json`**, each filing rendered as **readable plain text with stable character
   offsets**. This is the piece people get wrong: the evidence drawer highlights `span.start` to
   `span.end`, so the text you index must be byte-for-byte the text you render. Generate once, never
   reformat at display time.
@@ -74,15 +74,15 @@ Emits four files into `public/corpus/`:
      the video are a person reading one of these, so at least the demo filings must be pleasant.
   2. **Length matters both ways.** Under ~600 characters there is nothing to read and marking feels
      pointless; over ~6000 the analyst scrolls instead of reading and the video drags. Aim for
-     1–3k characters per filing and log the distribution when you build, so you can see the tail.
-- **`search-index.json`** — a prebuilt MiniSearch index. Build it offline; do not index 300
+     1-3k characters per filing and log the distribution when you build, so you can see the tail.
+- **`search-index.json`**, a prebuilt MiniSearch index. Build it offline; do not index 300
   documents in the browser at boot.
-- **`seed.json`** — the ~12 nodes the canvas opens with, **and the 5–8 filings the reader queue
+- **`seed.json`**, the ~12 nodes the canvas opens with, **and the 5-8 filings the reader queue
   opens with**. Deliberately sparse and deliberately *incomplete*: the interesting entities must be
   reachable but not present.
 
   Pick the opening filing deliberately. It has to contain something a human would genuinely stop
-  and mark — a correspondence address, a signatory, a date — whose consequences are *not* already on
+  and mark (a correspondence address, a signatory, a date) whose consequences are *not* already on
   the canvas. If the first document the analyst reads has nothing worth marking in it, the whole
   demo starts flat and no amount of agent cleverness recovers it. Note the chosen filing and the
   intended first mark alongside the verified chain.
@@ -95,14 +95,14 @@ put a person's full record on screen in the video. Names and roles are enough to
 
 Run this Sunday. It searches the built corpus for a chain that satisfies all four:
 
-1. **Exactly 3–4 hops.** Two is obvious, five is unfollowable in a 3-minute video.
+1. **Exactly 3-4 hops.** Two is obvious, five is unfollowable in a 3-minute video.
 2. **Not visible from the seed set.** At least two intermediate nodes must be absent from
    `seed.json`.
-3. **Every hop independently citable** — a specific filing with a specific span.
+3. **Every hop independently citable**, a specific filing with a specific span.
 4. **A shape a human can narrate in one sentence.** "These two companies look unrelated, but the
    director of one is the PSC of a third company registered at the same address as the second."
 5. **Hop one must be findable by reading.** The chain has to start from something visible in a
-   filing the analyst can open on the first screen — an address or a name they can highlight
+   filing the analyst can open on the first screen. An address or a name they can highlight
    themselves. This criterion is new and it is the one that makes the demo work: the human finds
    the thread, the agent follows it. A chain whose first hop is only discoverable by full-text
    search is a chain that forces the agent to open the investigation, which is the story we are
@@ -110,7 +110,7 @@ Run this Sunday. It searches the built corpus for a chain that satisfies all fou
 
 Have it print the top ten candidates with their citations. Pick one, verify every hop by hand on the
 Companies House website, and write the verified chain into a comment at the top of the file. **Do
-not skip the manual verification** — the entire impact argument rests on it holding up if a judge
+not skip the manual verification**. The entire impact argument rests on it holding up if a judge
 looks it up during judging.
 
 ## Graph schema
@@ -122,11 +122,11 @@ looks it up during judging.
 
 `shares_address_with` is the one derived edge and it is the one that makes the demo work. Compute it
 in `build-corpus.ts` from normalised addresses, and mark it `derived: true` so the evidence drawer
-can be honest about it — it cites *two* filings, not one, and the UI should say so.
+can be honest about it. It cites *two* filings, not one, and the UI should say so.
 
 ## Sizes and timing
 
-The Company Data Product is a large monthly ZIP. **Start the download on Saturday night** — it is
+The Company Data Product is a large monthly ZIP. **Start the download on Saturday night**, it is
 the only step with a wall-clock cost you cannot compress, and discovering that on Sunday afternoon
 would cost you the day.
 

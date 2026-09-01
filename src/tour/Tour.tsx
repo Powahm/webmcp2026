@@ -6,7 +6,7 @@ import { useTourStore } from "./tourStore";
  * The spotlight.
  *
  * One scrim element with a very large box-shadow punches a hole around the
- * target's bounding box — cheaper and far more robust than four positioned
+ * target's bounding box, cheaper and far more robust than four positioned
  * rectangles, and it cannot leave a seam when the target straddles a pixel.
  *
  * The card is placed on the side the step asks for, then pushed back inside the
@@ -43,7 +43,7 @@ export default function Tour({ api }: { api: TourApi }) {
   const current = TOUR_STEPS[step];
   const last = step === TOUR_STEPS.length - 1;
 
-  // Put the app into the state this step talks about, before measuring — the
+  // Put the app into the state this step talks about, before measuring, the
   // target may not exist, or may be the wrong size, until the tab has switched.
   useEffect(() => {
     if (!open || !current) return;

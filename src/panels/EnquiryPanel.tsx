@@ -9,12 +9,12 @@ import type { Enquiry } from "../types";
 import type { EvidenceTarget } from "./EvidenceDrawer";
 
 /**
- * Lines of enquiry — MIRSAP's Actions.
+ * Lines of enquiry, MIRSAP's Actions.
  *
  * The analyst raises them in their own words; the agent lists and results them;
  * **only the analyst files one**, and there is no tool that does. This panel is
- * the clearest answer the product has to "is the AI just doing everything?" —
- * the agent is working a queue a person wrote.
+ * the clearest answer the product has to "is the AI just doing everything?".
+ * The agent is working a queue a person wrote.
  *
  * An enquiry resulted `eliminated` is displayed as a result, not a failure.
  * Clearing a line of enquiry is most of real investigative work.
@@ -58,7 +58,7 @@ export default function EnquiryPanel({
 
       {all.length === 0 && (
         <p className="empty">
-          Nothing raised. You set the agenda — mark something in a filing and ask
+          Nothing raised. You set the agenda. Mark something in a filing and ask
           what you want to know. The agent works this queue.
         </p>
       )}
@@ -86,7 +86,7 @@ export default function EnquiryPanel({
 const STATUS_COPY: Record<Enquiry["status"], string> = {
   open: "waiting for the agent",
   claimed: "the agent is on it",
-  resulted: "answered — your call",
+  resulted: "answered: your call now",
   filed: "filed",
 };
 
@@ -97,7 +97,7 @@ const STATUS_COPY: Record<Enquiry["status"], string> = {
  * be theatre. What the page does know is real and nearly as reassuring: the
  * agent has claimed this question, and it is calling tools right now. So a
  * claimed enquiry shows a live pulse and a running count of the calls made
- * since it was claimed — which is visible progress, sourced from something
+ * since it was claimed, which is visible progress, sourced from something
  * that actually happened.
  */
 function Working({ since }: { since: number }) {
@@ -109,9 +109,9 @@ function Working({ since }: { since: number }) {
       <i className="pulse" aria-hidden />
       <span role="status">
         {inFlight > 0
-          ? `the agent is searching — ${calls} call${calls === 1 ? "" : "s"} so far`
+          ? `the agent is searching: ${calls} call${calls === 1 ? "" : "s"} so far`
           : calls > 0
-            ? `the agent has it — ${calls} call${calls === 1 ? "" : "s"} so far, waiting for its report`
+            ? `the agent has it: ${calls} call${calls === 1 ? "" : "s"} so far, waiting for its report`
             : "the agent has taken this and has not called anything yet"}
       </span>
     </p>
@@ -141,7 +141,7 @@ function Row({
 
       {from && (
         <p className="enquiry-from">
-          from your <b>{from.type}</b> mark — “{from.text.slice(0, 70)}”
+          from your <b>{from.type}</b> mark, “{from.text.slice(0, 70)}”
         </p>
       )}
 
@@ -168,7 +168,7 @@ function Row({
 
           {e.result.outcome === "eliminated" && (
             <p className="eliminated-note">
-              Nothing found. Clearing a line of enquiry is a result — it is
+              Nothing found. Clearing a line of enquiry is a result. It is
               recorded in the decision log either way.
             </p>
           )}

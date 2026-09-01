@@ -7,7 +7,7 @@
  *  1. `document.modelContext` is the spec location and what OpenAI's browser
  *     reads. Chrome's origin trial still exposes `navigator.modelContext`.
  *     We register on whichever exists, preferring the spec location.
- *  2. `inputSchema` is JSON Schema — see src/webmcp/schemas.ts. Every schema
+ *  2. `inputSchema` is JSON Schema, see src/webmcp/schemas.ts. Every schema
  *     sets `additionalProperties: false`; narrow inputs are the documented
  *     recommendation and broad god-tools are the documented anti-pattern.
  *  3. Tools registered inside an iframe are never discovered. We refuse to
@@ -50,7 +50,7 @@ export async function registerWebMcpTools(
 
   if (!isTopLevelDocument()) {
     console.warn(
-      "[threadweaver] running inside an iframe — WebMCP tools are not discovered " +
+      "[threadweaver] running inside an iframe. WebMCP tools are not discovered " +
         "in frames, so registration was skipped. Open the page top-level."
     );
     setWebMcpStatus({ kind: "framed" });

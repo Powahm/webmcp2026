@@ -2,7 +2,7 @@
  * The introduction sequence, as data.
  *
  * Targets are `data-tour` attributes rather than CSS classes, so restyling
- * cannot silently break the tour by renaming a class — a tour that points at
+ * cannot silently break the tour by renaming a class. A tour that points at
  * nothing is worse than no tour, and the failure is invisible until someone
  * runs it.
  *
@@ -35,7 +35,7 @@ export const TOUR_STEPS: TourStep[] = [
   {
     title: "Threadweaver",
     body:
-      "A canvas for investigative work, built on real UK Companies House records. You and an agent build the same graph — you read and decide, it searches and suggests.",
+      "A canvas for investigative work, built on real UK Companies House records. You and an agent build the same graph. You read and decide, it searches and suggests.",
     side: "center",
     before: (a) => {
       a.setWorkspace("read");
@@ -45,14 +45,14 @@ export const TOUR_STEPS: TourStep[] = [
   {
     title: "Two rules, before anything else",
     body:
-      "The agent can propose, never commit — only you put something on the canvas. And every claim it makes carries a citation you can open and read.",
+      "The agent can propose, never commit. Only you put something on the canvas. And every claim it makes carries a citation you can open and read.",
     side: "center",
   },
   {
     target: "workspace",
     title: "Two workspaces",
     body:
-      "Read is where you work. Canvas is the shared picture. Press W to switch — both stay live, so you never lose your place.",
+      "Read is where you work. Canvas is the shared picture. Press W to switch. Both stay live, so you never lose your place.",
     side: "bottom",
     before: (a) => a.setWorkspace("read"),
   },
@@ -60,7 +60,7 @@ export const TOUR_STEPS: TourStep[] = [
     target: "rail-left",
     title: "The corpus",
     body:
-      "1,158 real filings covering 2,717 entities. Your canvas starts with twelve of them — the gap between the two is the investigation.",
+      "1,158 real filings covering 2,717 entities. Your canvas starts with twelve of them. The gap between the two is the investigation.",
     side: "right",
   },
   {
@@ -74,12 +74,12 @@ export const TOUR_STEPS: TourStep[] = [
     target: "markbar",
     title: "Mark what matters",
     body:
-      "Select a passage and press 1–6 to type it. A mark is not a highlighter — it is an instruction: the agent reads what you marked and starts there.",
+      "Select a passage and press 1-6 to type it. A mark is not a highlighter. It is an instruction: the agent reads what you marked and starts there.",
     side: "top",
   },
   {
     target: "rail-tabs",
-    title: "Details — what you have selected",
+    title: "Details: what you have selected",
     body:
       "Click a node and it appears here. Select a second and you can draw the connection yourself, with no agent involved.",
     side: "left",
@@ -87,7 +87,7 @@ export const TOUR_STEPS: TourStep[] = [
   },
   {
     target: "rail-tabs",
-    title: "Proposals — suggested, not accepted",
+    title: "Proposals: suggested, not accepted",
     body:
       "What the agent thinks belongs on the canvas, drawn dashed. Nothing here is real until you accept it, and there is no tool that lets the agent accept its own.",
     side: "left",
@@ -95,15 +95,15 @@ export const TOUR_STEPS: TourStep[] = [
   },
   {
     target: "rail-tabs",
-    title: "Enquiries — your questions",
+    title: "Enquiries: your questions",
     body:
-      "Ask in your own words. The agent takes one, works it, and reports back — including 'found nothing', which is a real result. Only you close an enquiry.",
+      "Ask in your own words. The agent takes one, works it, and reports back. Including 'found nothing', which is a real result. Only you close an enquiry.",
     side: "left",
     before: (a) => a.setTab("enquiries"),
   },
   {
     target: "rail-tabs",
-    title: "Evidence — check, don't trust",
+    title: "Evidence: check, don't trust",
     body:
       "Click any citation and the filing opens here with the exact words highlighted. This is the step that separates checking from believing.",
     side: "left",
@@ -111,7 +111,7 @@ export const TOUR_STEPS: TourStep[] = [
   },
   {
     target: "rail-tabs",
-    title: "Decisions — the audit trail",
+    title: "Decisions: the audit trail",
     body:
       "Every action by you and by the agent, in order, exportable as plain text. It records who decided what, and on what evidence.",
     side: "left",
@@ -134,7 +134,7 @@ export const TOUR_STEPS: TourStep[] = [
   {
     title: "Read · Mark · Ask · Verify · Accept",
     body:
-      "That is the whole loop. Start by reading the filing that is already open — and press ? in the top bar any time you want this again.",
+      "That is the whole loop. Start by reading the filing that is already open, and press ? in the top bar any time you want this again.",
     side: "center",
     before: (a) => {
       a.setWorkspace("read");

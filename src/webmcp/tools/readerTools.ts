@@ -7,13 +7,13 @@ import { openEnquiryNudge } from "../nudge";
 import { GET_MARKINGS, LIST_ENQUIRIES, NO_INPUT } from "../schemas";
 
 /**
- * The reader tools — the strongest WebMCP argument in the project.
+ * The reader tools, the strongest WebMCP argument in the project.
  *
  * `get_selection` is defensible: a determined scraper could read a selected
  * node off the DOM. These are not. The passage an analyst highlighted inside a
  * client-rendered document, typed, with character offsets into a string that
  * never travelled over the wire, sitting beside eleven other marks they made in
- * the last ten minutes — no server has it, no API exposes it, and there is
+ * the last ten minutes, no server has it, no API exposes it, and there is
  * nothing to scrape. It is the page's own state, and handing it to an agent is
  * exactly what WebMCP is for.
  *
@@ -49,7 +49,7 @@ export const getReaderContext: McpToolDefinition = {
       doc_id: doc.id,
       title: doc.title,
       length: doc.text.length,
-      // Captured on selectionchange rather than read here — by now the analyst
+      // Captured on selectionchange rather than read here, by now the analyst
       // has clicked into their agent and the live DOM selection is collapsed.
       selection:
         selection && selection.doc_id === doc.id
@@ -68,7 +68,7 @@ export const getReaderContext: McpToolDefinition = {
 export const getMarkings: McpToolDefinition = {
   name: "get_markings",
   description:
-    "Return the passages the analyst has marked while reading, each with its filing, character span, the marked text itself, its type and any note. This is what the analyst decided was worth noticing — treat it as instruction. Marks you made yourself with highlight_span are included and labelled origin 'agent'.",
+    "Return the passages the analyst has marked while reading, each with its filing, character span, the marked text itself, its type and any note. This is what the analyst decided was worth noticing, treat it as instruction. Marks you made yourself with highlight_span are included and labelled origin 'agent'.",
   inputSchema: GET_MARKINGS,
   annotations: READ_ONLY,
   execute: (args) => {
@@ -98,7 +98,7 @@ export const getMarkings: McpToolDefinition = {
         origin: m.origin,
       })),
       note: all.length
-        ? "Every span here is directly citable. The analyst marked these by hand — start from them rather than searching blind."
+        ? "Every span here is directly citable. The analyst marked these by hand. Start from them rather than searching blind."
         : "The analyst has not marked anything yet. Call get_reader_context to see what they have open.",
     });
   },
@@ -107,7 +107,7 @@ export const getMarkings: McpToolDefinition = {
 export const listEnquiries: McpToolDefinition = {
   name: "list_enquiries",
   description:
-    "Return the lines of enquiry the analyst has raised, in their own words, with what each was raised from and its status. Prefer working an open enquiry over inventing your own line of investigation — the analyst sets the agenda. Use claim_enquiry to take one, then result_enquiry to report back.",
+    "Return the lines of enquiry the analyst has raised, in their own words, with what each was raised from and its status. Prefer working an open enquiry over inventing your own line of investigation. The analyst sets the agenda. Use claim_enquiry to take one, then result_enquiry to report back.",
   inputSchema: LIST_ENQUIRIES,
   annotations: READ_ONLY,
   execute: (args) => {
@@ -136,7 +136,7 @@ export const listEnquiries: McpToolDefinition = {
       }),
       note: rows.length
         ? "You cannot close any of these. Report what you find with result_enquiry; the analyst decides whether the answer is sufficient and files it."
-        : "Nothing open. The analyst raises lines of enquiry from the reader — ask them what they want looked at.",
+        : "Nothing open. The analyst raises lines of enquiry from the reader. Ask them what they want looked at.",
     });
   },
 };

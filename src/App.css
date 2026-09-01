@@ -1,4 +1,4 @@
-/* Threadweaver — application styles.
+/* Threadweaver, application styles.
 
    The layout is two workspaces with a shared rail. Read is a document; Canvas
    is a link chart. The visual system has one job beyond looking calm: keeping
@@ -613,7 +613,7 @@ input::placeholder {
   padding-bottom: 1px;
 }
 
-/* Both actors marked the same words — the strongest signal in the reader. */
+/* Both actors marked the same words. The strongest signal in the reader. */
 .mk-both {
   border-bottom: 2px solid var(--agent);
   padding-bottom: 1px;
@@ -678,7 +678,7 @@ input::placeholder {
 }
 
 /* In the canvas legend the swatch *is* the glyph, so it carries no colour of
-   its own — the whole point is that type is no longer a colour. */
+   its own, the whole point is that type is no longer a colour. */
 .swatch.glyph {
   width: auto;
   height: auto;
@@ -999,7 +999,7 @@ input::placeholder {
   overflow-y: auto;
 }
 
-/* The analyst's own material. Small and quiet — it is an affordance, not a
+/* The analyst's own material. Small and quiet. It is an affordance, not a
    feature to shout about, and the queue below it is the real content. */
 .dropzone {
   display: flex;
@@ -1070,7 +1070,7 @@ input::placeholder {
   white-space: nowrap;
 }
 
-/* The analyst's own material reads brighter than the ingested filings — but
+/* The analyst's own material reads brighter than the ingested filings, but
    NOT in teal. Teal is the agent's colour and appears nowhere else, which is
    only true if it stays true here. */
 .queue-group.yours .queue-company {
@@ -1150,7 +1150,7 @@ input::placeholder {
   gap: 5px;
 }
 
-/* Two nodes selected: the canvas answers "how are these related?" — including
+/* Two nodes selected: the canvas answers "how are these related?", including
    when the answer is "they are not". An empty result is a first-class outcome
    here, not an error state, so it is styled as information. See docs/METHOD.md. */
 .path-readout {
@@ -1590,7 +1590,7 @@ input::placeholder {
 }
 
 /* Relation and name are two separate spans; without a gap they read as one
-   word — "← directorDavid Robert CASTELLAN". */
+   word, "← directorDavid Robert CASTELLAN". */
 .edge-jump,
 .expand-list button {
   display: flex;
@@ -1854,7 +1854,7 @@ input::placeholder {
 }
 
 /* Last stop before the filing has to wrap. Below this the layout still works,
-   but a 78-column record no longer fits three columns of chrome — this is a
+   but a 78-column record no longer fits three columns of chrome, this is a
    desktop tool and the README says so. */
 @media (max-width: 1100px) {
   :root {
@@ -1907,8 +1907,8 @@ input::placeholder {
   font-size: 11px;
 }
 
-/* The arrow is decoration between steps, so it is drawn rather than typed —
-   a screen reader reads five list items, not five arrows. */
+/* The arrow is decoration between steps, so it is drawn rather than typed.
+   A screen reader reads five list items, not five arrows. */
 .howto li + li::before {
   content: "→";
   color: var(--text-faint);

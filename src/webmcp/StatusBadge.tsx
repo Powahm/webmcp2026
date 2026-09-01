@@ -6,7 +6,7 @@ import { ALL_TOOLS } from "./tools";
  *
  * Three things can be true, and conflating any two of them is what confused us:
  *
- *   off        no host on the page at all — an ordinary browser
+ *   off        no host on the page at all, an ordinary browser
  *   registered a host took the tools, but nothing has ever called one
  *   connected  an agent has actually used a tool this session
  *
@@ -60,7 +60,7 @@ export default function StatusBadge() {
         title={
           `All ${status.count} tools are registered on ${status.where}, but nothing has called ` +
           "one yet.\n\nA browser can expose the WebMCP host to every page whether or not an " +
-          "agent is attached — Chrome does this when the testing flag is on — so this is what " +
+          "agent is attached (Chrome does this when the testing flag is on), so this is what " +
           "you see in an ordinary tab with the flag enabled. It flips to “agent connected” " +
           `the moment something actually uses a tool.\n\n${toolList}`
         }
@@ -81,7 +81,7 @@ export default function StatusBadge() {
         role="status"
         title={
           "This page is running inside an iframe, and tools registered in a frame are never " +
-          "discovered — however correctly they are registered. Open Threadweaver as a top-level page."
+          "discovered, however correctly they are registered. Open Threadweaver as a top-level page."
         }
         aria-label="WebMCP is off because this page is inside an iframe, where tools are never discovered."
       >
@@ -97,7 +97,7 @@ export default function StatusBadge() {
         role="status"
         title={
           "No WebMCP host on this page, so no agent can see the tools.\n\n" +
-          "Nothing is broken — every part of Threadweaver works without an agent. " +
+          "Nothing is broken, every part of Threadweaver works without an agent. " +
           "To bring one in, open this page in ChatGPT's browser, or in Chrome 149+ with " +
           "chrome://flags/#enable-webmcp-testing enabled."
         }

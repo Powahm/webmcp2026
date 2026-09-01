@@ -5,8 +5,8 @@ import { create } from "zustand";
  *
  * The top bar used to claim "19 WebMCP tools" unconditionally, which is a lie
  * in an ordinary browser: the tools are defined, but nothing has discovered
- * them and no agent can call one. Registration already knows the answer — it
- * feature-detects the host and bails out in three distinguishable ways — so it
+ * them and no agent can call one. Registration already knows the answer, it
+ * feature-detects the host and bails out in three distinguishable ways, so it
  * publishes the result here and the badge reports it honestly.
  *
  * "Off" is not an error state. Threadweaver is a complete tool without an
@@ -16,7 +16,7 @@ import { create } from "zustand";
 export type WebMcpState =
   | { kind: "detecting" }
   /**
-   * Registered with the browser — but nothing has called a tool yet.
+   * Registered with the browser, but nothing has called a tool yet.
    *
    * This is a distinct state on purpose, and it is the one that misled us.
    * Chrome with chrome://flags/#enable-webmcp-testing exposes
@@ -38,7 +38,7 @@ interface StatusStore {
   /**
    * Calls that have started and not yet returned.
    *
-   * The page cannot know that a model is thinking — there is no such signal in
+   * The page cannot know that a model is thinking. There is no such signal in
    * WebMCP, and claiming one would be theatre. What it does know is that the
    * agent is *in the middle of a call it made*, which is the honest version of
    * the same reassurance, and it is enough to stop the interface looking dead.

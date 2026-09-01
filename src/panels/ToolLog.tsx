@@ -4,7 +4,7 @@ import { useToolLogStore } from "../state/toolLogStore";
 /**
  * Live WebMCP calls.
  *
- * Not a debug panel. It is the evidence a judge watches — every tool call, its
+ * Not a debug panel. It is the evidence a judge watches, every tool call, its
  * arguments, whether it was read-only, and how long it took. If the agent's
  * work is invisible, the WebMCP claim rests on the demo narration; here it
  * rests on the screen.

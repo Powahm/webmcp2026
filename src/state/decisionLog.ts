@@ -11,7 +11,7 @@ import type { DecisionEntry } from "../types";
  *
  * It is append-only, both actors write to it, and it exports as plain text. It
  * is cheap, and it is what turns a demo into something that could survive
- * disclosure — see docs/METHOD.md.
+ * disclosure, see docs/METHOD.md.
  *
  * This is distinct from the tool log. The tool log records *calls*; this
  * records *decisions*, including every one the analyst made with a mouse.
@@ -36,10 +36,10 @@ export const decisionLog = () => useDecisionLog.getState();
 const stamp = (at: number): string =>
   new Date(at).toISOString().replace("T", " ").slice(0, 19);
 
-/** Plain text, oldest first — a log reads forwards. */
+/** Plain text, oldest first, a log reads forwards. */
 export function exportDecisionLog(entries: DecisionEntry[]): string {
   const lines = [
-    "THREADWEAVER — DECISION LOG",
+    "THREADWEAVER, DECISION LOG",
     `Exported ${stamp(Date.now())} UTC`,
     "",
     "Every entry below records who did what, and when. Structural facts about",

@@ -6,7 +6,7 @@ import type { Annotation, Citation, Edge, Entity } from "../types";
  * selection and what the camera can currently see.
  *
  * Nothing outside src/state/actions.ts calls setState on this store. The
- * setters below are named `_`-prefixed as a reminder — actions.ts is the only
+ * setters below are named `_`-prefixed as a reminder. Actions.ts is the only
  * legitimate caller, for both the human's clicks and the agent's tool calls.
  */
 
@@ -62,5 +62,5 @@ export const useGraphStore = create<GraphState>((set) => ({
   _bumpReheat: () => set((s) => ({ reheat: s.reheat + 1 })),
 }));
 
-/** Read the store from outside React — the tool layer runs in no component. */
+/** Read the store from outside React. The tool layer runs in no component. */
 export const graph = () => useGraphStore.getState();

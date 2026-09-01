@@ -2,8 +2,8 @@
  * Mapping a DOM selection back to offsets in the source string.
  *
  * The whole evidence model rests on one invariant: the text indexed offline is
- * byte-for-byte the text rendered here, and every span — the corpus's citations
- * and the analyst's own marks alike — is an index into that exact string.
+ * byte-for-byte the text rendered here, and every span, the corpus's citations
+ * and the analyst's own marks alike. Is an index into that exact string.
  *
  * The naive approach is to read `Range.startOffset` and hope. That breaks the
  * moment a mark exists, because rendering a highlight splits the text into

@@ -15,24 +15,24 @@
 
 ## Canvas state at boot
 
-- 0. **ENVIROPASS CONSULTING LTD** — on canvas (`company:11624512`)
-- 1. **Matthew Colley-banks** — hidden, the agent must find it (`person:matthew-colley-banks-1984-02`)
-- 2. **ENVIROPASS LTD** — hidden, the agent must find it (`company:15164603`)
-- 3. **Peter Valaitis** — hidden, the agent must find it (`person:peter-valaitis-1950-11`)
-- 4. **RENEWABLE DIESEL FUELS LTD** — hidden, the agent must find it (`company:15481912`)
+- 0. **ENVIROPASS CONSULTING LTD**, on canvas (`company:11624512`)
+- 1. **Matthew Colley-banks**, hidden, the agent must find it (`person:matthew-colley-banks-1984-02`)
+- 2. **ENVIROPASS LTD**, hidden, the agent must find it (`company:15164603`)
+- 3. **Peter Valaitis**, hidden, the agent must find it (`person:peter-valaitis-1950-11`)
+- 4. **RENEWABLE DIESEL FUELS LTD**, hidden, the agent must find it (`company:15481912`)
 
 Endpoints are seeded so the analyst can drag them together and ask.
 Intermediates are deliberately absent from `public/corpus/seed.json`.
 
 ## The opening shot
 
-The reader opens on **`doc:psc:11624512`** — the filing that
+The reader opens on **`doc:psc:11624512`**, the filing that
 carries hop one. Rehearse this exact move:
 
 1. Read it, then select **"Matthew Colley-banks"**
-   (characters 540–560).
+   (characters 540-560).
 2. Press `1` to mark it `person`.
-3. Raise a line of enquiry in your own words — *"what else does this person control?"*
+3. Raise a line of enquiry in your own words. *"what else does this person control?"*
 4. Hand it to the agent.
 
-No AI is on screen for any of that. It is the whole differentiator — do not rush it.
+No AI is on screen for any of that. It is the whole differentiator, do not rush it.

@@ -9,7 +9,7 @@
  * cannot recur.
  *
  * Naive O(n²) repulsion. The canvas holds a working set of tens of nodes, not
- * the corpus — forty nodes is 1,600 pairs a frame, which is nothing. If the
+ * the corpus, forty nodes is 1,600 pairs a frame, which is nothing. If the
  * working set ever reaches the hundreds, that is a product problem before it is
  * a performance one.
  *
@@ -27,7 +27,7 @@ export interface SimNode {
   /** Set while the analyst is dragging: the simulation stops moving it. */
   fx?: number;
   fy?: number;
-  /** More connections, more mass — hubs sit still and leaves swing. */
+  /** More connections, more mass, hubs sit still and leaves swing. */
   weight: number;
   /** Which connected component this node belongs to. Assigned in setGraph and
    *  used to keep separate clusters apart without squashing either of them. */
@@ -44,7 +44,7 @@ export interface SimLink {
 export const SIM = {
   /** Node-node repulsion. Negative is apart. */
   charge: -1500,
-  /** Beyond this, nodes stop pushing at all — keeps distant clusters from
+  /** Beyond this, nodes stop pushing at all, keeps distant clusters from
    *  inflating the whole layout. */
   chargeDistanceMax: 620,
 
@@ -54,15 +54,15 @@ export const SIM = {
    * A centring force is proportional to a node's distance from the origin, so
    * it fights the springs and the repulsion everywhere at once: two clusters
    * that should sit apart get dragged into each other, and a wide chart gets
-   * compressed into a ball. The springs already hold a component together —
-   * that is what a spring is for — so the only two jobs left are keeping
+   * compressed into a ball. The springs already hold a component together.
+   * That is what a spring is for. So the only two jobs left are keeping
    * separate components off each other, and keeping the whole picture from
    * wandering off screen. Those are the two constants below, and neither one
    * distorts a cluster's shape.
    */
 
   /** Repulsion between the centroids of separate components, applied to every
-   *  node in each — so a cluster is translated away from its neighbour rather
+   *  node in each, so a cluster is translated away from its neighbour rather
    *  than stretched towards it. */
   clusterSeparation: 120_000,
   /** Below this the separation force stops growing, so two components that
@@ -73,7 +73,7 @@ export const SIM = {
    *
    * Without a ceiling the inverse-square decays but never reaches zero, so
    * every pair of clusters keeps accelerating apart for as long as the
-   * simulation is warm — and dragging holds it warm, because pointermove
+   * simulation is warm, and dragging holds it warm, because pointermove
    * reheats on every event. Worse, clusters spread *symmetrically*, so the mean
    * of the centroids barely moves and driftCorrection never sees a problem to
    * correct. That combination is the drift off screen. A component that is
@@ -90,7 +90,7 @@ export const SIM = {
    * the analyst added one more cluster than the box was sized for.
    */
   clusterSpreadRadius: 200,
-  /** Strength of that easing. Deliberately weak — it should read as the picture
+  /** Strength of that easing. Deliberately weak. It should read as the picture
    *  settling back into view, never as a cluster being yanked. */
   clusterContainment: 0.08,
   /**
@@ -155,7 +155,7 @@ export class Simulation {
    *
    * New nodes are seeded near an existing neighbour rather than at the origin.
    * A node dropped at (0,0) flies across the screen on its first few frames,
-   * which reads as a glitch — and, in the 3D version, a focus computed on a
+   * which reads as a glitch. And, in the 3D version, a focus computed on a
    * node still sitting at the origin put the camera inside the world and
    * blacked the screen out. Placing it next to something it is attached to
    * avoids the whole family of problems.
@@ -421,7 +421,7 @@ export class Simulation {
     }
 
     // Containment. A component whose centroid has wandered past the spread
-    // budget is eased back towards the middle of the layout — again as one
+    // budget is eased back towards the middle of the layout, again as one
     // shared vector per component, so it translates rather than deforms. This
     // is the backstop: separation can no longer push a cluster to infinity, and
     // anything that gets far out for another reason drifts back on its own.

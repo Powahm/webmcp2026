@@ -23,7 +23,7 @@ const DRAWABLE: Relation[] = [
 ];
 
 /**
- * The selected entity, its records and its edges — and, when two nodes are
+ * The selected entity, its records and its edges. And, when two nodes are
  * selected, the manual "connect these" control.
  *
  * Everything here is flat 2D. Nothing the analyst has to read carefully is ever
@@ -188,7 +188,7 @@ export default function Inspector({
                 <span className="other">{otherNode?.label ?? other}</span>
               </button>
               {edge.analystAsserted ? (
-                <span className="asserted" title="No filing cites this — you drew it">
+                <span className="asserted" title="No filing cites this, you drew it">
                   your assertion
                 </span>
               ) : (
@@ -198,7 +198,7 @@ export default function Inspector({
                     onClick={() =>
                       onShowEvidence({
                         citation: edge.citations[0],
-                        claim: `${node.label} — ${RELATION_LABEL[edge.relation]} — ${
+                        claim: `${node.label} · ${RELATION_LABEL[edge.relation]} · ${
                           otherNode?.label ?? other
                         }`,
                       })

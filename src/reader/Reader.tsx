@@ -14,7 +14,7 @@ import { dominant, hasAgentMark, segment } from "./markings";
 import { readSelection } from "./selection";
 
 /**
- * The reader — the analyst's work surface.
+ * The reader, the analyst's work surface.
  *
  * This is the human doing the job, and it happens before any agent is involved:
  * open a filing, read it, drag across a passage, mark it. Take the agent out of
@@ -35,7 +35,7 @@ import { readSelection } from "./selection";
 /**
  * Below this the marks column and a 78-column filing stop fitting side by side:
  * 236px of queue + 372px of rail + 268px of margin + the text itself. Measured,
- * not guessed — see the media queries in App.css that step the rails down.
+ * not guessed, see the media queries in App.css that step the rails down.
  */
 const MARGIN_FITS_ABOVE = "(max-width: 1520px)";
 
@@ -74,7 +74,7 @@ export default function Reader() {
   );
 
   // --- Capture the selection ------------------------------------------------
-  // On `selectionchange`, into the store — never read at tool-call time. By the
+  // On `selectionchange`, into the store. Never read at tool-call time. By the
   // time an agent invokes a tool the analyst has clicked into another surface
   // and document.getSelection() is collapsed, so reading it there would return
   // null exactly when it matters. See docs/TOOLS.md, get_reader_context.
@@ -166,7 +166,7 @@ export default function Reader() {
 
   /**
    * The margin costs 268px, and a filing is 78 columns of monospace that must
-   * not wrap — the claim is that this is the record rendered verbatim, and a
+   * not wrap, the claim is that this is the record rendered verbatim, and a
    * correspondence address broken across two lines reads as a bug. So below the
    * width where both fit, the margin folds away and the analyst opens it when
    * they want it. Above it, nothing changes.
@@ -246,7 +246,7 @@ export default function Reader() {
                   className={classes}
                   title={
                     seg.marks
-                      .map((m) => `${m.origin === "agent" ? "agent" : "you"}: ${m.type}${m.note ? ` — ${m.note}` : ""}`)
+                      .map((m) => `${m.origin === "agent" ? "agent" : "you"}: ${m.type}${m.note ? `, ${m.note}` : ""}`)
                       .join("\n")
                   }
                 >
@@ -358,7 +358,7 @@ function MarginList({
 
       {marks.length === 0 && (
         <p className="empty">
-          Nothing marked in this filing yet. Select a passage and press 1–6.
+          Nothing marked in this filing yet. Select a passage and press 1-6.
         </p>
       )}
 

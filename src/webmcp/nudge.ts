@@ -5,7 +5,7 @@ import { enquiries, openEnquiries } from "../state/enquiryStore";
  * first.
  *
  * The failure this fixes: the analyst raises a line of enquiry in the page and
- * the agent never learns it exists. Nothing pushes to the agent — it sees the
+ * the agent never learns it exists. Nothing pushes to the agent, it sees the
  * queue only if it calls `list_enquiries`, and no natural utterance ("find the
  * link between these two", "what does this filing say") routes it there. So
  * enquiries accumulated in the panel and nothing ever worked one.
@@ -29,7 +29,7 @@ export function openEnquiryNudge(): Record<string, unknown> {
     })),
     open_enquiries_note:
       `The analyst has ${open.length} open line(s) of enquiry, quoted above in their own ` +
-      `words${unclaimed ? `, ${unclaimed} of them unclaimed` : ""}. They set the agenda — work ` +
+      `words${unclaimed ? `, ${unclaimed} of them unclaimed` : ""}. They set the agenda, work ` +
       "one of these before inventing your own line of investigation. Call claim_enquiry with " +
       "its id so they can see you have it, then result_enquiry to report back. Reporting " +
       "'eliminated' with what you searched is a real result and is preferred to stretching " +

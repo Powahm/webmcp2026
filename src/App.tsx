@@ -30,7 +30,7 @@ import { Analytics } from "@vercel/analytics/react";
  * Two workspaces, one shared rail.
  *
  * READ is the analyst's work surface and the app opens on it, because the
- * human reads first — see docs/METHOD.md. CANVAS is the shared picture. Both
+ * human reads first, see docs/METHOD.md. CANVAS is the shared picture. Both
  * stay mounted: switching is a view change, so no scroll position, selection or
  * simulation state is ever lost.
  *
@@ -114,7 +114,7 @@ export default function App() {
 
   /**
    * The agent staging its first proposal is the moment the whole product turns
-   * on, and it used to happen behind an unselected tab. Pull focus once — only
+   * on, and it used to happen behind an unselected tab. Pull focus once, only
    * on the transition from none to some, and never over the top of the analyst
    * reading a citation in the Evidence panel.
    */
@@ -128,7 +128,7 @@ export default function App() {
   // Verification hook, inert unless asked for: exposes the registered tool
   // definitions on window so a test harness can stage a proposal exactly the
   // way a WebMCP host would call it, without needing a real host present.
-  // Only runs with ?debugSim in the URL — see GraphCanvas.tsx for the
+  // Only runs with ?debugSim in the URL. See GraphCanvas.tsx for the
   // matching Simulation exposure this pairs with.
   useEffect(() => {
     if (new URLSearchParams(window.location.search).has("debugSim")) {
@@ -163,7 +163,7 @@ export default function App() {
   }, [pendingCount]);
 
   // Was bound to Tab, which meant focus could never move anywhere in the
-  // app (WCAG 2.1.1) — every Tab press was eaten here before it reached
+  // app (WCAG 2.1.1), every Tab press was eaten here before it reached
   // anything focusable. W is unbound, unmodified, and matches the style of
   // F and Esc on the canvas.
   useEffect(() => {
@@ -210,7 +210,7 @@ export default function App() {
    * Rail order is a claim about what you touch most, and the old one was wrong.
    *
    * Details went first because it is the only panel that answers to what you
-   * click, and because it holds the connect form — the one control a person
+   * click, and because it holds the connect form. The one control a person
    * uses to draw their own edge. Burying that in fourth position meant nobody
    * found it without being told. Proposals still takes focus by itself the
    * moment one arrives (see the effect below), so nothing from the agent is
@@ -223,7 +223,7 @@ export default function App() {
     {
       id: "details",
       label: "Details",
-      hint: "What you have selected — and where you draw your own connection between two nodes.",
+      hint: "What you have selected. And where you draw your own connection between two nodes.",
     },
     {
       id: "proposals",
@@ -289,7 +289,7 @@ export default function App() {
           className="icon-btn help-btn"
           onClick={startTour}
           aria-label="Show the introduction again"
-          title="How Threadweaver works — replay the introduction"
+          title="How Threadweaver works. Replay the introduction"
         >
           ?
         </button>
@@ -312,7 +312,7 @@ export default function App() {
 
         {boot.fixture && (
           <span className="fixture-warning" title="public/corpus/ is missing">
-            DEV FIXTURE — not real records
+            DEV FIXTURE: not real records
           </span>
         )}
       </header>
@@ -396,7 +396,7 @@ export default function App() {
         <span className="dim">
           {workspace === "read" ? (
             <>
-              Select a passage and press <kbd>1</kbd>–<kbd>6</kbd> to mark it ·{" "}
+              Select a passage and press <kbd>1</kbd>-<kbd>6</kbd> to mark it ·{" "}
               {openDocId ? "reading" : "no filing open"}
             </>
           ) : (

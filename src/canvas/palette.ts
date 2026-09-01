@@ -1,4 +1,4 @@
-/** Kept in sync with src/styles/tokens.css by hand — the canvas is drawn with
+/** Kept in sync with src/styles/tokens.css by hand. The canvas is drawn with
  *  2D context calls, which cannot read CSS custom properties. */
 export const PALETTE = {
   bg: "#0d1117",
@@ -8,8 +8,8 @@ export const PALETTE = {
    * One ink for every confirmed entity on the canvas.
    *
    * Type is carried by the glyph on the disc (src/canvas/glyphs.ts), not by the
-   * disc's colour. That frees colour to mean *state* — proposed, asserted,
-   * on-path — which is the distinction a reader actually has to make quickly.
+   * disc's colour. That frees colour to mean *state*, proposed, asserted,
+   * on-path, which is the distinction a reader actually has to make quickly.
    * The per-type colours below survive for the small chips in the side panels,
    * where there is no room for a glyph.
    */

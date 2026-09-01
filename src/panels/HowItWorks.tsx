@@ -9,7 +9,7 @@ import { useState } from "react";
  * new analyst met five nouns in a rail and had to infer a workflow from them.
  *
  * Dismissal is remembered per tab, in the same sessionStorage the markings use,
- * so it does not follow you into a new session — and so the demo always opens
+ * so it does not follow you into a new session. And so the demo always opens
  * on it without a reset ritual.
  */
 
@@ -19,7 +19,7 @@ const KEY = "threadweaver:tour-dismissed:v1";
  *  each is in USER-GUIDE.md §5; this is a reminder, not the documentation. */
 const STEPS = [
   { n: "1", verb: "Read", says: "a real filing" },
-  { n: "2", verb: "Mark", says: "select text, press 1–6" },
+  { n: "2", verb: "Mark", says: "select text, press 1-6" },
   { n: "3", verb: "Ask", says: "in your own words" },
   { n: "4", verb: "Verify", says: "click a citation" },
   { n: "5", verb: "Accept", says: "only you decide" },

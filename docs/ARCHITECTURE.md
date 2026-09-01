@@ -19,7 +19,7 @@ has stopped being what `docs/METHOD.md` says it is.
 **The one asymmetry, and it is deliberate.** Six operations exist only for the human and have no
 tool at all: promoting a proposal, rejecting one, raising an enquiry, filing one, deleting a
 marking, and adding a document. See the table at the end of `docs/TOOLS.md`.
-`scripts/check-no-commit-tool.ts` enforces it in CI — it checks each one still refuses to run
+`scripts/check-no-commit-tool.ts` enforces it in CI. It checks each one still refuses to run
 without a trusted DOM event, so the guarantee cannot rot.
 
 ## System
@@ -73,7 +73,7 @@ argument's work: `readerStore` is written by a person selecting text with a mous
 agent over WebMCP, through the same API, and neither side has a private door.
 
 Note what is *not* in that diagram: a server. The corpus is static JSON fetched once at load. Every
-tool executes in the page. This is worth saying out loud in the write-up — it makes the WebMCP
+tool executes in the page. This is worth saying out loud in the write-up, it makes the WebMCP
 argument pure, because the page genuinely is the API, and it means the agent can never reach data
 the user can't see.
 
@@ -131,7 +131,7 @@ sequenceDiagram
 
 Two things in there are the whole submission.
 
-**The grey block.** It is the human doing the job — reading, marking, deciding what to ask — and it
+**The grey block.** It is the human doing the job (reading, marking, deciding what to ask), and it
 happens before any tool is registered. Nothing in it degrades if the agent never arrives.
 
 **`get_markings` and `get_reader_context`.** What the agent needs is a passage a person highlighted
@@ -168,7 +168,7 @@ flowchart LR
 ```
 webmcp2026/
 ├─ README.md
-├─ LICENSE                       MIT — required by the rules
+├─ LICENSE                       MIT, required by the rules
 ├─ package.json
 ├─ vite.config.ts
 ├─ tsconfig.json
@@ -221,7 +221,7 @@ webmcp2026/
    │     └─ writeTools.ts        9 staged / pointing / reporting
    ├─ canvas/
    │  ├─ GraphCanvas.tsx         the rAF loop, pointer handling, focus
-   │  ├─ simulation.ts           forces. No dependencies — see docs/UI.md
+   │  ├─ simulation.ts           forces. No dependencies, see docs/UI.md
    │  ├─ render.ts               drawing, hit testing, label placement
    │  ├─ viewport.ts             pan / zoom / frame. No camera vector to collapse
    │  └─ palette.ts              mirrors tokens.css by hand
@@ -231,7 +231,7 @@ webmcp2026/
    │  ├─ EnquiryPanel.tsx        raise, delegate, file. The human's agenda   NEW
    │  ├─ DecisionLog.tsx         who did what, when, and why. Exportable     NEW
    │  ├─ Inspector.tsx           selected entity, its records, its edges
-   │  └─ ToolLog.tsx             live WebMCP calls — this is video evidence
+   │  └─ ToolLog.tsx             live WebMCP calls, this is video evidence
    └─ styles/
       └─ tokens.css              one palette, light and dark
 ```
@@ -239,15 +239,15 @@ webmcp2026/
 ## Boot order
 
 1. `loadCorpus()` fetches the three JSON files and hydrates MiniSearch.
-2. `graphStore` seeds from `seed.json` — about twelve nodes, deliberately sparse.
+2. `graphStore` seeds from `seed.json`. About twelve nodes, deliberately sparse.
 3. `readerStore` seeds its queue from the filings attached to those twelve nodes, and opens the
-   first one. **The app opens on Read, not Canvas** — the analyst lands in a document, which is the
+   first one. **The app opens on Read, not Canvas**. The analyst lands in a document, which is the
    product's whole claim about who does what.
 4. Canvas mounts, simulation starts.
 5. `selectionchange` listener attaches.
 6. `registerWebMcpTools()` runs **last**, after the stores exist, so no tool can be called against
    an empty world. Feature-detect first; if neither `document.modelContext` nor
-   `navigator.modelContext` exists, log once and carry on — the app must still work as a normal
+   `navigator.modelContext` exists, log once and carry on. The app must still work as a normal
    web app in a normal browser.
 
 ## The reader: offsets, selection, and the two ways this breaks
@@ -259,12 +259,12 @@ The entire evidence model rests on one invariant, and it now has a second consum
 `build-corpus.ts` emits each filing as plain text with stable character offsets. The Reader renders
 that string verbatim into a `<pre>` and never reformats, re-wraps, trims or normalises it at display
 time. Spans are indices into that exact string. Break this and every citation in the corpus quietly
-points at the wrong words — and now every human marking does too, which is worse, because the human
+points at the wrong words. And now every human marking does too, which is worse, because the human
 made it and will trust it.
 
 **Failure one: computing offsets from the DOM.** `Range.startOffset` is relative to whichever
 rendered fragment the selection happened to start in, and the moment one mark exists the filing is
-no longer one text node — `markings.ts` cuts it at every mark boundary so overlapping marks can
+no longer one text node. `markings.ts` cuts it at every mark boundary so overlapping marks can
 render flat instead of nested. So every rendered run carries its own source offset in `data-start`,
 and `selection.ts` walks up to that anchor and adds the distance within it. Marks then nest and
 overlap freely without the arithmetic drifting.
@@ -284,18 +284,18 @@ when a different filing is opened.
 
 ## The two workspaces
 
-`App.tsx` switches between **Read** and **Canvas**, both mounted, neither unmounted — switching is a
+`App.tsx` switches between **Read** and **Canvas**, both mounted, neither unmounted, switching is a
 view change and no state, simulation or scroll position is lost. The shared right rail (Evidence,
 Proposals, Enquiries, Inspector) and the tool log persist across both.
 
 `focus()` switches to Canvas. `open_document()` and clicking a citation switch to Read. The agent
 moving the human between the two surfaces, mid-task, is a good ten seconds of video.
 
-## Corpus vs canvas — the distinction the whole design rests on
+## Corpus vs canvas, the distinction the whole design rests on
 
 The **corpus** holds ~300 companies and everything attached to them: thousands of relationships that
-genuinely exist in public records. The **canvas** holds only what has been pulled into view —
-starting at twelve nodes, ending a session around forty.
+genuinely exist in public records. The **canvas** holds only what has been pulled into view.
+Starting at twelve nodes, ending a session around forty.
 
 Nothing is planted. The links the agent finds were always there in the filings; they simply were not
 on screen. That is why the demo survives scrutiny, and it is also why performance is trivial: the

@@ -6,7 +6,7 @@
  * still exposes `navigator.modelContext`) and we only touch registerTool.
  */
 
-/** A JSON Schema object. We do not model JSON Schema in the type system — the
+/** A JSON Schema object. We do not model JSON Schema in the type system, the
  *  point is that this is JSON Schema and not TypeScript types. */
 export interface JsonSchema {
   type: "object";

@@ -5,7 +5,7 @@ import { corpusReady } from "../corpus/loadCorpus";
 
 /**
  * Wraps every tool so the ToolLog panel sees the call, its arguments and how
- * long it took — that panel is the visible proof that the standard is doing the
+ * long it took, that panel is the visible proof that the standard is doing the
  * work, and it is what the video shows.
  *
  * It also gives every tool one guarantee for free: a tool called before the

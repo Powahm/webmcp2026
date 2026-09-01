@@ -2,7 +2,7 @@
  * Pan and zoom for the 2D canvas.
  *
  * Hand-rolled, and small enough to read in one sitting. The transform is a
- * uniform scale plus a translation — no rotation, no perspective, no camera
+ * uniform scale plus a translation. No rotation, no perspective, no camera
  * vector. That is the entire reason the view cannot break the way the 3D one
  * did: framing a node is `centre the box, pick a scale`, with no direction to
  * compute and nothing to divide by.
@@ -50,8 +50,8 @@ export interface Box {
 /**
  * Frame a world-space box in a viewport of the given size.
  *
- * A box of zero extent — one node, or several stacked at the same point before
- * the simulation has separated them — is the case that broke the 3D camera.
+ * A box of zero extent. One node, or several stacked at the same point before
+ * the simulation has separated them. Is the case that broke the 3D camera.
  * Here it simply produces a scale of `maxZoom` around a valid centre, because
  * the width and height are floored before they are divided by.
  */

@@ -8,7 +8,7 @@ import { toScreen, type Transform } from "./viewport";
  *
  * Deliberately flat and legible rather than spectacular: this is a link chart
  * you read, and the reading half of the product is a document. Every visual
- * difference below encodes state — dashed means unconfirmed, a warm line means
+ * difference below encodes state, dashed means unconfirmed, a warm line means
  * the analyst asserted it with no filing behind it, a dimmed node means it is
  * not on the path you are looking at. Nothing here is decoration.
  */
@@ -24,8 +24,8 @@ export interface DrawNode {
 
 /**
  * A label short enough to sit under a node without colliding with its
- * neighbours. Addresses are the problem case — the full registered office
- * string is longer than the rest of the chart put together — so they keep the
+ * neighbours. Addresses are the problem case, the full registered office
+ * string is longer than the rest of the chart put together, so they keep the
  * building and the postcode, which is what identifies them to a reader anyway.
  * The Inspector shows the whole thing.
  */
@@ -50,7 +50,7 @@ export function shortLabel(label: string, type: NodeKind): string {
       const head = parts[0];
 
       // The postcode is the single most identifying token on the node, and
-      // it is not reliably the last comma-separated part — real addresses
+      // it is not reliably the last comma-separated part, real addresses
       // are routinely suffixed with the country. Scan from the end for the
       // first part that is actually shaped like a UK postcode.
       let tail: string | undefined;
@@ -72,7 +72,7 @@ export function shortLabel(label: string, type: NodeKind): string {
         }
       }
 
-      // Every part was a country name (unexpected) — keep the original
+      // Every part was a country name (unexpected), keep the original
       // behaviour rather than producing an empty label.
       if (!tail) tail = parts[parts.length - 1];
 
@@ -96,7 +96,7 @@ export interface Scene {
   positions: Map<string, SimNode>;
   selection: Set<string>;
   hovered: string | null;
-  /** Neighbours of the hovered node — everything else dims. */
+  /** Neighbours of the hovered node, everything else dims. */
   adjacent: Set<string>;
   /**
    * The path between the two selected nodes, if there is one.
@@ -112,7 +112,7 @@ export interface Scene {
   reducedMotion: boolean;
 }
 
-/** Stable key for a link, order-independent — the simulation may hand us
+/** Stable key for a link, order-independent. The simulation may hand us
  *  either end first. */
 export const linkKey = (a: string, b: string): string => (a < b ? `${a}\u0000${b}` : `${b}\u0000${a}`);
 
@@ -162,8 +162,8 @@ function dimFactor(scene: Scene, id: string): number {
   return 0.22;
 }
 
-/** Links are dimmed by their own membership of the path, not by their ends —
- *  two path nodes can be joined by an edge that is not on the route. */
+/** Links are dimmed by their own membership of the path, not by their ends.
+ *  Two path nodes can be joined by an edge that is not on the route. */
 function linkDim(scene: Scene, l: DrawLink): number {
   if (scene.path) return scene.path.edges.has(linkKey(l.source, l.target)) ? 1 : 0.08;
   return Math.min(dimFactor(scene, l.source), dimFactor(scene, l.target));
@@ -239,7 +239,7 @@ export function draw(
    * Occupied screen space. Discs go in first, then each label as it is placed,
    * so a label is dropped rather than drawn over a node or another label.
    * Overlapping text is the single thing that makes a link chart look broken,
-   * and a dropped label costs nothing — the node is still there and hovering
+   * and a dropped label costs nothing. The node is still there and hovering
    * brings its name straight back.
    */
   type Box = { x0: number; y0: number; x1: number; y1: number };
@@ -319,7 +319,7 @@ export function draw(
       }
     }
 
-    // The glyph. This is what says *what the node is* — the reason the discs
+    // The glyph. This is what says *what the node is*, the reason the discs
     // are all one colour. Below roughly nine pixels a symbol stops being a
     // symbol and becomes a smudge, so at that point we draw nothing rather
     // than something illegible; zooming in brings it straight back.
@@ -380,7 +380,7 @@ export function draw(
 }
 
 /** Topmost node under a screen point, or null. Iterates in reverse so the
- *  node drawn last — the one visually on top — is the one you hit. */
+ *  node drawn last, the one visually on top, is the one you hit. */
 export function hitTest(
   scene: Scene,
   t: Transform,

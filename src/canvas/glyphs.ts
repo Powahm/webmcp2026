@@ -25,7 +25,7 @@ export const DEFAULT_GLYPHS: Record<NodeKind, string> = {
   document: "\u{1F4C4}",
 };
 
-/** Offered in the settings picker. Any character works — these are the ones
+/** Offered in the settings picker. Any character works, these are the ones
  *  that stay legible at 14px on a dark disc. */
 export const GLYPH_CHOICES: Record<NodeKind, string[]> = {
   company: ["\u{1F3E2}", "\u{1F3DB}", "▣", "◼", "C"],
@@ -90,7 +90,7 @@ export const useGlyphStore = create<GlyphState>((set) => ({
 
 /**
  * Read outside React. The canvas draws on animation frames rather than on
- * renders, so it cannot use the hook — and the rAF loop is already running, so
+ * renders, so it cannot use the hook. And the rAF loop is already running, so
  * a change here appears on the very next frame with no invalidation needed.
  */
 export const glyphFor = (type: NodeKind): string =>

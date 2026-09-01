@@ -17,7 +17,7 @@ export function introSeen(): boolean {
     return window.localStorage.getItem(KEY) === "1";
   } catch {
     // Storage disabled. Treat as seen rather than showing the tour on every
-    // load forever — an unskippable-feeling tour is worse than no tour.
+    // load forever, an unskippable-feeling tour is worse than no tour.
     return true;
   }
 }

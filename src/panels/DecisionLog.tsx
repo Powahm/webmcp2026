@@ -3,8 +3,8 @@ import { exportDecisionLog, useDecisionLog } from "../state/decisionLog";
 /**
  * The decision log.
  *
- * A major incident room keeps a policy log — every significant decision and the
- * reasoning behind it, written down at the time — so the investigation can be
+ * A major incident room keeps a policy log. Every significant decision and the
+ * reasoning behind it, written down at the time. So the investigation can be
  * audited afterwards. E-discovery asks for the same thing and calls it an audit
  * trail.
  *

@@ -1,7 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 // Tokens first: App.css narrows the rails at its breakpoints by redefining the
-// same :root custom properties, and a media query adds no specificity — so if
+// same :root custom properties, and a media query adds no specificity, so if
 // tokens.css landed second its unconditional values would win and the narrow
 // layouts would silently never apply.
 import "./styles/tokens.css";

@@ -3,8 +3,8 @@ import type { CorpusDocument, Edge, Entity } from "../types";
 
 /**
  * The corpus is static JSON fetched once at boot. There is no server: every
- * tool executes in the page, which is what makes the WebMCP argument pure —
- * the agent can never reach data the analyst cannot also see.
+ * tool executes in the page, which is what makes the WebMCP argument pure.
+ * The agent can never reach data the analyst cannot also see.
  */
 
 export interface Corpus {
@@ -15,7 +15,7 @@ export interface Corpus {
   index: MiniSearch<CorpusDocument>;
   seedNodeIds: string[];
   /** Filings the reader queue opens with. The first one is what the analyst
-   *  sees on load, so build-corpus.ts should nominate one worth reading — see
+   *  sees on load, so build-corpus.ts should nominate one worth reading, see
    *  docs/DATA.md. Falls back to whatever the seed nodes cite. */
   seedDocIds: string[];
   /** Adjacency over the whole corpus, used to answer "what else is attached". */
@@ -132,7 +132,7 @@ async function loadFixture(): Promise<Omit<Corpus, "isFixture">> {
 /**
  * Add a document the analyst brought with them.
  *
- * The corpus is the 300 companies we ingested; this is everything else — the
+ * The corpus is the 300 companies we ingested; this is everything else, the
  * statement they were emailed, the notes they typed up, the letter they were
  * sent. It is indexed in the browser and lives only for the session: there is
  * no server, so their document never leaves the page, which is worth saying
@@ -155,7 +155,7 @@ export async function loadCorpus(): Promise<Corpus> {
     corpus = { ...(await loadReal()), isFixture: false };
   } catch (err) {
     console.warn(
-      "[threadweaver] public/corpus/ not found — falling back to the dev fixture. " +
+      "[threadweaver] public/corpus/ not found. Falling back to the dev fixture. " +
         "Run `npm run corpus:fetch && npm run corpus:build`.",
       err
     );

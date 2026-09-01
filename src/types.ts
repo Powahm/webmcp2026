@@ -1,5 +1,5 @@
 /**
- * Threadweaver — shared domain types.
+ * Threadweaver, shared domain types.
  *
  * These are the contract between the corpus, the stores, the canvas and the
  * WebMCP tool layer. Nothing here knows about React or three.js.
@@ -122,7 +122,7 @@ export const MARKING_TYPES: MarkingType[] = [
  * The richest state in the application, and the one no server has: offsets into
  * a string that is rendered from memory and never travelled over the wire. The
  * analyst's marks and the agent's `highlight_span` marks are the same object,
- * differing only in `origin` — there is no agent-flavoured write path.
+ * differing only in `origin`, there is no agent-flavoured write path.
  */
 export interface Marking {
   id: string;
@@ -145,7 +145,7 @@ export interface Marking {
  */
 export type EnquiryStatus = "open" | "claimed" | "resulted" | "filed";
 
-/** `eliminated` is a result, not a failure — clearing a line of enquiry is the
+/** `eliminated` is a result, not a failure. Clearing a line of enquiry is the
  *  majority of real investigative work. See docs/METHOD.md §3. */
 export type EnquiryOutcome = "found" | "eliminated" | "partial";
 
@@ -183,7 +183,7 @@ export interface DecisionEntry {
   action: string;
   /** One line of plain English. Structural, never a conclusion about a person. */
   detail: string;
-  /** Whatever it concerned — a node, an edge, a marking, an enquiry. */
+  /** Whatever it concerned, a node, an edge, a marking, an enquiry. */
   target_id?: string;
 }
 

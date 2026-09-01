@@ -13,13 +13,13 @@ import { GET_ENTITY, NO_INPUT, QUERY_PATHS, SEARCH_DOCUMENTS } from "../schemas"
  * readerTools.ts.
  *
  * All carry annotations.readOnlyHint so the browser doesn't gate them behind a
- * confirmation prompt — nothing here can change anything. They read the stores
+ * confirmation prompt, nothing here can change anything. They read the stores
  * and the corpus directly and never call actions.ts, because actions.ts is the
  * mutation API and these tools do not mutate.
  *
  * The canvas-state tools are half the argument for WebMCP over an API: no
  * server and no page-scraper can know what the analyst just decided to point
- * at. The other half — and the stronger one — is in readerTools.ts.
+ * at. The other half, and the stronger one, is in readerTools.ts.
  */
 
 const READ_ONLY = { readOnlyHint: true } as const;
@@ -65,7 +65,7 @@ export const getViewport: McpToolDefinition = {
 export const getVisibleSubgraph: McpToolDefinition = {
   name: "get_visible_subgraph",
   description:
-    "Return the nodes and edges currently on the canvas, with types, labels and confirmation state. This is the analyst's working set, not the full corpus — the corpus is much larger, and search_documents reaches it.",
+    "Return the nodes and edges currently on the canvas, with types, labels and confirmation state. This is the analyst's working set, not the full corpus. The corpus is much larger, and search_documents reaches it.",
   inputSchema: NO_INPUT,
   annotations: READ_ONLY,
   execute: () => {
@@ -141,7 +141,7 @@ export const getEntity: McpToolDefinition = {
 export const searchDocumentsTool: McpToolDefinition = {
   name: "search_documents",
   description:
-    "Full-text search across the filing corpus. Returns document ids with the character offsets of each match, so results can be cited exactly. It returns pointers, never prose — read the spans and cite them. Does not search the canvas; use get_visible_subgraph for that.",
+    "Full-text search across the filing corpus. Returns document ids with the character offsets of each match, so results can be cited exactly. It returns pointers, never prose. Read the spans and cite them. Does not search the canvas; use get_visible_subgraph for that.",
   inputSchema: SEARCH_DOCUMENTS,
   annotations: READ_ONLY,
   execute: (args) => {
@@ -168,7 +168,7 @@ export const searchDocumentsTool: McpToolDefinition = {
 export const queryPaths: McpToolDefinition = {
   name: "query_paths",
   description:
-    "Find existing paths between two entities on the canvas. Traversal only: it will not invent a connection. An empty result is a real answer — it means no confirmed path exists yet, which is usually where the investigation starts.",
+    "Find existing paths between two entities on the canvas. Traversal only: it will not invent a connection. An empty result is a real answer. It means no confirmed path exists yet, which is usually where the investigation starts.",
   inputSchema: QUERY_PATHS,
   annotations: READ_ONLY,
   execute: (args) => {
@@ -198,7 +198,7 @@ export const queryPaths: McpToolDefinition = {
       })),
       note: paths.length
         ? undefined
-        : `No path of ${maxHops} hops or fewer exists on the canvas between these two. That is a real answer, not a failure — search_documents may show a connection the canvas does not yet contain.`,
+        : `No path of ${maxHops} hops or fewer exists on the canvas between these two. That is a real answer, not a failure. Search_documents may show a connection the canvas does not yet contain.`,
     });
   },
 };

@@ -2,7 +2,7 @@ import { create } from "zustand";
 import type { Enquiry } from "../types";
 
 /**
- * Lines of enquiry — MIRSAP's Actions.
+ * Lines of enquiry, MIRSAP's Actions.
  *
  * The analyst raises them, in their own words. The agent can list them and
  * result them. **Only the analyst files one**, and there is no tool that does:
@@ -22,7 +22,7 @@ export const useEnquiryStore = create<EnquiryState>((set) => ({
 
 export const enquiries = () => useEnquiryStore.getState();
 
-/** Newest first — the analyst's most recent question is the one they mean. */
+/** Newest first, the analyst's most recent question is the one they mean. */
 export const enquiryList = (m: Map<string, Enquiry>): Enquiry[] =>
   [...m.values()].sort((a, b) => b.created_at - a.created_at);
 

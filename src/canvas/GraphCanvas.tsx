@@ -26,7 +26,7 @@ import {
 /**
  * The canvas.
  *
- * A flat 2D link chart — pan, zoom, drag, click — of the kind people already
+ * A flat 2D link chart (pan, zoom, drag, click) of the kind people already
  * know how to use. It was 3D and force-directed in three dimensions; that cost
  * more than it earned. Occlusion and depth ambiguity make a network genuinely
  * harder to read, the camera had a failure mode that put the analyst inside the
@@ -57,7 +57,7 @@ const acceptProgress = (justAccepted: number | undefined, now: number, reduced: 
  * when it was accepted, if recently. `distance`/`strength` on these objects
  * are placeholders filled in at scene-build time; the render loop overwrites
  * them every frame from the real clock, in place, on the same objects that
- * `sim.links` holds — see the render loop below for why that has to happen
+ * `sim.links` holds, see the render loop below for why that has to happen
  * there and not here.
  */
 type AnimLink = SimLink & { proposed: boolean; justAccepted?: number };
@@ -73,7 +73,7 @@ export default function GraphCanvas() {
    * True once the analyst has panned, zoomed or been flown somewhere.
    *
    * Until then the view keeps refitting to the whole graph every frame, so the
-   * chart is always framed no matter how the simulation moves — booting
+   * chart is always framed no matter how the simulation moves, booting
    * off-centre and small is the difference between "here is your case" and
    * "your first action is a pan". After the analyst touches the canvas we stop
    * touching it: nothing is more irritating than a view that keeps correcting
@@ -107,7 +107,7 @@ export default function GraphCanvas() {
   // --- Verification hook, inert unless asked for ----------------------------
   // Exposes the live Simulation on window so a test harness can read link
   // distance/strength directly instead of screenshotting and guessing. Only
-  // runs when the page is loaded with ?debugSim in the URL — never in a
+  // runs when the page is loaded with ?debugSim in the URL, never in a
   // normal session, and never something a build flag has to strip.
   useEffect(() => {
     if (new URLSearchParams(window.location.search).has("debugSim")) {
@@ -201,7 +201,7 @@ export default function GraphCanvas() {
    *
    * Two selections is the gesture that means "how are these related?", so it
    * is the moment to answer. Before the agent has worked there is no path and
-   * the canvas says so out loud — which is the honest half of the story, and
+   * the canvas says so out loud. Which is the honest half of the story, and
    * the half most demos skip.
    */
   const path = useMemo(() => {
@@ -272,7 +272,7 @@ export default function GraphCanvas() {
       // The accept animation lives here, not in the scene memo. Distance and
       // strength are a function of wall-clock time (see acceptProgress), so a
       // memo that only re-runs when the graph changes freezes them at
-      // whatever they were the instant the memo ran — that was the bug: an
+      // whatever they were the instant the memo ran. That was the bug: an
       // accepted edge sat at t=0 forever because nothing re-invoked it.
       // Mutating the same SimLink objects sim.links already holds, on every
       // frame, is what makes the spring actually tighten in front of tick().
@@ -297,7 +297,7 @@ export default function GraphCanvas() {
         const box = sim.bounds();
         if (box) {
           // 120px of padding on every side threw away a third of a 900px-tall
-          // canvas, and the seed graph then framed at roughly k=0.4 — twelve
+          // canvas, and the seed graph then framed at roughly k=0.4, twelve
           // unreadable dots in the middle of a black field, which is the first
           // thing anyone sees. Tighter padding and a higher ceiling let the
           // opening shot fill the space it has.
@@ -363,7 +363,7 @@ export default function GraphCanvas() {
 
     // A single node, or several stacked before the simulation has separated
     // them, is a zero-extent box. viewport.frame() floors the extent, so it
-    // yields a valid transform rather than dividing by nothing — this is
+    // yields a valid transform rather than dividing by nothing, this is
     // exactly the case that used to black the screen out.
     flightRef.current = {
       from: transformRef.current,
@@ -589,7 +589,7 @@ export default function GraphCanvas() {
             <>
               <strong>No path yet</strong>
               <span>
-                nothing on this canvas connects them — that is a real answer,
+                nothing on this canvas connects them. That is a real answer,
                 not a failure
               </span>
             </>
@@ -597,7 +597,7 @@ export default function GraphCanvas() {
         </div>
       )}
 
-      {/* A reminder, not a decoder ring — the glyph is on the node itself. */}
+      {/* A reminder, not a decoder ring. The glyph is on the node itself. */}
       <div className="canvas-legend">
         {NODE_KINDS.map((kind) => (
           <span key={kind}>

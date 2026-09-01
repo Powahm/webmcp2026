@@ -11,7 +11,7 @@ import { TYPE_LABEL } from "./labels";
  * Settings.
  *
  * One thing lives here: which glyph stands for which kind of entity on the
- * canvas. It is a display preference — per browser, outside the decision log,
+ * canvas. It is a display preference. Per browser, outside the decision log,
  * and unreachable from any WebMCP tool. The agent has no business changing how
  * the analyst's chart looks.
  *
@@ -53,7 +53,7 @@ export default function Settings({ onClose }: { onClose: () => void }) {
       </header>
 
       <p className="hint">
-        Shown on every node. Pick one, or type any character — an emoji, a
+        Shown on every node. Pick one, or type any character, an emoji, a
         letter, a symbol.
       </p>
 

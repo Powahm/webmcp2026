@@ -57,8 +57,8 @@ export function segment(text: string, markings: Marking[]): Segment[] {
  * Which mark decides the segment's colour when several overlap.
  *
  * The analyst's own mark always wins. Their reading is the point of the
- * product, and an agent highlight must never repaint what a person decided —
- * the agent's contribution shows as the underline instead.
+ * product, and an agent highlight must never repaint what a person decided.
+ * The agent's contribution shows as the underline instead.
  */
 export function dominant(marks: Marking[]): Marking | null {
   if (!marks.length) return null;
