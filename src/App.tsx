@@ -239,7 +239,7 @@ export default function App() {
   const tabs: { id: Tab; label: string; badge?: number }[] =
     workspace === "canvas"
       ? [
-          { id: "selection", label: "Selection" },
+          { id: "selection", label: "Inspector" },
           { id: "proposals", label: "Proposals", badge: pendingCount },
           { id: "enquiries", label: "Enquiries", badge: openCount },
         ]

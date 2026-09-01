@@ -80,7 +80,7 @@ export const TOUR_STEPS: TourStep[] = [
   },
   {
     target: "rail-panel",
-    title: "Selection: what you clicked",
+    title: "Inspector: what you clicked",
     body:
       "Click a node and it appears here. Select a second and you can draw the connection yourself, with no agent involved.",
     side: "left",
