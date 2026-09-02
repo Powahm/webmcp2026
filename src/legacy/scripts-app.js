@@ -292,8 +292,14 @@ export const Scripts = (() => {
           const r = runtime(script);
           total.textContent = `${script.lines.length} lines · about ${timecode(r)}`;
           win.setMeta(timecode(r));
+          // The block list can be a render behind: editing in the text view
+          // rewrites script.lines without re-rendering the blocks, so deleting
+          // lines there leaves more elements here than there are lines. Reading
+          // past the end used to throw and take the whole window down.
           list.querySelectorAll(".line:not(.line--proposed)").forEach((el, i) => {
-            el.querySelector(".line-time").textContent = timecode(seconds(script.lines[i].text));
+            const line = script.lines[i];
+            if (!line) return;
+            el.querySelector(".line-time").textContent = timecode(seconds(line.text));
           });
         }
 

@@ -450,3 +450,9 @@
 
 .ais-empty { margin: 0; padding: 26px 14px; text-align: center; font-size: 12px; line-height: 1.7; color: var(--text-muted); }
 .file--sub .file-art { background: color-mix(in srgb, var(--purple) 40%, transparent); border: 2px dashed var(--purple); }
+
+/* A skill whose triggers match the page right now. Between "offered" and
+   "loaded": the agent has not taken it, but the moment it was written for has
+   arrived. */
+.ais-card.ready { border-left-color: var(--yellow); background: color-mix(in srgb, var(--yellow) 9%, var(--surface-2)); }
+.ais-card-ready { color: var(--yellow-dk); font-weight: 700; }

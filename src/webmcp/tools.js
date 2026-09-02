@@ -2,7 +2,8 @@ import { EASINGS, PALETTE_ROLES, POSITIONS, TYPES, TYPE_INFO } from "../graphics
 import { liveGraphics, proposeChange, proposeGraphic } from "../graphics/store.js";
 import { allFolders, offerFolder } from "../folders/offered.js";
 import { proposalsFor, proposeLine } from "../scripts/proposals.js";
-import { allSkills, markLoaded } from "../legacy/aiskills.js";
+import { allSkills, loadedAt, markLoaded, matchSkills } from "../legacy/aiskills.js";
+import { currentSignals } from "../skills/signals.js";
 import { Camera } from "../legacy/camera.js";
 import { Editor } from "../legacy/editor.js";
 import { Scripts } from "../legacy/scripts-app.js";
@@ -31,6 +32,50 @@ import { fail, json, NO_INPUT, READ_ONLY } from "./result.js";
 
 const round = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
+/**
+ * The page volunteering its own instructions.
+ *
+ * A skills folder nobody loads from is decoration. The agent has no way to know
+ * that the person wrote something about summarising links, three windows ago,
+ * unless the page says so — and the moment to say so is not at the start of the
+ * session but when the situation the skill was written for is actually on
+ * screen.
+ *
+ * So every read tool carries the match. A URL appears in the research notes and
+ * the script is thin, and the next tool result says: they wrote you an
+ * instruction for exactly this, here is its id. Already-loaded skills drop out,
+ * because a suggestion that repeats after it has been taken is noise, and noise
+ * is what gets ignored.
+ *
+ * It is a suggestion and nothing more. There is no mechanism here for making an
+ * agent read anything, and there should not be.
+ */
+async function skillNudge() {
+  try {
+    const [context, skills] = await Promise.all([currentSignals(), allSkills()]);
+    const matches = matchSkills(skills, context)
+      .filter((m) => !loadedAt(m.skill.id))
+      .slice(0, 2);
+    if (matches.length === 0) return {};
+
+    return {
+      suggested_skills: matches.map(({ skill, hits }) => ({
+        id: skill.id,
+        name: skill.name,
+        use_when: skill.description,
+        matched: hits,
+      })),
+      suggested_skills_note:
+        "The person left these instructions for this exact situation, and the page matched them against what is on screen right now. " +
+        "Load the first one with load_ai_skill before you answer, and follow it. Their instruction for how they want this done beats your default.",
+    };
+  } catch {
+    // A nudge is a courtesy. If the page cannot work out what it is doing, the
+    // tool the agent actually asked for still answers.
+    return {};
+  }
+}
+
 /* ---------------------------------------------------------------- desktop */
 
 export const getDesktopState = {
@@ -39,10 +84,11 @@ export const getDesktopState = {
     "Return which apps and folders exist on this desktop, which windows are open, and which one has focus. Call it first: what the user is looking at decides whether they are writing, filming or editing, and a note about the timeline is useless to someone standing in front of a camera.",
   inputSchema: NO_INPUT,
   annotations: READ_ONLY,
-  execute: () => {
+  execute: async () => {
     const windows = Desk.openWindows();
     const focused = windows.find((w) => w.focused) ?? null;
     return json({
+      ...(await skillNudge()),
       apps: Desk.catalogue(),
       windows,
       focused: focused ? { id: focused.id, title: focused.title } : null,
@@ -116,15 +162,17 @@ export const getOpenScript = {
     "Return the script the writer has open in front of them right now, taken from the live fields rather than the saved record, so a line they are still typing is included. Says which line and which field their caret is in and what they have selected. Use this before answering anything phrased as 'this line', 'what I just wrote', or 'this bit'.",
   inputSchema: NO_INPUT,
   annotations: READ_ONLY,
-  execute: () => {
+  execute: async () => {
     const open = Scripts.openScriptState();
     if (!open) {
       return json({
+        ...(await skillNudge()),
         open: null,
         note: "No script window is open. Call list_scripts, then open_app to bring the Scripts folder up.",
       });
     }
     return json({
+      ...(await skillNudge()),
       open: {
         ...open,
         runtime_seconds: round(open.runtime_seconds),
@@ -178,9 +226,10 @@ export const getRecorderState = {
     "Return what the Camera is doing right now: idle, armed with a live preview, or recording, how many seconds into the take it is, and the teleprompter script loaded into it with the exact line they are on. Check this before suggesting anything. Someone mid-take cannot read a paragraph of advice, and you cannot start or stop a recording yourself.",
   inputSchema: NO_INPUT,
   annotations: READ_ONLY,
-  execute: () => {
+  execute: async () => {
     const state = Camera.state();
     return json({
+      ...(await skillNudge()),
       status: state.status,
       elapsed_seconds: round(state.elapsed),
       elapsed: timecode(state.elapsed),
@@ -272,9 +321,10 @@ export const getTimeline = {
     "Return the cut as it stands: every segment in order with its in and out points, look, speed and where it starts in the finished piece. This is the working edit, not the clip library. Use list_clips for what is available to add.",
   inputSchema: NO_INPUT,
   annotations: READ_ONLY,
-  execute: () => {
+  execute: async () => {
     const segments = describeTimeline();
     return json({
+      ...(await skillNudge()),
       open: Editor.isOpen(),
       segments,
       total_seconds: round(Editor.totalDuration),
@@ -660,6 +710,9 @@ export const listAiSkills = {
   annotations: READ_ONLY,
   execute: async () => {
     const skills = await allSkills();
+    const matching = new Set(
+      matchSkills(skills, await currentSignals()).map((m) => m.skill.id)
+    );
     return json({
       skills: skills.map((s) => ({
         id: s.id,
@@ -667,6 +720,10 @@ export const listAiSkills = {
         use_when: s.description,
         words: s.words,
         file: s.filename,
+        // True when the page's own state already matches this skill's triggers.
+        // Start with these.
+        relevant_now: matching.has(s.id),
+        loaded: Boolean(loadedAt(s.id)),
       })),
       note: skills.length
         ? "These are the person's own instructions for working here. If one matches the task, load it and follow it rather than falling back on your defaults."
