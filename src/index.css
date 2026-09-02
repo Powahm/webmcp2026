@@ -546,6 +546,19 @@
 .desk-folder-sub { font-size: 10.5px; color: var(--text-muted); white-space: nowrap; }
 
 .file--inert { opacity: 0.55; cursor: default; }
+
+/*
+ * The tile that is always there. Dashed and hollow, like the ghost folder, so
+ * the desk reads as "this one is not a folder yet" rather than as an app.
+ */
+.desk-folder--add svg { fill: none; stroke: var(--line); stroke-dasharray: 7 5; opacity: 0.75; filter: none; }
+.desk-folder--add .desk-folder-plus { stroke: var(--line); stroke-width: 5; stroke-linecap: round; stroke-dasharray: none; }
+.desk-folder--add .desk-folder-name { color: var(--text-muted); }
+.desk-folder--add:hover svg { opacity: 1; stroke: var(--teal); }
+.desk-folder--add:hover .desk-folder-plus { stroke: var(--teal); }
+.desk-folder--add:hover .desk-folder-name { color: var(--text); }
+.desk-folder--add:disabled { opacity: 0.5; cursor: default; }
+
 /* ============================================================
    The composition: layers, sound, format, transcript, code.
 

@@ -23,6 +23,9 @@ import { folderById, markImported } from "./offered.js";
  */
 
 const TEXT_FILE = /\.(txt|md|markdown|srt|vtt)$/i;
+// Some browsers hand back a blank `type` for a file read out of a directory
+// handle, so the extension has to be able to answer on its own.
+const VIDEO_FILE = /\.(mp4|webm|mov|m4v|mkv|avi)$/i;
 
 /** Split a plain text file into the app's line-per-beat script model. */
 function linesFrom(text) {
@@ -67,20 +70,42 @@ export async function pickFolderOntoDesk() {
   const { Desk } = await import("../legacy/shell.js");
 
   const chosen = await picking;
-  if (!chosen || chosen.length === 0) return null;
+
+  // Silence here was the bug. Every way this can end without a folder now says
+  // so: a picker the browser will not open, a cancelled dialog, and a folder
+  // that turned out to be empty are three different things, and a person
+  // staring at an unchanged desktop cannot tell them apart.
+  if (chosen === CANCELLED) return null;
+  if (chosen instanceof Error) {
+    Desk.toast(pickerProblem(chosen), "bad");
+    return null;
+  }
+  if (!chosen || chosen.length === 0) {
+    Desk.toast("That folder came back empty.", "bad");
+    return null;
+  }
 
   const entries = [];
+  const failed = [];
   for (const file of chosen) {
-    if (file.type.startsWith("video/")) {
-      const clip = await Clips.save(file, { name: stem(file.name), kind: "import" });
-      entries.push({ name: file.name, size: file.size, clipId: clip.id });
-    } else if (file.type.startsWith("text/") || TEXT_FILE.test(file.name)) {
-      const script = await saveScript(Store, file.name, await file.text());
-      entries.push({ name: file.name, size: file.size, scriptId: script.id });
+    // One unreadable file used to end the whole import, and because nothing
+    // caught it the folder simply never appeared. Now it is listed as a file
+    // that would not open and the rest still lands.
+    try {
+      if (file.type.startsWith("video/") || VIDEO_FILE.test(file.name)) {
+        const clip = await Clips.save(file, { name: stem(file.name), kind: "import" });
+        entries.push({ name: file.name, size: file.size, clipId: clip.id });
+      } else if (file.type.startsWith("text/") || TEXT_FILE.test(file.name)) {
+        const script = await saveScript(Store, file.name, await file.text());
+        entries.push({ name: file.name, size: file.size, scriptId: script.id });
+      }
+      // Anything else is listed but not opened: an image or a project file is
+      // worth seeing in the folder and is not something this app can act on.
+      else entries.push({ name: file.name, size: file.size });
+    } catch (err) {
+      failed.push(file.name);
+      entries.push({ name: file.name, size: file.size });
     }
-    // Anything else is listed but not opened: an image or a project file is
-    // worth seeing in the folder and is not something this app can act on.
-    else entries.push({ name: file.name, size: file.size });
   }
 
   const name = folderNameFrom(chosen);
@@ -92,6 +117,9 @@ export async function pickFolderOntoDesk() {
   if (clips) bits.push(`${clips} clip${clips === 1 ? "" : "s"}`);
   if (scripts) bits.push(`${scripts} script${scripts === 1 ? "" : "s"}`);
   Desk.toast(bits.length ? `${bits.join(" and ")} in from ${name}` : `${name} is on your desk`, "good");
+  if (failed.length) {
+    Desk.toast(`${failed.length} file${failed.length === 1 ? "" : "s"} would not open: ${failed.slice(0, 3).join(", ")}`, "bad");
+  }
 
   // Show them what arrived. The icon lands on the desktop behind whatever
   // window they already had open, so without this the only sign anything
@@ -112,10 +140,26 @@ function folderNameFrom(files) {
 /**
  * Ask for the folder.
  *
+ * Three outcomes, and they are deliberately three rather than one:
+ * `CANCELLED` for a dialog the person closed, an `Error` for a picker the
+ * browser refused to open, and an array for a folder. Collapsing all three into
+ * null is what made a failed import look identical to a successful one that
+ * changed nothing.
+ *
  * showDirectoryPicker is the good path. The input fallback is for browsers, and
- * embedded frames, that do not expose it; a cancelled input fires no event in
- * some of them, so the focus listener stops the promise hanging forever.
+ * embedded frames, that do not expose it.
  */
+export const CANCELLED = Symbol("cancelled");
+
+/** What to say when the browser would not open a picker at all. */
+function pickerProblem(err) {
+  const name = err?.name || "";
+  if (name === "SecurityError" || name === "NotAllowedError") {
+    return "This browser would not open a folder picker here. Try the page in its own tab.";
+  }
+  return `Could not open the folder: ${err?.message || name || "unknown error"}`;
+}
+
 function chooseFiles() {
   if (window.showDirectoryPicker) {
     return window
@@ -127,7 +171,7 @@ function chooseFiles() {
         }
         return out;
       })
-      .catch((err) => (err?.name === "AbortError" ? null : null));
+      .catch((err) => (err?.name === "AbortError" ? CANCELLED : err));
   }
 
   return new Promise((resolve) => {
@@ -136,15 +180,31 @@ function chooseFiles() {
     input.multiple = true;
     input.webkitdirectory = true;
     input.style.display = "none";
-    input.addEventListener("change", () => {
-      resolve([...input.files]);
+
+    let done = false;
+    const finish = (value) => {
+      if (done) return;
+      done = true;
       input.remove();
-    });
+      resolve(value);
+    };
+
+    input.addEventListener("change", () => finish([...input.files]));
+    // Chrome fires this when the dialog is dismissed. Where it exists it is
+    // exact, and it is why the focus fallback below can afford to be slow.
+    input.addEventListener("cancel", () => finish(CANCELLED));
+
+    // The old version resolved null 600ms after focus returned. On a folder
+    // with any size to it the change event has not fired by then, so the
+    // import was abandoned while the browser was still reading the directory —
+    // which is exactly the "it just disappears" symptom. Give it real time, and
+    // only give up if nothing was chosen.
     window.addEventListener(
       "focus",
-      () => setTimeout(() => resolve(input.files?.length ? [...input.files] : null), 600),
+      () => setTimeout(() => finish(input.files?.length ? [...input.files] : CANCELLED), 4000),
       { once: true }
     );
+
     document.body.appendChild(input);
     input.click();
   });
@@ -178,7 +238,12 @@ export async function acceptFolder(id, gesture) {
   }
   if (scripts) Desk.toast(`${scripts} script${scripts === 1 ? "" : "s"} in from ${folder.name}`, "good");
 
-  const chosen = await picking;
+  let chosen = await picking;
+  if (chosen === CANCELLED) chosen = null;
+  if (chosen instanceof Error) {
+    Desk.toast(pickerProblem(chosen), "bad");
+    chosen = null;
+  }
   let clips = 0;
 
   if (chosen) {
