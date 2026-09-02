@@ -9,6 +9,7 @@ import { Editor } from "../legacy/editor.js";
 import { Scripts } from "../legacy/scripts-app.js";
 import { Desk } from "../legacy/shell.js";
 import { Clips, Store, timecode } from "../legacy/store.js";
+import { COMP_TOOLS } from "./comp-tools.js";
 import { fail, json, NO_INPUT, READ_ONLY } from "./result.js";
 
 /**
@@ -790,4 +791,7 @@ export const TOOLS = [
   getOfferedFolders,
   listAiSkills,
   loadAiSkill,
+  // The composition engine's own surface: the frame-accurate graphics layer,
+  // the transcript derived from the prompter, and cuts staged over the edit.
+  ...COMP_TOOLS,
 ];
