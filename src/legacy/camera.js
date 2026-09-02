@@ -518,6 +518,25 @@ export const Camera = (() => {
       renderStrip();
     });
 
+    /**
+     * Minimising the window lets the camera go.
+     *
+     * A webcam light that stays on after the window is tucked into the dock is
+     * alarming, and the app has no business holding the device while it is not
+     * showing you the picture. Restoring re-acquires. A take in progress is
+     * ended first, so the clip is saved rather than truncated by the tracks
+     * being pulled from under the recorder.
+     */
+    win.onVisibility(async (visible) => {
+      if (!visible) {
+        if (session) await toggleRecord();
+        release();
+        video.srcObject = null;
+        return;
+      }
+      if (source === "camera") connect();
+    });
+
     const off = Store.on("clips", renderStrip);
     const offScripts = Store.on("scripts", loadScripts);
     win.onCleanup(() => {

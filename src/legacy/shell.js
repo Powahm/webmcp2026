@@ -41,6 +41,14 @@ export const Desk = (() => {
 
   /* ---------------- windows ---------------- */
 
+  /** Change a window's state and tell the app inside it. */
+  function setWindowState(rec, state) {
+    if (rec.el.dataset.state === state) return;
+    rec.el.dataset.state = state;
+    const visible = state === "open";
+    rec.visibility.forEach((fn) => { try { fn(visible); } catch { /* app teardown */ } });
+  }
+
   function focusWindow(id) {
     const rec = windows.get(id);
     if (!rec) return;
@@ -65,7 +73,7 @@ export const Desk = (() => {
   function openWindow({ id, title, meta = "", tint, size = { w: 560, h: 440 }, origin, build, onClose }) {
     const existing = windows.get(id);
     if (existing) {
-      existing.el.dataset.state = "open";
+      setWindowState(existing, "open");
       focusWindow(id);
       return existing;
     }
@@ -106,7 +114,7 @@ export const Desk = (() => {
 
     desktop.appendChild(el);
 
-    const rec = { el, id, title, tint, restore: null, onClose, cleanups: [] };
+    const rec = { el, id, title, tint, restore: null, onClose, cleanups: [], visibility: [] };
     windows.set(id, rec);
 
     const body = $(".win-body", el);
@@ -115,6 +123,11 @@ export const Desk = (() => {
         setMeta: (text) => ($(".win-meta", el).textContent = text),
         close: () => closeWindow(id),
         onCleanup: (fn) => rec.cleanups.push(fn),
+        // Minimising is not closing, so cleanups do not run, but an app holding
+        // a camera or a microphone must let go of it anyway. A webcam light
+        // that stays on after you tuck the window into the dock is alarming,
+        // and rightly so.
+        onVisibility: (fn) => rec.visibility.push(fn),
         el
       });
     } catch (err) {
@@ -199,7 +212,7 @@ export const Desk = (() => {
       const act = e.target.closest("[data-act]")?.dataset.act;
       if (!act) return;
       if (act === "close") closeWindow(id);
-      if (act === "min") { el.dataset.state = "minimised"; syncDock(); }
+      if (act === "min") { setWindowState(rec, "minimised"); syncDock(); }
       if (act === "max") toggleMax(rec);
     });
 
@@ -284,7 +297,7 @@ export const Desk = (() => {
       btn.setAttribute("aria-current", String(rec.el.dataset.focused === "true" && rec.el.dataset.state === "open"));
       btn.innerHTML = `<span class="dock-swatch" aria-hidden="true"></span><span class="dock-label">${esc(rec.title)}</span>`;
       btn.addEventListener("click", () => {
-        rec.el.dataset.state = "open";
+        setWindowState(rec, "open");
         focusWindow(rec.id);
       });
       li.appendChild(btn);
@@ -492,7 +505,7 @@ export const Desk = (() => {
       id: rec.id,
       title: rec.title,
       focused: rec.el.dataset.focused === "true",
-      minimised: rec.el.dataset.state === "min"
+      minimised: rec.el.dataset.state === "minimised"
     }));
   }
 
