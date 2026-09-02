@@ -63,3 +63,55 @@
 .gfx-reason { margin: 4px 0 0; font-size: 11px; line-height: 1.45; color: var(--text-muted); font-style: italic; }
 .gfx-acts { display: flex; gap: 6px; margin-top: 8px; }
 .gfx-count { font-size: 10px; color: var(--accent); font-weight: 600; }
+
+/* ------------------------------------------------------ the script window */
+
+.scr-views { display: flex; gap: 2px; margin-left: auto; padding: 2px; border: 1px solid var(--line); border-radius: var(--radius-s); background: var(--surface-2); }
+.scr-view { padding: 3px 10px; border: 0; border-radius: 4px; background: transparent; color: var(--text-muted); font: inherit; font-size: 11px; cursor: pointer; }
+.scr-view.on { background: var(--ink); color: var(--surface); font-weight: 600; }
+
+/* The text view. Gutter and document scroll as one, so the numbers stay
+   beside the lines they belong to.
+   `.scr-lines` is display:grid and this is display:grid, and an author rule
+   beats the user agent's [hidden] { display: none }, so hiding a pane needs
+   saying outright. Two panes stacked on top of each other is what happens
+   otherwise, and it looks like a layout bug rather than a specificity one. */
+.scr-text { display: grid; grid-template-columns: auto 1fr; flex: 1; min-height: 0; overflow: hidden; border-top: 1px solid var(--line); }
+.scr-text[hidden], .scr-lines[hidden], .scr-research[hidden] { display: none; }
+
+.scr-gutter {
+  overflow: hidden;
+  padding: 12px 8px 12px 12px;
+  border-right: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.75;
+  text-align: right;
+  user-select: none;
+}
+.scr-gutter span { display: block; }
+
+.scr-doc {
+  width: 100%;
+  padding: 12px 14px;
+  border: 0;
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  line-height: 1.75;
+  resize: none;
+  outline: none;
+}
+
+.scr-research { flex: none; border-top: var(--bw) solid var(--line); background: var(--surface-2); display: grid; grid-template-rows: auto 1fr; height: 148px; }
+.scr-sources { width: 100%; padding: 10px 12px; border: 0; background: transparent; color: var(--text); font-family: var(--font-mono); font-size: 11.5px; line-height: 1.6; resize: none; outline: none; }
+
+/* A line the agent wrote. Dashed and tinted, the same rule proposals follow
+   everywhere else in this app, so it can never be mistaken for your draft. */
+.line--proposed { border: 1px dashed var(--accent); border-radius: var(--radius-s); background: var(--accent-soft); }
+.line-prop-text { margin: 0; font-size: 13px; line-height: 1.55; }
+.line-prop-note { margin: 4px 0 0; font-size: 11px; color: var(--text-muted); }
+.line-prop-why { margin: 6px 0 0; font-size: 11px; font-style: italic; color: var(--text-muted); }
+.line-prop-acts { display: flex; gap: 6px; margin-top: 8px; }

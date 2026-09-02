@@ -154,7 +154,7 @@ export const Readme = (() => {
       title: doc.name,
       meta: "Readme",
       tint: TINT,
-      size: { w: 580, h: 500 },
+      size: { w: 720, h: 640 },
       origin,
       build(body) {
         const article = document.createElement("article");
@@ -173,7 +173,7 @@ export const Readme = (() => {
       title: "Readme",
       meta: `${DOCS.length} documents`,
       tint: TINT,
-      size: { w: 520, h: 360 },
+      size: { w: 660, h: 460 },
       origin,
       build(body) {
         body.className = "win-body";

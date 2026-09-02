@@ -1,4 +1,5 @@
 import { Store, Clips, timecode } from "./store.js";
+import { drop, onProposals, proposalsFor, take } from "../scripts/proposals.js";
 import { Desk } from "./shell.js";
 
 /* ============================================================
@@ -215,18 +216,43 @@ export const Scripts = (() => {
       title: script.name,
       meta: timecode(runtime(script)),
       tint: TINT,
-      size: { w: 640, h: 560 },
+      size: { w: 900, h: 720 },
       origin,
       build(body, win) {
         body.className = "win-body scr";
         body.innerHTML = `
           <div class="scr-bar">
             <input class="scr-name" value="${Desk.esc(script.name)}" aria-label="Script title" spellcheck="false">
+            <div class="scr-views" role="tablist" aria-label="View">
+              <button class="scr-view on" data-view="blocks" role="tab" aria-selected="true">Blocks</button>
+              <button class="scr-view" data-view="text" role="tab" aria-selected="false">Text</button>
+            </div>
+            <button class="btn btn-mini" data-act="research" aria-pressed="false">Research</button>
             <button class="btn btn-mini" data-act="save">Save</button>
             <button class="btn btn-mini btn-danger" data-act="delete">Delete</button>
             <button class="btn btn-accent" data-act="prompt">Teleprompter</button>
           </div>
-          <div class="scr-lines"></div>
+
+          <!-- Two views of one document. Blocks is the shooting script, one
+               line per spoken beat with its shot direction. Text is the same
+               lines as one editable document, numbered, for when you want to
+               rewrite the whole thing rather than nudge a beat. -->
+          <div class="scr-lines" data-pane="blocks"></div>
+
+          <div class="scr-text" data-pane="text" hidden>
+            <div class="scr-gutter mono" aria-hidden="true"></div>
+            <textarea class="scr-doc" spellcheck="true"
+              aria-label="Script, one line per beat"
+              placeholder="One line per beat. Each line becomes a block."></textarea>
+          </div>
+
+          <aside class="scr-research" hidden>
+            <div class="ed-head"><span>Research</span></div>
+            <textarea class="scr-sources" spellcheck="false"
+              aria-label="Research notes and links"
+              placeholder="Paste links, quotes, figures, anything you found while browsing. The agent reads this when you ask it to write."></textarea>
+          </aside>
+
           <div class="scr-foot">
             <button class="btn btn-mini" data-act="add">+ Add line</button>
             <span class="scr-total mono"></span>
@@ -235,6 +261,14 @@ export const Scripts = (() => {
         const list = body.querySelector(".scr-lines");
         const total = body.querySelector(".scr-total");
         const nameInput = body.querySelector(".scr-name");
+        const textPane = body.querySelector(".scr-text");
+        const doc = body.querySelector(".scr-doc");
+        const gutter = body.querySelector(".scr-gutter");
+        const research = body.querySelector(".scr-research");
+        const sources = body.querySelector(".scr-sources");
+
+        script.sources = script.sources || "";
+        sources.value = script.sources;
 
         /**
          * The last state that reached the store.
@@ -244,11 +278,12 @@ export const Scripts = (() => {
          * is ever unsaved. This snapshot is the saved truth, taken when the
          * window opens and refreshed by save().
          */
-        let saved = JSON.stringify({ name: script.name, lines: script.lines });
+        let saved = JSON.stringify({ name: script.name, lines: script.lines, sources: script.sources });
 
         openWindows.set(script.id, {
           script, body, list, nameInput,
           savedSnapshot: () => saved,
+          sourcesValue: () => sources.value,
           markSaved: () => { saved = JSON.stringify({ name: script.name, lines: script.lines }); }
         });
         win.onCleanup(() => openWindows.delete(script.id));
@@ -257,13 +292,48 @@ export const Scripts = (() => {
           const r = runtime(script);
           total.textContent = `${script.lines.length} lines · about ${timecode(r)}`;
           win.setMeta(timecode(r));
-          list.querySelectorAll(".line").forEach((el, i) => {
+          list.querySelectorAll(".line:not(.line--proposed)").forEach((el, i) => {
             el.querySelector(".line-time").textContent = timecode(seconds(script.lines[i].text));
           });
         }
 
+        /**
+         * A line the agent wrote, sitting where it would go.
+         *
+         * Shown in place rather than in a side panel, because the only useful
+         * question about a proposed line is how it reads next to the ones
+         * around it.
+         */
+        function proposalCard(p) {
+          return `
+            <article class="line line--proposed" data-proposal="${p.id}">
+              <div class="line-rail">
+                <span class="line-no mono">${p.mode === "replace" ? "↻" : "+"}</span>
+                <span class="line-time mono">${timecode(seconds(p.text))}</span>
+              </div>
+              <div class="line-main">
+                <p class="line-prop-text">${Desk.esc(p.text)}</p>
+                ${p.note ? `<p class="line-prop-note">${Desk.esc(p.note)}</p>` : ""}
+                ${p.reason ? `<p class="line-prop-why">${Desk.esc(p.reason)}</p>` : ""}
+                <div class="line-prop-acts">
+                  <button class="btn btn-mini btn-accent" data-take="${p.id}">
+                    ${p.mode === "replace" ? "Use this instead" : "Add it"}
+                  </button>
+                  <button class="btn btn-mini btn-danger" data-drop="${p.id}">Discard</button>
+                </div>
+              </div>
+            </article>`;
+        }
+
         function render() {
-          list.innerHTML = script.lines.map((line, i) => `
+          const pending = proposalsFor(script.id);
+          const before = new Map();
+          for (const p of pending) {
+            const key = Math.max(0, Math.min(p.index, script.lines.length));
+            before.set(key, [...(before.get(key) || []), p]);
+          }
+
+          const rows = script.lines.map((line, i) => `
             <article class="line" data-i="${i}">
               <div class="line-rail">
                 <span class="line-no mono">${String(i + 1).padStart(2, "0")}</span>
@@ -280,10 +350,91 @@ export const Scripts = (() => {
                 <button class="line-btn" data-move="1" aria-label="Move line ${i + 1} down">↓</button>
                 <button class="line-btn line-btn--del" data-move="x" aria-label="Delete line ${i + 1}">×</button>
               </div>
-            </article>`).join("")
-            || `<p class="scr-empty">No lines yet. Add the first thing you are going to say.</p>`;
+            </article>`);
+
+          // Interleave: a proposal for index i is drawn just above line i, and
+          // anything aimed past the end lands after the last line.
+          const out = [];
+          for (let i = 0; i < rows.length; i++) {
+            (before.get(i) || []).forEach((p) => out.push(proposalCard(p)));
+            out.push(rows[i]);
+          }
+          for (let i = rows.length; i <= rows.length + 1; i++) {
+            (before.get(i) || []).forEach((p) => out.push(proposalCard(p)));
+          }
+
+          list.innerHTML =
+            out.join("") ||
+            `<p class="scr-empty">No lines yet. Add the first thing you are going to say.</p>`;
           renderTotals();
           autosizeAll();
+          renderDoc();
+        }
+
+        /* ---------------- the text view ---------------- */
+
+        /**
+         * One line of the document is one block.
+         *
+         * That is the whole mapping, and keeping it that strict is what lets
+         * the two views be the same document rather than two formats to
+         * convert between. Shot directions are not in the text: they belong to
+         * a beat, not to a sentence, and folding them in would mean the line
+         * numbers here stopped matching the block numbers there.
+         */
+        function renderDoc() {
+          if (document.activeElement === doc) return;
+          doc.value = script.lines.map((l) => l.text).join("\n");
+          paintGutter();
+        }
+
+        function paintGutter() {
+          const n = Math.max(1, doc.value.split("\n").length);
+          gutter.innerHTML = Array.from({ length: n }, (_, i) => `<span>${i + 1}</span>`).join("");
+          gutter.scrollTop = doc.scrollTop;
+        }
+
+        /** Keep a note with its line when the text moves under it. */
+        function adoptNotes(texts) {
+          const old = script.lines;
+          const spare = new Map();
+          old.forEach((l) => {
+            if (l.note) spare.set(l.text, l.note);
+          });
+          return texts.map((text, i) => ({
+            text,
+            note: old[i]?.text === text ? old[i].note : spare.get(text) ?? old[i]?.note ?? "",
+          }));
+        }
+
+        doc.addEventListener("input", () => {
+          script.lines = adoptNotes(doc.value.split("\n"));
+          paintGutter();
+          renderTotals();
+        });
+        doc.addEventListener("scroll", () => { gutter.scrollTop = doc.scrollTop; });
+        doc.addEventListener("blur", () => {
+          // Blocks are rebuilt from the document, so switching back shows what
+          // was actually typed rather than a stale render.
+          renderBlocks();
+        });
+
+        function renderBlocks() {
+          render();
+        }
+
+        let view = "blocks";
+        function setView(next) {
+          view = next;
+          list.hidden = next !== "blocks";
+          textPane.hidden = next !== "text";
+          body.querySelectorAll(".scr-view").forEach((b) => {
+            const on = b.dataset.view === next;
+            b.classList.toggle("on", on);
+            b.setAttribute("aria-selected", String(on));
+          });
+          if (next === "text") renderDoc();
+          else render();
         }
 
         const autosize = (el) => {
@@ -313,16 +464,50 @@ export const Scripts = (() => {
           render();
         });
 
+        sources.addEventListener("input", () => { script.sources = sources.value; });
+
+        const offProposals = onProposals(() => render());
+        win.onCleanup(() => offProposals());
+
         async function save() {
           script.name = nameInput.value.trim() || "Untitled script";
+          script.sources = sources.value;
           script.updated = Date.now();
           await Store.put("scripts", script);
-          saved = JSON.stringify({ name: script.name, lines: script.lines });
+          saved = JSON.stringify({ name: script.name, lines: script.lines, sources: script.sources });
           Desk.toast(`Saved ${script.name}`, "good");
         }
 
         body.addEventListener("click", async (e) => {
+          const tab = e.target.closest("[data-view]");
+          if (tab) return setView(tab.dataset.view);
+
+          // Accept a line the agent wrote. Only a real click reaches here:
+          // take() refuses anything that is not a trusted user event.
+          const yes = e.target.closest("[data-take]");
+          if (yes) {
+            const p = take(yes.dataset.take, e);
+            if (!p) return;
+            const line = { text: p.text, note: p.note || "" };
+            const at = Math.max(0, Math.min(p.index, script.lines.length));
+            if (p.mode === "replace" && script.lines[at]) script.lines[at] = line;
+            else script.lines.splice(at, 0, line);
+            render();
+            return;
+          }
+          const no = e.target.closest("[data-drop]");
+          if (no) { drop(no.dataset.drop, e); return void render(); }
+
           const act = e.target.closest("[data-act]")?.dataset.act;
+
+          if (act === "research") {
+            const open = research.hidden;
+            research.hidden = !open;
+            body.querySelector('[data-act="research"]').setAttribute("aria-pressed", String(open));
+            if (open) sources.focus();
+            return;
+          }
+
           if (act === "add") {
             script.lines.push({ text: "", note: "" });
             render();
@@ -369,7 +554,7 @@ export const Scripts = (() => {
       title: "Scripts",
       meta: "",
       tint: TINT,
-      size: { w: 520, h: 400 },
+      size: { w: 660, h: 480 },
       origin,
       build(body, win) {
         body.className = "win-body";
@@ -422,10 +607,14 @@ export const Scripts = (() => {
     if (!rec) return null;
     const { script, list, nameInput } = rec;
 
-    const lines = [...list.querySelectorAll(".line")].map((el, i) => ({
+    // Read the document, not one of its two views. Both the block editor and
+    // the text editor write into script.lines as you type, so that array is
+    // always current, and reading the DOM instead meant an edit made in the
+    // view that happened to be hidden was invisible to the agent.
+    const lines = script.lines.map((l, i) => ({
       index: i,
-      text: el.querySelector(".line-text")?.value ?? "",
-      note: el.querySelector(".line-note")?.value || null
+      text: l.text,
+      note: l.note || null
     }));
 
     const active = document.activeElement;
@@ -449,11 +638,16 @@ export const Scripts = (() => {
       id: script.id,
       name: nameInput.value,
       lines,
+      // What they pasted in while researching. The agent writes from this,
+      // which is the difference between drafting and inventing.
+      research: rec.sourcesValue(),
       caret,
       runtime_seconds: runtime(live),
       // Against the store, not against the in-memory record: typing mutates
       // that record, so it is never behind.
-      unsaved: JSON.stringify({ name: nameInput.value, lines: live.lines }) !== rec.savedSnapshot()
+      unsaved:
+        JSON.stringify({ name: nameInput.value, lines: live.lines, sources: rec.sourcesValue() }) !==
+        rec.savedSnapshot()
     };
   }
 

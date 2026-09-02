@@ -615,7 +615,7 @@ export const Editor = (() => {
       title: "Editor",
       meta: "timeline",
       tint: TINT,
-      size: { w: 820, h: 600 },
+      size: { w: 1080, h: 760 },
       origin,
       build
     });

@@ -174,7 +174,7 @@ export const Skills = (() => {
       title: skill.name,
       meta: skill.kind,
       tint: TINT,
-      size: { w: 580, h: 500 },
+      size: { w: 720, h: 640 },
       origin,
       build(body) {
         const article = document.createElement("article");
@@ -203,7 +203,7 @@ export const Skills = (() => {
       title: "Skills",
       meta: `${SKILLS.length} skills`,
       tint: TINT,
-      size: { w: 560, h: 400 },
+      size: { w: 700, h: 480 },
       origin,
       build(body) {
         body.className = "win-body";

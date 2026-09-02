@@ -1,5 +1,6 @@
 import { EASINGS, PALETTE_ROLES, POSITIONS, TYPES, TYPE_INFO } from "../graphics/spec.js";
 import { liveGraphics, proposeChange, proposeGraphic } from "../graphics/store.js";
+import { proposalsFor, proposeLine } from "../scripts/proposals.js";
 import { Camera } from "../legacy/camera.js";
 import { Editor } from "../legacy/editor.js";
 import { Scripts } from "../legacy/scripts-app.js";
@@ -126,6 +127,14 @@ export const getOpenScript = {
         ...open,
         runtime_seconds: round(open.runtime_seconds),
         runtime: timecode(open.runtime_seconds),
+        // Lines you have already written into this draft that they have not
+        // decided on. Do not propose the same thing twice.
+        pending_lines: proposalsFor(open.id).map((p) => ({
+          id: p.id,
+          index: p.index,
+          mode: p.mode,
+          text: p.text,
+        })),
       },
     });
   },
@@ -440,6 +449,99 @@ export const proposeGraphicChange = {
   },
 };
 
+/* ---------------------------------------------------------------- writing */
+
+/**
+ * The agent writes into the draft the person is looking at.
+ *
+ * This is the writing half of the same bargain the graphics tools make. The
+ * line appears exactly where it would go, dashed, between the lines around it,
+ * because the only useful question about a proposed line is how it reads next
+ * to its neighbours. And it is still just sitting there: there is no tool that
+ * accepts one, and the accept path refuses anything that is not a trusted user
+ * event.
+ *
+ * Call get_open_script first. The research field is what they pasted in while
+ * browsing, and writing from it rather than from memory is the difference
+ * between drafting and inventing.
+ */
+export const proposeScriptLine = {
+  name: "propose_script_line",
+  description:
+    "Write a line into the script the person has open: a new beat, or a rewrite of one that is already there. It appears in place as a dashed suggestion between the lines around it, and it is not in their script until they accept it. Call get_open_script first, so you write from their research and their current draft rather than from memory, and so you do not repeat a line already waiting for them. One line per call: a beat is one thing said to camera, not a paragraph.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      text: {
+        type: "string",
+        minLength: 1,
+        maxLength: 320,
+        description: "The words they say out loud. Their voice, not yours, and short enough to say in one breath.",
+      },
+      note: {
+        type: "string",
+        maxLength: 160,
+        description: "Optional shot direction for this beat: camera, b-roll, tone, what is on screen.",
+      },
+      index: {
+        type: "integer",
+        minimum: 0,
+        description:
+          "Which line this concerns, from get_open_script. With mode 'insert' the line lands before this one, so 0 is a new opening and the line count appends at the end.",
+      },
+      mode: {
+        type: "string",
+        enum: ["insert", "replace"],
+        description: "'insert' adds a beat, 'replace' offers a rewrite of the line at index. Default insert.",
+      },
+      reason: {
+        type: "string",
+        maxLength: 200,
+        description: "One sentence shown under the suggestion. Why this line, here.",
+      },
+    },
+    required: ["text", "index"],
+    additionalProperties: false,
+  },
+  execute: (args) => {
+    const open = Scripts.openScriptState();
+    if (!open) {
+      return fail(
+        "No script is open, so there is nothing to write into.",
+        "Call list_scripts, then ask them to open the one they want to work on. You cannot open a script yourself."
+      );
+    }
+
+    const index = Number(args.index);
+    const mode = args.mode === "replace" ? "replace" : "insert";
+    const limit = mode === "replace" ? open.lines.length - 1 : open.lines.length;
+    if (!Number.isInteger(index) || index < 0 || index > Math.max(0, limit)) {
+      return fail(
+        `index ${args.index} is outside this script, which has ${open.lines.length} line(s).`,
+        mode === "replace"
+          ? "To replace, use the index of an existing line from get_open_script."
+          : `To insert, use 0 to ${open.lines.length}, where ${open.lines.length} adds to the end.`
+      );
+    }
+
+    const p = proposeLine({
+      scriptId: open.id,
+      index,
+      mode,
+      text: String(args.text ?? ""),
+      note: args.note,
+      reason: args.reason,
+    });
+
+    return json({
+      ok: true,
+      proposal_id: p.id,
+      staged: true,
+      note: "It is in their draft as a dashed suggestion in the position you gave. Nothing changes in the script until they accept it, and there is no tool that accepts.",
+    });
+  },
+};
+
 export const TOOLS = [
   getDesktopState,
   listScripts,
@@ -454,4 +556,5 @@ export const TOOLS = [
   getGraphics,
   proposeGraphicTool,
   proposeGraphicChange,
+  proposeScriptLine,
 ];
