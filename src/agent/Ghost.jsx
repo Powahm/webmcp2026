@@ -41,6 +41,7 @@ export default function Ghost() {
    * whether they take it or not — an offer that keeps coming back is a nag.
    */
   const [askFolder, setAskFolder] = useState(false);
+  const picker = useRef(null);
   const [asked, setAsked] = useState(false);
   /** The highest call sequence already spoken. Not a count of the log, which
    *  is capped and stops growing. */
@@ -78,6 +79,17 @@ export default function Ghost() {
   }, [s.calls]);
 
   /* --- the one thing it asks for ---------------------------------------- */
+  // Load the folder code as soon as the question is on screen, not when it
+  // is answered, so pressing the button opens the picker synchronously.
+  useEffect(() => {
+    if (!askFolder || picker.current) return;
+    let live = true;
+    import("../folders/import.js").then((m) => {
+      if (live) picker.current = m.pickFolderOntoDesk;
+    });
+    return () => { live = false; };
+  }, [askFolder]);
+
   useEffect(() => {
     if (!here || asked) return;
     const id = setTimeout(() => {
@@ -134,17 +146,18 @@ export default function Ghost() {
               <div className="agent-ask-acts">
                 <button
                   className="btn btn-mini btn-accent"
-                  onClick={async () => {
-                    // The picker has to open from this click, so the import
-                    // module is loaded before anything can await.
-                    const { pickFolderOntoDesk } = await import("../folders/import.js");
+                  onClick={() => {
+                    // The picker must open inside this click. The module is
+                    // fetched when the question appears, so there is nothing
+                    // left to await here: awaiting an import first can spend
+                    // the user activation and the picker never opens.
                     setAskFolder(false);
-                    pickFolderOntoDesk();
+                    picker.current?.();
                   }}
                 >
                   Choose a folder
                 </button>
-                <button className="btn btn-mini" onClick={() => setAskFolder(false)}>
+                <button className="btn btn-mini" data-later onClick={() => setAskFolder(false)}>
                   Not now
                 </button>
               </div>

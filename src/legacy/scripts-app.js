@@ -382,6 +382,7 @@ export const Scripts = (() => {
 
           if (pending.length === 0) {
             suggests.innerHTML = "";
+            suggests.dataset.sig = "";
             doc.style.paddingBottom = "";
             return;
           }
@@ -389,11 +390,26 @@ export const Scripts = (() => {
           const lh = lineHeight();
           const padTop = parseFloat(getComputedStyle(doc).paddingTop) || 0;
           const count = doc.value.split("\n").length;
+          const place = (p) => padTop + Math.max(0, Math.min(p.index, count)) * lh;
+
+          // Only rebuild when the cards themselves changed. Typing in the
+          // draft repaints on every keystroke, and blurring it rebuilds the
+          // blocks; either one replacing these nodes mid-gesture swallows the
+          // click, because the button you pressed is gone before mouseup.
+          const sig = pending.map((p) => `${p.id}:${p.index}:${p.mode}`).join("|") + `@${count}`;
+          if (suggests.dataset.sig === sig) {
+            pending.forEach((p) => {
+              const el = suggests.querySelector(`[data-proposal="${p.id}"]`);
+              if (el) el.style.top = `${place(p)}px`;
+            });
+            return;
+          }
+          suggests.dataset.sig = sig;
 
           suggests.innerHTML = pending
             .map((p) => {
               const at = Math.max(0, Math.min(p.index, count));
-              const top = padTop + at * lh;
+              const top = place(p);
               return `
                 <div class="scr-sugg" data-proposal="${p.id}" style="top:${top}px">
                   <span class="scr-sugg-rail mono">${p.mode === "replace" ? "↻" : "+"}</span>
@@ -441,6 +457,11 @@ export const Scripts = (() => {
           gutter.scrollTop = doc.scrollTop;
           suggests.style.transform = `translateY(${-doc.scrollTop}px)`;
         });
+        // Pressing a suggestion must not pull focus out of the draft: the
+        // blur rebuilds the blocks, and the caret should stay where the writer
+        // left it anyway.
+        suggests.addEventListener("mousedown", (e) => e.preventDefault());
+
         doc.addEventListener("blur", () => {
           // Blocks are rebuilt from the document, so switching back shows what
           // was actually typed rather than a stale render.
