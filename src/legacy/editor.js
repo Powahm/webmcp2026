@@ -485,7 +485,7 @@ export const Editor = (() => {
     refresh();
     if (timeline.length) seekTo(0);
 
-    body._editor = { play, stop, seekTo, runExport, renderLibrary };
+    body._editor = { play, stop, seekTo, runExport, renderLibrary, at: () => playhead };
   }
 
   function open(origin) {
@@ -505,9 +505,29 @@ export const Editor = (() => {
     await addClip(clipId);
   }
 
+  /** The live window body, when the editor is open. */
+  const live = () => document.querySelector('[data-win="editor"] .win-body')?._editor ?? null;
+
   return {
     open, openWith, addClip, TINT, FILTERS,
     get timeline() { return timeline; },
+
+    /**
+     * State the WebMCP layer reads.
+     *
+     * All three exist only in this tab. The timeline is an array in this
+     * closure, the selection is a uid held in a local, and the playhead is a
+     * number a requestAnimationFrame loop is updating right now. No server has
+     * any of it and no scraper can tell a selected segment from an unselected
+     * one, which is the whole reason get_selection is worth a tool.
+     */
+    get selectedUid() { return selected; },
+    get playhead() { return live()?.at() ?? 0; },
+    get totalDuration() { return total(); },
+    isOpen: () => live() !== null,
+    clipFor: (clipId) => byId.get(clipId) ?? null,
+    SPEEDS,
+
     clear() { timeline = []; selected = null; refresh(); },
     setAll(patch) { timeline.forEach((s) => Object.assign(s, patch)); refresh(); },
     trimSelected(inS, outS) {

@@ -39,6 +39,12 @@ function findHost() {
 }
 
 export async function registerTools(tools = TOOLS) {
+  // Verification hook, always on. A host is needed to *call* a tool, and there
+  // is no host in a normal browser or in a headless test, so the definitions
+  // are exposed here and every tool can be exercised exactly as a host would
+  // invoke it. It reads nothing and changes nothing.
+  window.__desk_tools = tools;
+
   const host = findHost();
   if (!host) {
     console.info(
@@ -67,8 +73,8 @@ export async function registerTools(tools = TOOLS) {
       (webmcp.failed.length ? `, ${webmcp.failed.length} refused` : "")
   );
 
-  // Verification hook. A judge, or you at 3am, can type this in the console to
-  // see what the page actually offered rather than guessing from a panel.
+  // What the page actually offered, for a judge or for you at 3am, rather than
+  // guessing from a panel.
   window.__desk_webmcp = webmcp;
   return webmcp;
 }

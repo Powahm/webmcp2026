@@ -145,6 +145,27 @@ log(\`Montage ready: \${clips.length} clips.\`);`
 
   /* ---------------- script editor window ---------------- */
 
+  /**
+   * Script windows that are currently open, newest last.
+   *
+   * The WebMCP layer reads this to answer get_open_script. What it returns
+   * exists nowhere else: which script the writer has in front of them, where
+   * their caret is, and what they have selected in the textarea right now. A
+   * server has the saved file; only this page has the cursor.
+   */
+  const openWindows = new Map();
+
+  /** The script window with focus, or the most recently opened one. */
+  function focusedScript() {
+    if (openWindows.size === 0) return null;
+    const focused = Desk.openWindows().find((w) => w.focused && w.id.startsWith("script:"));
+    if (focused) {
+      const rec = openWindows.get(focused.id.slice("script:".length));
+      if (rec) return rec;
+    }
+    return [...openWindows.values()].pop();
+  }
+
   function openScript(script, origin) {
     Desk.openWindow({
       id: `script:${script.id}`,
@@ -190,6 +211,9 @@ log(\`Montage ready: \${clips.length} clips.\`);`
           const lines = upto.split("\n");
           pos.textContent = `Ln ${lines.length}, Col ${lines[lines.length - 1].length + 1}`;
         }
+
+        openWindows.set(script.id, { script, area, nameInput });
+        win.onCleanup(() => openWindows.delete(script.id));
 
         area.addEventListener("keyup", updatePos);
         area.addEventListener("click", updatePos);
@@ -306,5 +330,43 @@ log(\`Montage ready: \${clips.length} clips.\`);`
     });
   }
 
-  return { open, seed, openScript, newScript, TINT, canRun };
+  /**
+   * Live editor state for the WebMCP layer.
+   *
+   * `beats` is the script split on blank lines. That split is the unit the
+   * teleprompter advances through and the unit a take is indexed against, so it
+   * is defined here, once, rather than in each consumer.
+   */
+  function beatsOf(code) {
+    return String(code)
+      .split(/\n\s*\n/)
+      .map((b) => b.trim())
+      .filter(Boolean);
+  }
+
+  function openScriptState() {
+    const rec = focusedScript();
+    if (!rec) return null;
+    const { script, area, nameInput } = rec;
+    const code = area.value;
+    const caret = area.selectionStart ?? 0;
+    const upto = code.slice(0, caret).split("\n");
+    const selection =
+      area.selectionEnd > area.selectionStart
+        ? { start: area.selectionStart, end: area.selectionEnd, text: code.slice(area.selectionStart, area.selectionEnd) }
+        : null;
+
+    return {
+      id: script.id,
+      name: nameInput.value,
+      code,
+      beats: beatsOf(code),
+      // Uncommitted: what is in the textarea, not what was last saved.
+      unsaved: code !== script.code || nameInput.value !== script.name,
+      caret: { offset: caret, line: upto.length, column: upto[upto.length - 1].length + 1 },
+      selection
+    };
+  }
+
+  return { open, seed, openScript, newScript, openScriptState, beatsOf, TINT, canRun };
 })();

@@ -15,6 +15,17 @@ export const Camera = (() => {
   let withAudio = true;
   const viewers = new Set();
 
+  /**
+   * What the recorder is doing, right now.
+   *
+   * Maintained inside start() rather than in the window UI, so it is true
+   * whether the take was begun by a person pressing the shutter or by a script.
+   * This is the state the WebMCP layer reads: `armed` means a stream is live and
+   * the preview is running, `recording` means a MediaRecorder is collecting.
+   * Elapsed seconds tick from an interval that exists nowhere but this tab.
+   */
+  const recorder = { status: "idle", startedAt: 0, elapsed: 0 };
+
   function pickMime() {
     const options = [
       "video/webm;codecs=vp9,opus",
@@ -48,30 +59,44 @@ export const Camera = (() => {
       audio: withAudio
     });
     viewers.forEach((fn) => fn(stream));
+    if (recorder.status === "idle") recorder.status = "armed";
     return stream;
   }
 
   function release() {
     stream?.getTracks().forEach((t) => t.stop());
     stream = null;
+    if (recorder.status === "armed") recorder.status = "idle";
   }
 
   /* record for a fixed number of seconds, or until stop() is called */
   async function start({ onTick } = {}) {
     const live = await acquire();
     const mimeType = pickMime();
-    const recorder = new MediaRecorder(live, mimeType ? { mimeType } : undefined);
+    const rec = new MediaRecorder(live, mimeType ? { mimeType } : undefined);
     const chunks = [];
     const startedAt = Date.now();
 
-    recorder.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+    rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
 
-    const timer = onTick && setInterval(() => onTick((Date.now() - startedAt) / 1000), 200);
-    recorder.start(250);
+    recorder.status = "recording";
+    recorder.startedAt = startedAt;
+    recorder.elapsed = 0;
+
+    // One interval, whether or not the caller wanted ticks: the module's own
+    // elapsed counter has to be right for a script-driven take too.
+    const timer = setInterval(() => {
+      recorder.elapsed = (Date.now() - startedAt) / 1000;
+      onTick?.(recorder.elapsed);
+    }, 200);
+
+    rec.start(250);
 
     const finished = new Promise((resolve) => {
-      recorder.onstop = async () => {
+      rec.onstop = async () => {
         clearInterval(timer);
+        recorder.status = stream?.active ? "armed" : "idle";
+        recorder.elapsed = (Date.now() - startedAt) / 1000;
         const blob = new Blob(chunks, { type: mimeType || "video/webm" });
         const stamp = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
         resolve(await Clips.save(blob, { name: `Recording ${stamp}`, kind: "recording" }));
@@ -79,7 +104,7 @@ export const Camera = (() => {
     });
 
     return {
-      stop: () => recorder.state !== "inactive" && recorder.stop(),
+      stop: () => rec.state !== "inactive" && rec.stop(),
       finished
     };
   }
@@ -240,5 +265,16 @@ export const Camera = (() => {
     });
   }
 
-  return { open, recordFor, start, acquire, release, TINT, describeError };
+  /** Live recorder state for the WebMCP layer. */
+  function state() {
+    return {
+      status: recorder.status,
+      elapsed: recorder.status === "recording" ? (Date.now() - recorder.startedAt) / 1000 : recorder.elapsed,
+      audio: withAudio,
+      deviceId: deviceId || null,
+      windowOpen: Desk.isOpen("camera")
+    };
+  }
+
+  return { open, recordFor, start, acquire, release, state, TINT, describeError };
 })();
