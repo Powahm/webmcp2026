@@ -9,6 +9,7 @@ const Camera = (() => {
   let stream = null;
   let deviceId = null;
   let withAudio = true;
+  let gotAudio = false;
   const viewers = new Set();
 
   function pickMime() {
@@ -21,30 +22,54 @@ const Camera = (() => {
     return options.find((t) => window.MediaRecorder?.isTypeSupported?.(t)) || "";
   }
 
+  const framed = () => { try { return window.self !== window.top; } catch { return true; } };
+
   function describeError(err) {
     const name = err?.name || "";
-    if (name === "NotAllowedError" || name === "SecurityError")
-      return "Camera access was blocked. Allow it in your browser, or use Import video below.";
+    if (name === "NotAllowedError" || name === "SecurityError") {
+      return framed()
+        ? "This preview frame blocked the camera. Open the deployed site to record, or use Import video."
+        : "Camera access was blocked. Allow it in your browser's address bar, then press Try again.";
+    }
     if (name === "NotFoundError" || name === "OverconstrainedError")
       return "No camera found on this device. Import video works without one.";
     if (name === "NotReadableError")
       return "The camera is already in use by another app.";
-    if (!navigator.mediaDevices?.getUserMedia)
-      return "This browser or frame does not expose camera access.";
+    if (name === "UnsupportedError" || !navigator.mediaDevices?.getUserMedia) {
+      return framed()
+        ? "This preview frame does not allow camera access. Open the deployed site to record, or use Import video."
+        : "Camera access needs a secure page — https or localhost. Import video works anywhere.";
+    }
     return err?.message || "The camera could not be started.";
   }
 
   async function acquire() {
     if (stream && stream.active) return stream;
     if (!navigator.mediaDevices?.getUserMedia) {
-      throw new Error("This browser or frame does not expose camera access.");
+      throw Object.assign(new Error("no camera API in this context"), { name: "UnsupportedError" });
     }
-    stream = await navigator.mediaDevices.getUserMedia({
-      video: deviceId ? { deviceId: { exact: deviceId } } : { facingMode: "user" },
-      audio: withAudio
-    });
-    viewers.forEach((fn) => fn(stream));
-    return stream;
+
+    const video = deviceId ? { deviceId: { exact: deviceId } } : { facingMode: "user" };
+    const ladder = [
+      { video, audio: withAudio },
+      { video, audio: false },
+      { video: true, audio: false }
+    ];
+
+    let last;
+    for (const constraints of ladder) {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+        gotAudio = stream.getAudioTracks().length > 0;
+        viewers.forEach((fn) => fn(stream));
+        return stream;
+      } catch (err) {
+        last = err;
+        /* a refusal is final; a missing device or a bad constraint is worth retrying */
+        if (err.name === "NotAllowedError" || err.name === "SecurityError") break;
+      }
+    }
+    throw last;
   }
 
   function release() {
@@ -130,6 +155,9 @@ const Camera = (() => {
         video.srcObject = live;
         await video.play().catch(() => {});
         shutter.disabled = false;
+        /* the ladder may have dropped audio to get a picture at all */
+        micBtn.textContent = gotAudio ? "Mic on" : withAudio ? "No mic" : "Mic off";
+        micBtn.setAttribute("aria-pressed", String(gotAudio));
         await listDevices();
       } catch (err) {
         shutter.disabled = true;

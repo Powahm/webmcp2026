@@ -23,6 +23,8 @@
   --teal-dk:     #1F7E94;
   --blue:        #1D4AFF;
   --purple:      #B62AD9;
+  --green:       #29963F;
+  --green-dk:    #1C6B2C;
 
   --radius:   10px;
   --radius-s: 6px;
@@ -57,6 +59,8 @@
     --teal-dk:     #1E7186;
     --blue:        #6D8BFF;
     --purple:      #C95FE0;
+    --green:       #4CC062;
+    --green-dk:    #2A7A3A;
   }
 }
 
@@ -79,6 +83,8 @@
   --teal-dk:     #1E7186;
   --blue:        #6D8BFF;
   --purple:      #C95FE0;
+  --green:       #4CC062;
+  --green-dk:    #2A7A3A;
 }
 
 * { box-sizing: border-box; }
@@ -1317,3 +1323,172 @@ body {
 }
 
 .file-art--new::after { display: none; }
+
+/* an author display rule outranks the UA [hidden] rule, so these need saying */
+.cam-blocked[hidden], .cam-rec[hidden], .prompter[hidden], .cam-hint[hidden] { display: none; }
+
+/* ============================================================
+   Script editor — spoken lines, not code
+   ============================================================ */
+
+.scr-lines { flex: 1; min-height: 0; overflow-y: auto; padding: 12px; display: grid; gap: 9px; align-content: start; }
+
+.line {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) 26px;
+  gap: 10px;
+  padding: 10px 11px;
+  background: var(--surface-2);
+  border: var(--bw) solid var(--line);
+  border-radius: var(--radius-s);
+}
+
+.line-rail { display: grid; gap: 2px; align-content: start; }
+.line-no { font-size: 12px; font-weight: 500; color: var(--text); }
+.line-time { font-size: 10.5px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
+.line-main { display: grid; gap: 6px; min-width: 0; }
+
+.line-text {
+  width: 100%;
+  padding: 6px 8px;
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--text);
+  background: var(--surface);
+  border: var(--bw) solid var(--line);
+  border-radius: 5px;
+  resize: none;
+  overflow: hidden;
+}
+
+.line-note {
+  width: 100%;
+  padding: 4px 8px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-muted);
+  background: none;
+  border: 1.5px dashed var(--line);
+  border-radius: 5px;
+}
+.line-note::placeholder, .line-text::placeholder { color: var(--text-muted); opacity: .7; }
+
+.line-acts { display: grid; gap: 3px; align-content: start; }
+.line-btn {
+  width: 22px; height: 20px;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--text);
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.line-btn:hover { background: var(--accent-soft); }
+.line-btn--del { color: var(--accent); }
+
+.scr-foot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  background: var(--surface-2);
+  border-top: var(--bw) solid var(--line);
+}
+.scr-total { margin-left: auto; font-size: 11.5px; color: var(--text-muted); }
+.scr-empty { padding: 22px; text-align: center; font-size: 13.5px; color: var(--text-muted); }
+
+.file-art--script::after {
+  top: 14px; left: 8px; right: 14px;
+  box-shadow: 0 8px 0 -1px var(--text-muted), 0 16px 0 var(--text-muted), 0 24px 0 -1px var(--text-muted);
+}
+
+.file-art--skill { background: var(--surface); }
+.file-art--skill::after {
+  top: 18px; left: 10px; right: 10px;
+  height: 3px;
+  background: var(--green);
+  box-shadow: 0 9px 0 var(--green), 0 18px 0 var(--green);
+  opacity: .85;
+}
+.file-art--skill[data-kind="style"]::after { background: var(--purple); box-shadow: 0 9px 0 var(--purple), 0 18px 0 var(--purple); }
+.file-art--skill[data-kind="cut"]::after { background: var(--accent); box-shadow: 0 9px 0 var(--accent), 0 18px 0 var(--accent); }
+
+.skill-apply { margin-top: 24px; }
+
+/* ============================================================
+   Teleprompter
+   ============================================================ */
+
+.prompter { position: fixed; inset: 0; z-index: 700; }
+
+.prompter-scrim { position: absolute; inset: 0; background: rgba(10, 12, 17, .82); backdrop-filter: blur(3px); }
+
+.prompter-panel {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: min(860px, 92vw);
+  height: min(76vh, 640px);
+  margin: 8vh auto 0;
+  background: var(--surface);
+  border: var(--bw) solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 8px 8px 0 var(--shadow);
+  overflow: hidden;
+  animation: pop .26s var(--ease-spring) both;
+}
+
+.prompter-head, .prompter-foot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 14px;
+  background: var(--surface-2);
+}
+.prompter-head { border-bottom: var(--bw) solid var(--line); }
+.prompter-foot { border-top: var(--bw) solid var(--line); justify-content: center; }
+
+.prompter-title {
+  margin-right: auto;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 15px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.prompter-speed { min-width: 44px; text-align: center; font-size: 12.5px; color: var(--text-muted); }
+
+.prompter-scroll {
+  position: relative;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 20vh 8% 28vh;
+  scroll-behavior: auto;
+}
+
+.prompter-line {
+  margin: 0 0 30px;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: clamp(24px, 3.4vw, 38px);
+  line-height: 1.34;
+  text-wrap: balance;
+  color: var(--text-muted);
+  opacity: .42;
+  transition: opacity .25s var(--ease-out), color .25s var(--ease-out);
+}
+.prompter-line[data-now="true"] { color: var(--text); opacity: 1; }
+
+@media (max-width: 760px) {
+  .prompter-panel { width: 100%; height: 100%; margin: 0; border-radius: 0; border: none; }
+  .line { grid-template-columns: 40px minmax(0, 1fr) 24px; }
+}

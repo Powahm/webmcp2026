@@ -51,12 +51,33 @@
 
 <div class="toaster" id="toaster" aria-live="polite"></div>
 
+<div class="prompter" id="prompter" hidden>
+  <div class="prompter-scrim" data-close-prompter></div>
+  <div class="prompter-panel" role="dialog" aria-modal="true" aria-label="Teleprompter">
+    <header class="prompter-head">
+      <span class="prompter-title"></span>
+      <button class="btn btn-mini" data-act="prompt-camera">Open Camera</button>
+      <button class="btn btn-mini" data-act="prompt-close" aria-label="Close teleprompter">Esc</button>
+    </header>
+    <div class="prompter-scroll"></div>
+    <footer class="prompter-foot">
+      <button class="btn btn-mini" data-act="prompt-slower" aria-label="Slower">−</button>
+      <span class="prompter-speed mono">1.0×</span>
+      <button class="btn btn-mini" data-act="prompt-faster" aria-label="Faster">+</button>
+      <button class="btn btn-play" data-act="prompt-play" data-playing="true" aria-label="Pause">
+        <svg class="ico-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9-5.5z"/></svg>
+        <svg class="ico-pause" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 2.5h3v11h-3zM8.5 2.5h3v11h-3z"/></svg>
+      </button>
+    </footer>
+  </div>
+</div>
+
 <div class="spotlight" id="spotlight" hidden>
   <div class="spotlight-scrim" data-close-spotlight></div>
   <div class="spotlight-panel" role="dialog" aria-modal="true" aria-label="Search">
     <div class="spotlight-field">
       <svg class="spotlight-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 5 5"/></svg>
-      <input id="spotlight-input" type="text" placeholder="Search docs, scripts and clips…" autocomplete="off" spellcheck="false" aria-controls="spotlight-results">
+      <input id="spotlight-input" type="text" placeholder="Search docs, skills, scripts and clips…" autocomplete="off" spellcheck="false" aria-controls="spotlight-results">
       <kbd class="mono">esc</kbd>
     </div>
     <ul class="spotlight-results" id="spotlight-results" role="listbox" aria-label="Results"></ul>
@@ -68,6 +89,7 @@
 <script src="camera.js"></script>
 <script src="editor.js"></script>
 <script src="scripts-app.js"></script>
+<script src="skills.js"></script>
 <script src="main.js"></script>
 </body>
 </html>
