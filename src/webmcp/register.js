@@ -20,6 +20,7 @@
  * they exist.
  */
 
+import { setHost, instrument } from "./status.js";
 import { TOOLS } from "./tools.js";
 
 export const webmcp = {
@@ -43,10 +44,11 @@ export async function registerTools(tools = TOOLS) {
   // is no host in a normal browser or in a headless test, so the definitions
   // are exposed here and every tool can be exercised exactly as a host would
   // invoke it. It reads nothing and changes nothing.
-  window.__desk_tools = tools;
+  window.__desk_tools = tools.map(instrument);
 
   const host = findHost();
   if (!host) {
+    setHost("none", [], []);
     console.info(
       "[desk-two] No WebMCP host on this page, running as an ordinary web app. " +
         "Open it in ChatGPT's browser, or in Chrome 149+ with " +
@@ -59,7 +61,9 @@ export async function registerTools(tools = TOOLS) {
 
   for (const tool of tools) {
     try {
-      await host.mc.registerTool(tool);
+      // Instrumented on the way in, so every call a host makes is counted
+      // whether it lands on a read tool or a write one.
+      await host.mc.registerTool(instrument(tool));
       webmcp.registered.push(tool.name);
     } catch (err) {
       // One bad schema must not take the rest of the surface down with it.
@@ -72,6 +76,8 @@ export async function registerTools(tools = TOOLS) {
     `[desk-two] ${webmcp.registered.length} site tool(s) registered on ${host.where}` +
       (webmcp.failed.length ? `, ${webmcp.failed.length} refused` : "")
   );
+
+  setHost(host.where, webmcp.registered, webmcp.failed);
 
   // What the page actually offered, for a judge or for you at 3am, rather than
   // guessing from a panel.

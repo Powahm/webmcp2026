@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import StatusBadge from "./webmcp/StatusBadge.jsx";
 
 /**
  * The desktop chrome.
@@ -50,6 +51,7 @@ export default function App() {
         </div>
 
         <div className="menubar-right">
+          <StatusBadge />
           <button className="chip" id="spotlight-open" aria-keyshortcuts="Meta+K Control+K">
             <span>Search</span>
             <kbd className="mono">⌘K</kbd>
