@@ -12,6 +12,37 @@ import {
 import { Desk } from "./shell.js";
 import { Camera } from "./camera.js";
 
+/* The composition engine: the frame-accurate graphics layer over the cut, the
+   transcript derived from the teleprompter, and cuts staged against the edit.
+   The timeline, the trims and the six looks below are untouched by all of it —
+   the composition sits on top of the cut and never owns the footage. */
+import { createMixer, createScheduler, speechRanges } from "../comp/audio.js";
+import { generate } from "../comp/codegen.js";
+import { SFX_PRESETS } from "../comp/composition.js";
+import { formatOf, toSeconds } from "../comp/engine.js";
+import { renderComposition } from "../comp/render.js";
+import {
+  acceptAudio,
+  acceptedLayers,
+  acceptFormat,
+  acceptLayer,
+  composition,
+  liveAudio,
+  liveLayers,
+  onComposition,
+  pendingCount,
+  rejectAudio,
+  rejectFormat,
+  rejectLayer,
+  removeAudio,
+  removeLayer,
+  setFormat,
+} from "../comp/store.js";
+import { applyCut, onCuts, pendingCuts, proposeCut, rejectCut, settle } from "../cuts/store.js";
+import { FILLERS, findDeadWeight, toCutTime } from "../transcript/transcript.js";
+import { hasApiKey, onTranscripts, setApiKey, transcriptsFor } from "../transcript/store.js";
+import { transcribe } from "../transcript/whisper.js";
+
 /* ============================================================
    Editor — a timeline of trimmed clips with per-clip grading.
    Export replays the timeline into a canvas and records the
@@ -107,8 +138,23 @@ export const Editor = (() => {
       <aside class="ed-insp"></aside>
 
       <div class="ed-timeline">
-        <div class="ed-head"><span>Timeline</span><button class="btn btn-mini" data-act="clear">Clear</button></div>
-        <div class="ed-track"></div>
+        <div class="ed-head">
+          <!-- One pane, three views of the same cut. The transcript and the
+               code are both full-width things, which is why they live down
+               here beside the track rather than in the 196px inspector. -->
+          <div class="cmp-tabs" role="tablist" aria-label="Timeline views">
+            <button class="cmp-tab" role="tab" data-tab="track" aria-selected="true">Timeline</button>
+            <button class="cmp-tab" role="tab" data-tab="words" aria-selected="false">Transcript</button>
+            <button class="cmp-tab" role="tab" data-tab="code" aria-selected="false">Code</button>
+          </div>
+          <button class="btn btn-mini" data-act="clear">Clear</button>
+        </div>
+        <div class="cmp-pane" data-pane="track">
+          <div class="ed-track"></div>
+          <div class="cut-strip"></div>
+        </div>
+        <div class="cmp-pane" data-pane="words" hidden></div>
+        <div class="cmp-pane" data-pane="code" hidden></div>
       </div>
 
       <div class="ed-export" hidden>
@@ -133,11 +179,30 @@ export const Editor = (() => {
     const playBtn = body.querySelector('[data-act="play"]');
     const fileInput = body.querySelector('[data-act="file"]');
     const exportPane = body.querySelector(".ed-export");
+    const cutStrip = body.querySelector(".cut-strip");
+    const panes = {
+      track: body.querySelector('[data-pane="track"]'),
+      words: body.querySelector('[data-pane="words"]'),
+      code: body.querySelector('[data-pane="code"]'),
+    };
 
     let playing = false;
     let playhead = 0;
     let loaded = null;
     let raf = 0;
+    let tab = "track";
+
+    /* The cut-level transcript, rebuilt whenever the timeline changes.
+       It has to be: every trim and reorder moves every word after it, and a
+       stale transcript would place a caption confidently in the wrong place. */
+    let transcript = null;
+    let transcribing = false;
+
+    async function rebuildTranscript() {
+      if (!timeline.length) { transcript = null; return; }
+      const map = await transcriptsFor(timeline.map((s) => s.clipId));
+      transcript = map.size ? toCutTime(timeline, map) : null;
+    }
 
     /* ---- rendering ---- */
 
@@ -220,12 +285,110 @@ export const Editor = (() => {
         <ul class="gfx-list">${[...pending, ...live].map(card).join("")}</ul>`;
     }
 
+    /**
+     * The composition section: format, then layers, then sound.
+     *
+     * Proposals sort above accepted work in both lists, because a proposal is
+     * the thing asking for a decision. Each carries the reason the agent gave
+     * and clicking one moves the playhead into it, so judging a graphic means
+     * looking at it rather than imagining it.
+     */
+    function compositionHtml() {
+      const doc = composition();
+      const layers = liveLayers();
+      const sounds = liveAudio();
+      const pending = pendingCount();
+
+      const formats = ["landscape", "vertical", "square"].map((name) => {
+        const f = formatOf(name);
+        // The glyph is the aspect ratio itself, scaled to fit a 20px box.
+        const w = f.width >= f.height ? 20 : Math.round((f.width / f.height) * 20);
+        const h = f.height >= f.width ? 20 : Math.round((f.height / f.width) * 20);
+        return `
+          <button class="cmp-format" data-format="${name}" aria-pressed="${doc.format === name}"
+                  style="--fw:${w}px; --fh:${h}px" title="${Desk.esc(name)}">
+            <span class="cmp-format-box" aria-hidden="true"></span>
+            <span>${f.label}</span>
+          </button>`;
+      }).join("");
+
+      const reframe = doc.pendingFormat
+        ? `<div class="cmp-reframe">
+             <p><b>Reframe to ${formatOf(doc.pendingFormat.format).label}?</b></p>
+             ${doc.pendingFormat.reason ? `<p class="cmp-reframe-why">${Desk.esc(doc.pendingFormat.reason)}</p>` : ""}
+             <div class="cmp-item-acts">
+               <button class="btn btn-mini btn-accent" data-fmt-accept="1">Accept</button>
+               <button class="btn btn-mini btn-danger" data-fmt-reject="1">Reject</button>
+             </div>
+           </div>`
+        : "";
+
+      const layerCard = (l) => {
+        const label = l.component.replace(/_/g, " ");
+        const words = l.props?.text || l.props?.items?.[0] || l.props?.subtext || "—";
+        return `
+          <li class="cmp-item ${l.status}" data-layer="${l.id}">
+            <div class="cmp-item-head">
+              <span class="cmp-item-kind">${Desk.esc(label)}</span>
+              <span class="cmp-item-at">${timecode(toSeconds(l.from, doc.fps))} · ${l.durationInFrames}f</span>
+            </div>
+            <p class="cmp-item-text">${Desk.esc(String(words))}</p>
+            ${l.reason ? `<p class="cmp-item-why">${Desk.esc(l.reason)}</p>` : ""}
+            <div class="cmp-item-acts">
+              ${l.status === "proposed"
+                ? `<button class="btn btn-mini btn-accent" data-layer-accept="${l.id}">Accept</button>
+                   <button class="btn btn-mini btn-danger" data-layer-reject="${l.id}">Reject</button>`
+                : `<button class="btn btn-mini btn-danger" data-layer-remove="${l.id}">Remove</button>`}
+            </div>
+          </li>`;
+      };
+
+      const soundCard = (a) => {
+        const what = a.kind === "sfx"
+          ? `${a.preset} — ${SFX_PRESETS[a.preset]?.blurb ?? ""}`
+          : `music bed${a.duck ? ", ducked under speech" : ""}`;
+        return `
+          <li class="cmp-item ${a.status}" data-sound="${a.id}">
+            <div class="cmp-item-head">
+              <span class="cmp-item-kind">${a.kind === "sfx" ? "sound" : "music"}</span>
+              <span class="cmp-item-at">${timecode(toSeconds(a.from, doc.fps))} · ${Math.round(a.gain * 100)}%</span>
+            </div>
+            <p class="cmp-item-text">${Desk.esc(what)}</p>
+            ${a.reason ? `<p class="cmp-item-why">${Desk.esc(a.reason)}</p>` : ""}
+            <div class="cmp-item-acts">
+              ${a.status === "proposed"
+                ? `<button class="btn btn-mini btn-accent" data-sound-accept="${a.id}">Accept</button>
+                   <button class="btn btn-mini btn-danger" data-sound-reject="${a.id}">Reject</button>`
+                : `<button class="btn btn-mini" data-sound-play="${a.id}">Play</button>
+                   <button class="btn btn-mini btn-danger" data-sound-remove="${a.id}">Remove</button>`}
+            </div>
+          </li>`;
+      };
+
+      const byPending = (a, b) =>
+        (a.status === "proposed" ? 0 : 1) - (b.status === "proposed" ? 0 : 1) || a.from - b.from;
+
+      return `
+        <div class="ed-head">
+          <span>Composition</span>
+          ${pending ? `<span class="gfx-count">${pending} to judge</span>` : ""}
+        </div>
+        <div class="cmp-formats">${formats}</div>
+        ${reframe}
+        ${layers.length
+          ? `<ul class="cmp-list">${[...layers].sort(byPending).map(layerCard).join("")}</ul>`
+          : `<p class="cmp-empty">No graphics yet. Ask the agent for a title card over the opening, or a list where you say "three things".</p>`}
+        ${sounds.length
+          ? `<ul class="cmp-list">${[...sounds].sort(byPending).map(soundCard).join("")}</ul>`
+          : ""}`;
+    }
+
     function renderInspector() {
       const seg = timeline.find((s) => s.uid === selected);
       if (!seg) {
         insp.innerHTML =
           `<div class="ed-head"><span>Clip</span></div><p class="insp-empty">Select a clip on the timeline.</p>` +
-          graphicsHtml();
+          graphicsHtml() + compositionHtml();
         return;
       }
       const clip = byId.get(seg.clipId);
@@ -265,7 +428,7 @@ export const Editor = (() => {
             <button class="btn btn-mini" data-move="1" aria-label="Move later">→</button>
             <button class="btn btn-mini btn-danger" data-move="x" aria-label="Remove from timeline">Remove</button>
           </div>
-        </div>` + graphicsHtml();
+        </div>` + graphicsHtml() + compositionHtml();
     }
 
     function renderClock() {
@@ -274,7 +437,138 @@ export const Editor = (() => {
       scrub.value = dur ? String(Math.round((playhead / dur) * 1000)) : "0";
     }
 
-    refresh = () => { renderTrack(); renderInspector(); renderClock(); };
+    /** Staged cuts, under the track. Each says what it takes out and why. */
+    function renderCuts() {
+      const cuts = pendingCuts();
+      cutStrip.innerHTML = cuts.length
+        ? cuts.map((c) => `
+            <span class="cut-chip" data-cut="${c.id}">
+              <b>−${(c.end - c.start).toFixed(2)}s</b>
+              <span>${timecode(c.start)}</span>
+              <span class="cut-chip-why">${Desk.esc(c.text || c.reason || "")}</span>
+              <button class="btn btn-mini btn-accent" data-cut-accept="${c.id}">Cut</button>
+              <button class="btn btn-mini btn-danger" data-cut-reject="${c.id}">Keep</button>
+            </span>`).join("")
+        : "";
+    }
+
+    /**
+     * The transcript, as buttons.
+     *
+     * Every word moves the playhead to the moment it was said, which is what
+     * turns a wall of text into a way of navigating the take. Fillers are
+     * struck through and gaps are called out inline, so what the agent would
+     * offer to cut is already visible before it offers.
+     */
+    /**
+     * Follow the playhead through the transcript without rebuilding it.
+     *
+     * The pane holds a text input for the API key and can be scrolled, so
+     * re-rendering it on every frame would throw away the caret and the scroll
+     * position thirty times a second. Only the one word that changed gets
+     * touched, and only when it actually changes.
+     */
+    let nowWord = -1;
+    function highlightWord() {
+      if (tab !== "words" || !transcript?.words?.length) return;
+      const i = transcript.words.findIndex((w) => playhead >= w.start && playhead < w.end);
+      if (i === nowWord) return;
+      nowWord = i;
+      const buttons = panes.words.querySelectorAll(".trx-word");
+      buttons.forEach((b, k) => b.classList.toggle("now", k === i));
+    }
+
+    function renderWords() {
+      if (tab !== "words") return;
+      nowWord = -1;
+
+      if (!transcript?.words?.length) {
+        panes.words.innerHTML = `
+          <div class="trx">
+            <p class="cmp-empty">${
+              !timeline.length
+                ? "Nothing on the timeline yet. Add a clip, and if it was recorded with the teleprompter its transcript is already waiting."
+                : "These clips were not recorded against a script, so there are no prompter timings to derive. Load a script into the Camera before recording and the transcript comes for free — or paste an OpenAI key below to transcribe with Whisper."
+            }</p>
+            ${timeline.length ? whisperHtml() : ""}
+          </div>`;
+        return;
+      }
+
+      const words = transcript.words.map((w, i) => {
+        const next = transcript.words[i + 1];
+        const gap = next ? next.start - w.end : 0;
+        const now = playhead >= w.start && playhead < w.end;
+        const classes = ["trx-word", now ? "now" : "", FILLERS.has(w.n) ? "filler" : ""]
+          .filter(Boolean).join(" ");
+        return `<button class="${classes}" data-at="${w.start.toFixed(3)}">${Desk.esc(w.w)}</button>` +
+          (gap >= 1.1 ? `<span class="trx-gap">⟨${gap.toFixed(1)}s⟩</span>` : "");
+      }).join(" ");
+
+      panes.words.innerHTML = `
+        <div class="trx">
+          <div class="trx-meta">
+            <span class="trx-tag${transcript.approximate ? " approx" : ""}">${
+              transcript.source === "whisper" ? "whisper · measured" : "teleprompter · estimated"
+            }</span>
+            <span>${transcript.words.length} words</span>
+            <span>${timecode(transcript.cut_seconds)}</span>
+            <button class="btn btn-mini" data-act="tidy">Find fillers and gaps</button>
+          </div>
+          <p class="trx-words">${words}</p>
+          ${whisperHtml()}
+        </div>`;
+    }
+
+    /** The Whisper upgrade. The key is the user's and stays in this browser. */
+    function whisperHtml() {
+      const seg = timeline.find((s) => s.uid === selected) ?? timeline[0];
+      const clip = seg ? byId.get(seg.clipId) : null;
+      return `
+        <div class="trx-key">
+          <input type="password" data-act="key" placeholder="${
+            hasApiKey() ? "OpenAI key saved in this browser" : "sk-… paste an OpenAI key to use Whisper"
+          }" autocomplete="off" spellcheck="false" aria-label="OpenAI API key">
+          <button class="btn btn-mini" data-act="save-key">Save</button>
+          <button class="btn btn-mini btn-accent" data-act="transcribe" ${
+            hasApiKey() && clip && !transcribing ? "" : "disabled"
+          }>${transcribing ? "Transcribing…" : `Transcribe ${clip ? Desk.esc(clip.name) : "clip"}`}</button>
+        </div>
+        <p class="trx-note">Kept in this browser's localStorage and sent only to api.openai.com. The teleprompter transcript needs no key and works offline.</p>`;
+    }
+
+    /** The composition, printed as the TSX it compiles to. */
+    function renderCode() {
+      if (tab !== "code") return;
+      const code = generate(composition(), { cutSeconds: total() });
+      panes.code.innerHTML = `
+        <div class="tsx-view">
+          <div class="tsx-bar">
+            <span>Cut.tsx · generated from the composition · ${composition().fps}fps</span>
+            <button class="btn btn-mini" data-act="copy-code">Copy</button>
+          </div>
+          <pre class="tsx-code"><code>${Desk.esc(code)}</code></pre>
+        </div>`;
+    }
+
+    function showTab(next) {
+      tab = next;
+      for (const [name, pane] of Object.entries(panes)) pane.hidden = name !== next;
+      body.querySelectorAll(".cmp-tab").forEach((t) => {
+        t.setAttribute("aria-selected", String(t.dataset.tab === next));
+      });
+      renderWords();
+      renderCode();
+    }
+
+    refresh = () => {
+      renderTrack();
+      renderInspector();
+      renderClock();
+      renderCuts();
+      renderWords();
+      renderCode();
+    };
 
     /* ---- playback ---- */
 
@@ -301,7 +595,12 @@ export const Editor = (() => {
       const target = at.seg.in + at.offset * at.seg.speed;
       if (Math.abs(video.currentTime - target) > 0.12) video.currentTime = target;
       if (play) await video.play().catch(() => {});
+      // Moving the playhead is not playing through it, so nothing fires. An
+      // effect that retriggered every time you scrubbed over it would make the
+      // preview unusable.
+      scheduler?.seek(playhead);
       renderClock();
+      highlightWord();
     }
 
     function loop() {
@@ -317,7 +616,10 @@ export const Editor = (() => {
           else return stop();
         }
       }
+      // Fire any accepted effect the playhead just crossed.
+      scheduler?.tick(playhead, liveAudio());
       renderClock();
+      highlightWord();
       raf = requestAnimationFrame(loop);
     }
 
@@ -327,7 +629,9 @@ export const Editor = (() => {
       playing = true;
       playBtn.dataset.playing = "true";
       playBtn.setAttribute("aria-label", "Pause");
+      if (hasSound()) ensureMixer();
       await seekTo(playhead, { play: true });
+      if (hasSound()) startBeds();
       raf = requestAnimationFrame(loop);
     }
 
@@ -337,6 +641,7 @@ export const Editor = (() => {
       playBtn.setAttribute("aria-label", "Play");
       cancelAnimationFrame(raf);
       video.pause();
+      stopBeds();
       renderClock();
     }
 
@@ -387,9 +692,12 @@ export const Editor = (() => {
       const title = exportPane.querySelector(".ed-export-title");
       const duration = total();
 
+      if (hasSound()) ensureMixer();
       recorder.start(250);
       playhead = 0;
       await seekTo(0, { play: true });
+      scheduler?.reset();
+      if (hasSound()) await startBeds();
 
       await new Promise((resolve) => {
         const paint = () => {
@@ -402,12 +710,25 @@ export const Editor = (() => {
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
           } catch { /* frame not ready */ }
 
-          // The same function the preview calls, on the frame being written.
-          // Proposals are excluded: only what the analyst accepted is in the
+          // The same functions the preview calls, on the frame being written.
+          // Proposals are excluded: only what the editor accepted is in the
           // file, and the look never has to be reconciled between two
           // renderers because there is only one.
           ctx.filter = "none";
           drawGraphics(ctx, canvas.width, canvas.height, playhead, acceptedGraphics(), { showProposed: false });
+          renderComposition(ctx, {
+            width: canvas.width,
+            height: canvas.height,
+            frame: Math.round(playhead * composition().fps),
+            layers: acceptedLayers(),
+            format: composition().format,
+            fps: composition().fps,
+            showProposed: false,
+          });
+
+          // Effects fire into the same graph the recorder is capturing, so
+          // what you heard in the preview is what is in the file.
+          scheduler?.tick(playhead, liveAudio());
 
           const local = Math.max(0, (video.currentTime - at.seg.in) / at.seg.speed);
           playhead = at.start + local;
@@ -425,6 +746,7 @@ export const Editor = (() => {
       });
 
       video.pause();
+      stopBeds();
       recorder.stop();
 
       const blob = await new Promise((resolve) => {
@@ -438,6 +760,149 @@ export const Editor = (() => {
       Desk.toast("Export saved to your library.", "good");
       offerDownload(clip);
       return clip;
+    }
+
+    /* ---- sound ---- */
+
+    /**
+     * One mixer, fanning out to the speakers and to the export stream.
+     *
+     * Built on the same AudioContext the export already makes to get the
+     * video's own audio into the file, so an accepted effect is audible in the
+     * preview and present in the export without a second graph or a second
+     * decision about routing.
+     */
+    let mixer = null;
+    let scheduler = null;
+    let beds = [];
+
+    /**
+     * Built on first use, and only on first use.
+     *
+     * `ensureAudio` puts the video through a MediaElementSource, and from then
+     * on the element's sound reaches the speakers only by way of the graph. So
+     * a composition with no sound in it must not touch this at all: doing it
+     * eagerly on every play would route the audio through a context the
+     * autoplay policy may have left suspended, and the cost of that is silent
+     * playback for someone who never asked for a sound effect.
+     */
+    function ensureMixer() {
+      if (mixer) return mixer;
+      const { ctx: audioCtx, dest } = ensureAudio();
+      if (!audioCtx) return null;
+      // A context created without a gesture starts suspended, and a suspended
+      // context passes no audio through at all.
+      if (audioCtx.state === "suspended") audioCtx.resume().catch(() => {});
+      const outs = [audioCtx.destination];
+      if (dest) outs.push(dest);
+      mixer = createMixer(audioCtx, outs);
+      scheduler = createScheduler(mixer, { fps: composition().fps });
+      return mixer;
+    }
+
+    /** Is there any sound to mix? If not, leave the audio path alone. */
+    const hasSound = () => liveAudio().some((a) => a.status === "accepted");
+
+    /** Start the accepted music beds, ducked under the words we know about. */
+    async function startBeds() {
+      stopBeds();
+      const tracks = liveAudio().filter((a) => a.kind === "music" && a.status === "accepted");
+      if (!tracks.length) return;
+      const mix = ensureMixer();
+      if (!mix) return;
+
+      for (const track of tracks) {
+        const clip = byId.get(track.clipId) ?? (await Clips.all()).find((c) => c.id === track.clipId);
+        if (!clip) continue;
+        const el = new Audio(Clips.url(clip));
+        el.loop = true;
+        el.crossOrigin = "anonymous";
+        const bed = mix.bed(el, {
+          gain: track.gain,
+          duck: track.duck,
+          speech: track.duck ? speechRanges(transcript) : [],
+          offset: playhead,
+        });
+        if (!bed) continue;
+        await el.play().catch(() => {});
+        beds.push(bed);
+      }
+    }
+
+    function stopBeds() {
+      for (const bed of beds) bed.stop();
+      beds = [];
+    }
+
+    /* ---- staged cuts ---- */
+
+    /**
+     * Take a staged cut.
+     *
+     * The store hands back a whole new timeline rather than mutating this one,
+     * so applying a cut is a swap. A cut in the middle of a segment becomes
+     * two segments of the same clip: a real split, which the timeline could
+     * not do before the transcript gave a reason to want one.
+     */
+    async function takeCut(id, gesture) {
+      const cut = pendingCuts().find((c) => c.id === id);
+      if (!cut) return;
+      if (!(gesture?.isTrusted || gesture?.nativeEvent?.isTrusted)) return;
+
+      const result = applyCut(timeline, cut);
+      timeline = result.timeline;
+      if (!timeline.some((s) => s.uid === selected)) selected = null;
+      loaded = null;
+      settle(id);
+      await rebuildTranscript();
+      Desk.toast(`Cut ${result.removed.toFixed(2)}s.`, "good");
+      refresh();
+      seekTo(Math.min(playhead, total()));
+    }
+
+    /** The button beside the transcript. Same finder the agent's propose_tidy
+     *  uses, so the two never disagree about what counts as a filler. */
+    function findDeadWeightHere(gesture) {
+      if (!transcript) return;
+      const found = findDeadWeight(transcript);
+      if (!found.length) return Desk.toast("No fillers or dead air found.", "good");
+
+      let staged = 0;
+      for (const item of found) {
+        // origin "human", because this list was asked for by the person at the
+        // keyboard. They still have to accept each one.
+        const r = proposeCut(
+          { start: item.start, end: item.end, reason: item.reason, text: item.text, kind: item.kind, origin: "human" },
+          { cutSeconds: total() }
+        );
+        if (r.ok) staged++;
+      }
+      Desk.toast(
+        staged ? `${staged} cut${staged === 1 ? "" : "s"} staged under the track.` : "Those are already staged.",
+        "good"
+      );
+    }
+
+    /* ---- whisper ---- */
+
+    async function runTranscribe() {
+      const seg = timeline.find((s) => s.uid === selected) ?? timeline[0];
+      const clip = seg ? (await Clips.all()).find((c) => c.id === seg.clipId) : null;
+      if (!clip) return Desk.toast("Select a clip on the timeline first.", "bad");
+
+      transcribing = true;
+      renderWords();
+      const result = await transcribe(clip);
+      transcribing = false;
+
+      if (!result.ok) {
+        Desk.toast(result.error, "bad");
+        if (result.hint) console.info(`[desk-two] ${result.hint}`);
+      } else {
+        Desk.toast(`Transcribed ${result.transcript.words.length} words.`, "good");
+      }
+      await rebuildTranscript();
+      refresh();
     }
 
     function offerDownload(clip) {
@@ -469,20 +934,115 @@ export const Editor = (() => {
         if (g) return void seekTo(Math.min(total(), g.start + g.duration * 0.45));
       }
 
+      /* ---- the composition ---- */
+
+      const tabBtn = t.closest("[data-tab]");
+      if (tabBtn) return showTab(tabBtn.dataset.tab);
+
+      const fmt = t.closest("[data-format]");
+      if (fmt) return void setFormat(fmt.dataset.format, e);
+      if (t.closest("[data-fmt-accept]")) return void acceptFormat(e);
+      if (t.closest("[data-fmt-reject]")) return void rejectFormat(e);
+
+      const yesLayer = t.closest("[data-layer-accept]");
+      if (yesLayer) return void acceptLayer(yesLayer.dataset.layerAccept, e);
+      const noLayer = t.closest("[data-layer-reject]");
+      if (noLayer) return void rejectLayer(noLayer.dataset.layerReject, e);
+      const goneLayer = t.closest("[data-layer-remove]");
+      if (goneLayer) return void removeLayer(goneLayer.dataset.layerRemove, e);
+
+      const yesSound = t.closest("[data-sound-accept]");
+      if (yesSound) return void acceptAudio(yesSound.dataset.soundAccept, e);
+      const noSound = t.closest("[data-sound-reject]");
+      if (noSound) return void rejectAudio(noSound.dataset.soundReject, e);
+      const goneSound = t.closest("[data-sound-remove]");
+      if (goneSound) return void removeAudio(goneSound.dataset.soundRemove, e);
+
+      // Audition an effect without moving the playhead. Deciding whether a
+      // thump belongs under a title card takes hearing it, once.
+      const hear = t.closest("[data-sound-play]");
+      if (hear) {
+        const track = liveAudio().find((a) => a.id === hear.dataset.soundPlay);
+        if (track?.kind === "sfx") ensureMixer()?.sfx(track.preset, track.gain);
+        return;
+      }
+
+      // Clicking a layer takes you into it, past its entrance, so what you
+      // are judging is the graphic and not its first three frames.
+      const layerCard = t.closest("[data-layer]");
+      if (layerCard) {
+        const l = liveLayers().find((x) => x.id === layerCard.dataset.layer);
+        if (l) {
+          const at = toSeconds(l.from + l.durationInFrames * 0.45, composition().fps);
+          return void seekTo(Math.min(total(), at));
+        }
+      }
+
+      /* ---- staged cuts ---- */
+
+      const yesCut = t.closest("[data-cut-accept]");
+      if (yesCut) return void takeCut(yesCut.dataset.cutAccept, e);
+      const noCut = t.closest("[data-cut-reject]");
+      if (noCut) return void rejectCut(noCut.dataset.cutReject, e);
+
+      const cutChip = t.closest("[data-cut]");
+      if (cutChip) {
+        const c = pendingCuts().find((x) => x.id === cutChip.dataset.cut);
+        if (c) return void seekTo(Math.max(0, c.start - 0.6));
+      }
+
+      /* ---- the transcript ---- */
+
+      // Every word is a seek. This is the whole point of the panel.
+      const word = t.closest("[data-at]");
+      if (word) return void seekTo(Number(word.dataset.at));
+
+      if (act === "tidy") return findDeadWeightHere(e);
+      if (act === "save-key") {
+        const input = body.querySelector('[data-act="key"]');
+        setApiKey(input.value);
+        input.value = "";
+        Desk.toast(hasApiKey() ? "Key saved in this browser." : "Key cleared.", "good");
+        return refresh();
+      }
+      if (act === "transcribe") return runTranscribe();
+      if (act === "copy-code") {
+        navigator.clipboard?.writeText(generate(composition(), { cutSeconds: total() }))
+          .then(() => Desk.toast("Composition copied as TSX.", "good"))
+          .catch(() => Desk.toast("Could not reach the clipboard.", "bad"));
+        return;
+      }
+
       if (act === "play") return playing ? stop() : play();
       if (act === "import") return fileInput.click();
       if (act === "export") return runExport();
       if (act === "cancel-export") { cancelled = true; return; }
-      if (act === "clear") { timeline = []; selected = null; loaded = null; video.removeAttribute("src"); stop(); return refresh(); }
+      if (act === "clear") {
+        timeline = [];
+        selected = null;
+        loaded = null;
+        video.removeAttribute("src");
+        stop();
+        await rebuildTranscript();
+        return refresh();
+      }
 
       const add = t.closest("[data-add]");
-      if (add) { await addClip(add.dataset.add); return seekTo(playhead); }
+      if (add) {
+        await addClip(add.dataset.add);
+        // The transcript is a property of the cut, not of the library, so
+        // adding a clip changes it.
+        await rebuildTranscript();
+        refresh();
+        return seekTo(playhead);
+      }
 
       const del = t.closest("[data-del]");
       if (del) {
         timeline = timeline.filter((s) => s.clipId !== del.dataset.del);
         await Clips.remove(del.dataset.del);
         loaded = null;
+        await rebuildTranscript();
         return refresh();
       }
 
@@ -505,6 +1065,7 @@ export const Editor = (() => {
           if (j < 0 || j >= timeline.length) return;
           [timeline[i], timeline[j]] = [timeline[j], timeline[i]];
         }
+        await rebuildTranscript();
         return refresh();
       }
     });
@@ -518,6 +1079,9 @@ export const Editor = (() => {
       if (set === "out") seg.out = Math.max(Number(e.target.value), seg.in + 0.1);
       if (set === "filter") seg.filter = e.target.value;
       if (set === "speed") seg.speed = Number(e.target.value);
+      // A trim or a speed change re-times every word after it. The per-clip
+      // transcripts are cached, so this is a remap rather than a rebuild.
+      if (set === "in" || set === "out" || set === "speed") rebuildTranscript().then(renderWords);
       refresh();
       seekTo(playhead);
     });
@@ -551,7 +1115,7 @@ export const Editor = (() => {
       const to = timeline.findIndex((s) => s.uid === overUid);
       timeline.splice(to, 0, timeline.splice(from, 1)[0]);
       dragUid = null;
-      refresh();
+      rebuildTranscript().then(refresh);
     });
 
     fileInput.addEventListener("change", async () => {
@@ -588,21 +1152,50 @@ export const Editor = (() => {
       gfxCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
       gfxCtx.clearRect(0, 0, w, h);
       drawGraphics(gfxCtx, w, h, playhead, liveGraphics());
+
+      // The composition, on the same canvas and from the same playhead. One
+      // renderer for the preview and the export is what keeps them honest, so
+      // this is the identical call the export loop makes below.
+      renderComposition(gfxCtx, {
+        width: w,
+        height: h,
+        frame: Math.round(playhead * composition().fps),
+        layers: liveLayers(),
+        format: composition().format,
+        fps: composition().fps,
+        // Guides only while a reframe is waiting, which is the one moment the
+        // safe area is a decision rather than clutter.
+        guides: Boolean(composition().pendingFormat),
+      });
+
       gfxFrame = requestAnimationFrame(paintGraphics);
     }
     gfxFrame = requestAnimationFrame(paintGraphics);
 
     const offGraphics = onGraphics(() => renderInspector());
+    const offComposition = onComposition(() => {
+      renderInspector();
+      renderCode();
+    });
+    const offCuts = onCuts(() => renderCuts());
+    const offTranscripts = onTranscripts(() => renderWords());
     const off = Store.on("clips", renderLibrary);
+
     win.onCleanup(() => {
       off();
       offGraphics();
+      offComposition();
+      offCuts();
+      offTranscripts();
       cancelAnimationFrame(gfxFrame);
       stop();
+      stopBeds();
+      mixer?.dispose();
       refresh = () => {};
     });
 
     renderLibrary();
+    rebuildTranscript().then(refresh);
     refresh();
     if (timeline.length) seekTo(0);
 
