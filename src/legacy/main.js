@@ -3,6 +3,7 @@ import { Desk } from "./shell.js";
 import { Camera } from "./camera.js";
 import { Editor } from "./editor.js";
 import { Scripts } from "./scripts-app.js";
+import * as AiSkills from "./aiskills.js";
 import { Skills } from "./skills.js";
 
 /* ============================================================
@@ -283,4 +284,5 @@ export function boot() {
   );
 
   Scripts.seed();
+  AiSkills.seed();
 }

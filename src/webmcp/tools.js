@@ -2,6 +2,7 @@ import { EASINGS, PALETTE_ROLES, POSITIONS, TYPES, TYPE_INFO } from "../graphics
 import { liveGraphics, proposeChange, proposeGraphic } from "../graphics/store.js";
 import { allFolders, offerFolder } from "../folders/offered.js";
 import { proposalsFor, proposeLine } from "../scripts/proposals.js";
+import { allSkills, markLoaded } from "../legacy/aiskills.js";
 import { Camera } from "../legacy/camera.js";
 import { Editor } from "../legacy/editor.js";
 import { Scripts } from "../legacy/scripts-app.js";
@@ -633,6 +634,86 @@ export const getOfferedFolders = {
     }),
 };
 
+/* ------------------------------------------------------------- ai skills */
+
+/**
+ * Instructions this page will hand you, if you ask.
+ *
+ * A page cannot install anything into an agent, and should not be able to: a
+ * site that could permanently modify the model visiting it is a security hole
+ * wearing a feature's clothes. But a skill is only ever instructions, so a page
+ * that answers well when asked has done the whole job. The agent reads the
+ * index, decides something is relevant, pulls the body, and follows it for the
+ * rest of the session.
+ *
+ * Which is why this is two tools and not one. The index is small and always
+ * safe to call; the body is only worth its tokens when it is going to be used.
+ * That is the same progressive disclosure every skill system settles on, and
+ * doing it in one tool would mean every agent that glanced at the folder paid
+ * for all of it.
+ */
+export const listAiSkills = {
+  name: "list_ai_skills",
+  description:
+    "Return the skills this workstation offers you: name, when to use it, and how long it is. These are instructions the person put here for you, about how they want this kind of work done. Call this early, once, and remember what is on the list. It returns descriptions only, so it is cheap; when one of them matches what you have been asked to do, call load_ai_skill to get it.",
+  inputSchema: NO_INPUT,
+  annotations: READ_ONLY,
+  execute: async () => {
+    const skills = await allSkills();
+    return json({
+      skills: skills.map((s) => ({
+        id: s.id,
+        name: s.name,
+        use_when: s.description,
+        words: s.words,
+        file: s.filename,
+      })),
+      note: skills.length
+        ? "These are the person's own instructions for working here. If one matches the task, load it and follow it rather than falling back on your defaults."
+        : "Nothing here yet. They can drop markdown into the AI Skills folder inside Skills.",
+    });
+  },
+};
+
+export const loadAiSkill = {
+  name: "load_ai_skill",
+  description:
+    "Return the full text of one skill from list_ai_skills, so you can follow it. Load a skill when its 'use_when' matches the task in front of you, not speculatively. Once loaded, treat it as the person's instruction for this kind of work and apply it for the rest of the session; they can see which skills you have taken.",
+  inputSchema: {
+    type: "object",
+    properties: { skill_id: { type: "string", description: "Id from list_ai_skills." } },
+    required: ["skill_id"],
+    additionalProperties: false,
+  },
+  annotations: READ_ONLY,
+  execute: async (args) => {
+    const id = String(args.skill_id ?? "");
+    const skill = (await allSkills()).find((s) => s.id === id);
+    if (!skill) {
+      return fail(
+        `No skill with id "${id}".`,
+        "Call list_ai_skills for the ids this workstation offers. They look like 'skill-1788...'."
+      );
+    }
+
+    // The person sees which skills the agent actually took. A list of skills
+    // nobody can tell are being used is indistinguishable from a list nobody
+    // is using.
+    markLoaded(skill.id);
+
+    return json({
+      id: skill.id,
+      name: skill.name,
+      use_when: skill.description,
+      // Everything the file carried, including fields this app does not know
+      // about: a skill written for another host should still arrive intact.
+      frontmatter: skill.meta,
+      instructions: skill.body,
+      note: "This is the person's instruction for this kind of work. Follow it for the rest of the session, and say when you are applying it.",
+    });
+  },
+};
+
 export const TOOLS = [
   getDesktopState,
   listScripts,
@@ -650,4 +731,6 @@ export const TOOLS = [
   proposeScriptLine,
   offerFolderTool,
   getOfferedFolders,
+  listAiSkills,
+  loadAiSkill,
 ];

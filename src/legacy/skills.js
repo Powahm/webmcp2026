@@ -1,3 +1,4 @@
+import * as AiSkills from "./aiskills.js";
 import { Desk } from "./shell.js";
 import { Editor } from "./editor.js";
 
@@ -209,14 +210,25 @@ export const Skills = (() => {
         body.className = "win-body";
         const grid = document.createElement("div");
         grid.className = "filegrid spill";
-        grid.innerHTML = SKILLS.map((s, i) => `
-          <button class="file" data-skill="${s.id}" style="--i:${i}; --f-accent:${TINT}">
+        // The subfolder first: it is the one that changes, and the craft notes
+        // below it never do.
+        grid.innerHTML =
+          `<button class="file file--sub" data-open="aiskills" style="--i:0; --f-accent:${AiSkills.TINT}">
+            <span class="file-art" aria-hidden="true"></span>
+            <span class="file-name">AI Skills</span>
+            <span class="file-kind">for the agent</span>
+          </button>` +
+          SKILLS.map((s, i) => `
+          <button class="file" data-skill="${s.id}" style="--i:${i + 1}; --f-accent:${TINT}">
             <span class="file-art file-art--skill" data-kind="${s.kind}" aria-hidden="true"></span>
             <span class="file-name">${Desk.esc(s.name)}</span>
             <span class="file-kind">${Desk.esc(s.kind)}</span>
           </button>`).join("");
 
         grid.addEventListener("click", (e) => {
+          const sub = e.target.closest('[data-open="aiskills"]');
+          if (sub) return AiSkills.open(sub.getBoundingClientRect());
+
           const btn = e.target.closest("[data-skill]");
           if (!btn) return;
           const skill = SKILLS.find((s) => s.id === btn.dataset.skill);

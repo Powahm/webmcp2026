@@ -6,12 +6,16 @@
 
 export const Store = (() => {
   const DB = "desk-two";
-  const VERSION = 1;
-  const STORES = ["clips", "scripts"];
+  // Bumped for "aiskills". onupgradeneeded creates any store that is missing,
+  // so an existing tab picks the new one up without losing its clips.
+  const VERSION = 2;
+  const STORES = ["clips", "scripts", "aiskills"];
 
   let db = null;
   let usable = true;
-  const memory = { clips: new Map(), scripts: new Map() };
+  // Derived from STORES rather than written out, so adding a store cannot
+  // leave the memory fallback missing one. It did exactly that once.
+  const memory = Object.fromEntries(STORES.map((name) => [name, new Map()]));
   const listeners = new Map();
 
   const open = () =>
