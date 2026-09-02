@@ -176,6 +176,9 @@ export const getRecorderState = {
       // having one are two different facts.
       audio: state.audio,
       audio_requested: state.audioRequested,
+      // "camera" or "screen". A screen recording is a tutorial or a walkthrough
+      // and wants different advice from a piece to camera.
+      source: state.source,
       window_open: state.windowOpen,
       // The teleprompter as loaded in the Camera, which is what tells you what
       // they are about to say rather than what they saved yesterday.

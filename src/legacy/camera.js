@@ -14,6 +14,8 @@ export const Camera = (() => {
   let deviceId = null;
   let withAudio = true;
   let gotAudio = false;
+  /** "camera" or "screen". Screen capture keeps the mic, so a tutorial is one take. */
+  let source = "camera";
   const viewers = new Set();
 
   /**
@@ -60,6 +62,14 @@ export const Camera = (() => {
         ? "This preview frame blocked the camera. Open the deployed site to record, or use Import video."
         : "Camera access was blocked. Allow it in your browser's address bar, then press Try again.";
     }
+    if (source === "screen") {
+      if (name === "NotAllowedError") return "Screen sharing was cancelled. Pick a window or a screen to record it.";
+      if (name === "UnsupportedError" || !navigator.mediaDevices?.getDisplayMedia) {
+        return framed()
+          ? "This preview frame does not allow screen capture. Open the deployed site to record your screen."
+          : "Screen capture needs a secure page — https or localhost.";
+      }
+    }
     if (name === "NotFoundError" || name === "OverconstrainedError")
       return "No camera found on this device. Import video works without one.";
     if (name === "NotReadableError")
@@ -72,8 +82,66 @@ export const Camera = (() => {
     return err?.message || "The camera could not be started.";
   }
 
+  /**
+   * The screen, plus your voice.
+   *
+   * getDisplayMedia gives picture and, at the user's discretion, the audio of
+   * whatever they picked. That is not the same thing as a voiceover, so the mic
+   * is fetched separately and both are put into one MediaStream. Everything
+   * downstream only ever sees a MediaStream and then a Blob, so the recorder,
+   * the library, the editor and the export need no changes at all.
+   *
+   * Two things this must get right or the take is ruined silently:
+   *
+   *   - It needs a real user gesture. A tool call has none, which is why there
+   *     is no WebMCP tool that starts a recording. The person presses the
+   *     button.
+   *   - The browser draws its own "Stop sharing" bar. Pressing it ends the
+   *     track but not the MediaRecorder, so without the `ended` listener the
+   *     clip runs on with a frozen last frame.
+   */
+  async function acquireScreen() {
+    if (!navigator.mediaDevices?.getDisplayMedia) {
+      throw Object.assign(new Error("no screen capture in this context"), { name: "UnsupportedError" });
+    }
+
+    const display = await navigator.mediaDevices.getDisplayMedia({
+      video: { frameRate: { ideal: 30 } },
+      audio: true
+    });
+
+    const tracks = [...display.getVideoTracks(), ...display.getAudioTracks()];
+
+    if (withAudio) {
+      try {
+        const mic = await navigator.mediaDevices.getUserMedia({ audio: true });
+        tracks.push(...mic.getAudioTracks());
+      } catch {
+        /* No mic, or refused. A silent screen recording still beats no take. */
+      }
+    }
+
+    stream = new MediaStream(tracks);
+    gotAudio = stream.getAudioTracks().length > 0;
+
+    // The browser's own stop button lives outside the page. This is the only
+    // way the page hears about it.
+    display.getVideoTracks()[0]?.addEventListener("ended", () => {
+      stopRequests.forEach((fn) => fn());
+      release();
+    });
+
+    viewers.forEach((fn) => fn(stream));
+    if (recorder.status === "idle") recorder.status = "armed";
+    return stream;
+  }
+
+  /** Callbacks that end an in-flight take. Registered by start(). */
+  const stopRequests = new Set();
+
   async function acquire() {
     if (stream && stream.active) return stream;
+    if (source === "screen") return acquireScreen();
     if (!navigator.mediaDevices?.getUserMedia) {
       throw Object.assign(new Error("no camera API in this context"), { name: "UnsupportedError" });
     }
@@ -138,14 +206,20 @@ export const Camera = (() => {
         recorder.elapsed = (Date.now() - startedAt) / 1000;
         const blob = new Blob(chunks, { type: mimeType || "video/webm" });
         const stamp = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-        resolve(await Clips.save(blob, { name: `Recording ${stamp}`, kind: "recording" }));
+        resolve(
+          await Clips.save(blob, {
+            name: source === "screen" ? `Screen ${stamp}` : `Recording ${stamp}`,
+            kind: source === "screen" ? "screen" : "recording"
+          })
+        );
       };
     });
 
-    return {
-      stop: () => rec.state !== "inactive" && rec.stop(),
-      finished
-    };
+    const stop = () => rec.state !== "inactive" && rec.stop();
+    stopRequests.add(stop);
+    finished.finally(() => stopRequests.delete(stop));
+
+    return { stop, finished };
   }
 
   async function recordFor(seconds = 3) {
@@ -185,6 +259,10 @@ export const Camera = (() => {
         </div>
       </div>
       <div class="cam-bar">
+        <select class="select" data-act="source" aria-label="What to record">
+          <option value="camera">Camera</option>
+          <option value="screen">Screen</option>
+        </select>
         <select class="select" data-act="script" aria-label="Teleprompter script">
           <option value="">No script</option>
         </select>
@@ -212,6 +290,7 @@ export const Camera = (() => {
     const promptNext = body.querySelector(".cam-prompt-next");
     const promptNote = body.querySelector(".cam-prompt-note");
     const scriptSelect = body.querySelector('[data-act="script"]');
+    const sourceSelect = body.querySelector('[data-act="source"]');
 
     /* ---------------- teleprompter ---------------- */
 
@@ -350,6 +429,14 @@ export const Camera = (() => {
         current.stop();
         const clip = await current.finished;
         await attachPromptMarks(clip);
+        if (source === "screen") {
+          // The share ends with the take. Leaving it live would keep the
+          // browser's sharing bar on screen with nothing recording.
+          release();
+          video.srcObject = null;
+          blocked.hidden = false;
+          blockedMsg.textContent = "Press record to pick a window or a screen again.";
+        }
         Desk.toast(`Saved ${clip.name}`, "good");
         renderStrip();
         return;
@@ -357,7 +444,16 @@ export const Camera = (() => {
 
       try {
         prompt.marks = [];
+        // The gesture that opened this handler is what getDisplayMedia needs,
+        // so there must be nothing slow between the click and start().
         session = await start({ onTick: (s) => (recTime.textContent = timecode(s)) });
+        if (source === "screen") {
+          // Show them what is actually being captured, muted so the room does
+          // not feed back into itself.
+          video.srcObject = stream;
+          await video.play().catch(() => {});
+          blocked.hidden = true;
+        }
         if (prompt.script) prompt.marks.push({ line: prompt.line, at: 0 });
         shutter.dataset.recording = "true";
         shutter.setAttribute("aria-label", "Stop recording");
@@ -388,6 +484,29 @@ export const Camera = (() => {
       deviceId = select.value;
       release();
       connect();
+    });
+
+    /**
+     * Switching to Screen does not open the picker.
+     *
+     * getDisplayMedia needs a user gesture, and a `change` event on a select is
+     * one, but the picker would then appear before the person has decided
+     * anything. Worse, cancelling it leaves the app with no stream and a dead
+     * preview. So the switch only arms the source; pressing record opens the
+     * picker, which is the moment they actually meant to choose a window.
+     */
+    sourceSelect.addEventListener("change", () => {
+      source = sourceSelect.value;
+      release();
+      video.srcObject = null;
+      select.hidden = source === "screen";
+      if (source === "screen") {
+        blocked.hidden = false;
+        blockedMsg.textContent = "Press record and pick a window or a screen. Your mic is mixed in if it is on.";
+        shutter.disabled = false;
+      } else {
+        connect();
+      }
     });
 
     fileInput.addEventListener("change", async () => {
@@ -439,6 +558,7 @@ export const Camera = (() => {
       // picture at all.
       audio: recorder.status === "idle" ? withAudio : gotAudio,
       audioRequested: withAudio,
+      source,
       deviceId: deviceId || null,
       windowOpen: Desk.isOpen("camera"),
       script: prompt.script
