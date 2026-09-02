@@ -162,7 +162,7 @@ export const getPrompterState = {
 export const getRecorderState = {
   name: "get_recorder_state",
   description:
-    "Return what the Camera is doing right now: idle, armed with a live preview, or recording, plus how many seconds into the take it is. Check this before suggesting anything. Someone mid-take cannot read a paragraph of advice, and you cannot start or stop a recording yourself.",
+    "Return what the Camera is doing right now: idle, armed with a live preview, or recording, how many seconds into the take it is, and the teleprompter script loaded into it with the exact line they are on. Check this before suggesting anything. Someone mid-take cannot read a paragraph of advice, and you cannot start or stop a recording yourself.",
   inputSchema: NO_INPUT,
   annotations: READ_ONLY,
   execute: () => {
@@ -177,6 +177,9 @@ export const getRecorderState = {
       audio: state.audio,
       audio_requested: state.audioRequested,
       window_open: state.windowOpen,
+      // The teleprompter as loaded in the Camera, which is what tells you what
+      // they are about to say rather than what they saved yesterday.
+      script: state.script,
       note:
         state.status === "recording"
           ? "A take is running. Do not interrupt with a long answer, and do not propose edits until it stops."

@@ -28,6 +28,19 @@ export const Camera = (() => {
    */
   const recorder = { status: "idle", startedAt: 0, elapsed: 0 };
 
+  /**
+   * The teleprompter, as it exists during a take.
+   *
+   * Kept at module level rather than in the window, so a take begun anywhere
+   * carries the same record and so get_recorder_state can answer "which line
+   * are they on" without reaching into the DOM.
+   *
+   * `marks` is the useful part: one entry per line, with the second of the take
+   * it was reached at. It is written onto the clip when the take ends, which is
+   * what later lets anything cut on what was said rather than on guesswork.
+   */
+  const prompt = { script: null, line: 0, marks: [] };
+
   function pickMime() {
     const options = [
       "video/webm;codecs=vp9,opus",
@@ -155,8 +168,26 @@ export const Camera = (() => {
           <button class="btn btn-ghost" data-act="retry">Try again</button>
         </div>
         <div class="cam-rec" hidden><span class="cam-dot"></span><span class="cam-time mono">0:00</span></div>
+
+        <!-- The teleprompter, over the preview rather than over the desktop.
+             Tailwind utilities with the theme's own custom properties, so it
+             sits on the same palette as everything else without adding rules
+             to desk.css. -->
+        <div class="cam-prompt absolute inset-x-0 bottom-0 flex-col gap-1 p-4
+                    bg-gradient-to-t from-black/85 via-black/65 to-transparent"
+             style="display:none" hidden>
+          <p class="cam-prompt-line m-0 text-[22px] leading-snug font-semibold text-white
+                    [text-shadow:0_1px_3px_rgb(0_0_0/0.9)]"></p>
+          <p class="cam-prompt-next m-0 text-[15px] leading-snug text-white/55
+                    [text-shadow:0_1px_3px_rgb(0_0_0/0.9)]"></p>
+          <p class="cam-prompt-note m-0 text-[11px] uppercase tracking-wider text-[var(--amber,#F7A501)]"></p>
+          <p class="cam-prompt-hint m-0 text-[10px] text-white/45">space or click advances · ← goes back</p>
+        </div>
       </div>
       <div class="cam-bar">
+        <select class="select" data-act="script" aria-label="Teleprompter script">
+          <option value="">No script</option>
+        </select>
         <select class="select" data-act="device" aria-label="Camera"><option>Default camera</option></select>
         <button class="btn btn-ghost" data-act="mic" aria-pressed="true">Mic on</button>
         <button class="shutter" data-act="record" aria-label="Start recording"><span class="shutter-core"></span></button>
@@ -175,6 +206,96 @@ export const Camera = (() => {
     const select = body.querySelector('[data-act="device"]');
     const fileInput = body.querySelector('[data-act="file"]');
     const strip = body.querySelector(".cam-strip");
+    const stage = body.querySelector(".cam-stage");
+    const promptEl = body.querySelector(".cam-prompt");
+    const promptLine = body.querySelector(".cam-prompt-line");
+    const promptNext = body.querySelector(".cam-prompt-next");
+    const promptNote = body.querySelector(".cam-prompt-note");
+    const scriptSelect = body.querySelector('[data-act="script"]');
+
+    /* ---------------- teleprompter ---------------- */
+
+    function paintPrompt() {
+      const script = prompt.script;
+
+      // Set display outright rather than toggling a `hidden` class against a
+      // `flex` class: both are display utilities with the same specificity, so
+      // which one wins comes down to Tailwind's internal ordering, and the
+      // overlay silently laid out at zero height.
+      promptEl.hidden = !script;
+      promptEl.style.display = script ? "flex" : "none";
+      if (!script) return;
+
+      const line = script.lines[prompt.line];
+      const next = script.lines[prompt.line + 1];
+      promptLine.textContent = line?.text || "";
+      promptNext.textContent = next?.text || "";
+      promptNote.textContent = line?.note || "";
+    }
+
+    /**
+     * Move to a line.
+     *
+     * Manual by default, and deliberately so: a prompter that scrolls on a
+     * timer gets ahead of you the moment you pause, and the take is ruined
+     * silently. You advance when you have finished the line.
+     */
+    function goToLine(index) {
+      if (!prompt.script) return;
+      prompt.line = Math.max(0, Math.min(index, prompt.script.lines.length - 1));
+      if (recorder.status === "recording") {
+        prompt.marks.push({ line: prompt.line, at: (Date.now() - recorder.startedAt) / 1000 });
+      }
+      paintPrompt();
+    }
+
+    async function loadScripts() {
+      const scripts = await Store.all("scripts");
+      scriptSelect.innerHTML =
+        `<option value="">No script</option>` +
+        scripts
+          .map((s) => `<option value="${s.id}">${Desk.esc(s.name)}</option>`)
+          .join("");
+      if (prompt.script) scriptSelect.value = prompt.script.id;
+    }
+
+    async function loadPrompt(scriptId) {
+      if (!scriptId) {
+        prompt.script = null;
+        prompt.line = 0;
+        prompt.marks = [];
+        return paintPrompt();
+      }
+      const script = (await Store.all("scripts")).find((s) => s.id === scriptId);
+      prompt.script = script && script.lines?.length ? script : null;
+      prompt.line = 0;
+      prompt.marks = [];
+      paintPrompt();
+    }
+
+    scriptSelect.addEventListener("change", () => loadPrompt(scriptSelect.value));
+
+    // Click the preview to advance. The shutter is a long way from your hand
+    // when you are set up in front of the camera; the picture is not.
+    stage.addEventListener("click", (e) => {
+      if (!prompt.script || e.target.closest("button")) return;
+      goToLine(prompt.line + 1);
+    });
+
+    const onPromptKey = (e) => {
+      if (!prompt.script || !Desk.isOpen("camera")) return;
+      const el = e.target;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT")) return;
+      if (e.key === " " || e.key === "ArrowRight" || e.key === "ArrowDown") {
+        e.preventDefault();
+        goToLine(prompt.line + 1);
+      }
+      if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+        e.preventDefault();
+        goToLine(prompt.line - 1);
+      }
+    };
+    window.addEventListener("keydown", onPromptKey);
 
     let session = null;
 
@@ -228,13 +349,16 @@ export const Camera = (() => {
         session = null;
         current.stop();
         const clip = await current.finished;
+        await attachPromptMarks(clip);
         Desk.toast(`Saved ${clip.name}`, "good");
         renderStrip();
         return;
       }
 
       try {
+        prompt.marks = [];
         session = await start({ onTick: (s) => (recTime.textContent = timecode(s)) });
+        if (prompt.script) prompt.marks.push({ line: prompt.line, at: 0 });
         shutter.dataset.recording = "true";
         shutter.setAttribute("aria-label", "Stop recording");
         recTime.textContent = "0:00";
@@ -276,10 +400,19 @@ export const Camera = (() => {
     });
 
     const off = Store.on("clips", renderStrip);
-    win.onCleanup(() => { off(); release(); video.srcObject = null; });
+    const offScripts = Store.on("scripts", loadScripts);
+    win.onCleanup(() => {
+      off();
+      offScripts();
+      window.removeEventListener("keydown", onPromptKey);
+      release();
+      video.srcObject = null;
+    });
 
     connect();
     renderStrip();
+    loadScripts();
+    paintPrompt();
   }
 
   function open(origin) {
@@ -288,7 +421,7 @@ export const Camera = (() => {
       title: "Camera",
       meta: "live",
       tint: TINT,
-      size: { w: 560, h: 560 },
+      size: { w: 660, h: 600 },
       origin,
       build
     });
@@ -307,8 +440,34 @@ export const Camera = (() => {
       audio: recorder.status === "idle" ? withAudio : gotAudio,
       audioRequested: withAudio,
       deviceId: deviceId || null,
-      windowOpen: Desk.isOpen("camera")
+      windowOpen: Desk.isOpen("camera"),
+      script: prompt.script
+        ? {
+            id: prompt.script.id,
+            name: prompt.script.name,
+            line_index: prompt.line,
+            line: prompt.script.lines[prompt.line]?.text ?? "",
+            note: prompt.script.lines[prompt.line]?.note || null,
+            lines_total: prompt.script.lines.length
+          }
+        : null
     };
+  }
+
+  /**
+   * Write the prompter marks onto the take.
+   *
+   * A clip that knows which line was being spoken at which second is a clip
+   * anything can cut on later. It costs one extra field and it can only be
+   * captured here, while the take is running.
+   */
+  async function attachPromptMarks(clip) {
+    if (!prompt.script || prompt.marks.length === 0) return clip;
+    clip.scriptId = prompt.script.id;
+    clip.scriptName = prompt.script.name;
+    clip.beats = prompt.marks.slice();
+    await Store.put("clips", clip);
+    return clip;
   }
 
   return { open, recordFor, start, acquire, release, state, TINT, describeError };
