@@ -217,7 +217,10 @@ export function createMixer(ctx, outputs = []) {
         const merged = [];
         for (const range of [...speech].sort((a, b) => a.start - b.start)) {
           const last = merged[merged.length - 1];
-          if (last && range.start - last.end < 0.45) last.end = Math.max(last.end, range.end);
+          // 0.5 rather than 0.45: the recovery window below is a 0.12 lead-in
+          // plus a 0.35 ramp, and merging on anything shorter than that total
+          // schedules the next duck before the last one has come back up.
+          if (last && range.start - last.end < 0.5) last.end = Math.max(last.end, range.end);
           else merged.push({ ...range });
         }
         for (const range of merged) {
@@ -235,6 +238,10 @@ export function createMixer(ctx, outputs = []) {
       return {
         stop() {
           try { element.pause(); } catch { /* already gone */ }
+          // The source too, not just the gain. Every play() builds a fresh
+          // element and a fresh source node, so leaving these connected
+          // accumulates one dead node per press.
+          try { source.disconnect(); } catch { /* already gone */ }
           try { node.disconnect(); } catch { /* already gone */ }
           beds.delete(bedRef);
         },
@@ -244,7 +251,9 @@ export function createMixer(ctx, outputs = []) {
 
     stopAll() {
       for (const bed of [...beds]) {
-        try { bed.element.pause(); bed.node.disconnect(); } catch { /* already gone */ }
+        try { bed.element.pause(); } catch { /* already gone */ }
+        try { bed.source.disconnect(); } catch { /* already gone */ }
+        try { bed.node.disconnect(); } catch { /* already gone */ }
         beds.delete(bed);
       }
     },

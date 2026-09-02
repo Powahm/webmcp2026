@@ -9,11 +9,11 @@
  *
  * Two conventions run through the whole file.
  *
- * **Author at 1080p.** Sizes are written as if the frame were 1080 tall and
- * multiplied by `u(height)` at draw time. The preview canvas is however many
- * pixels the video box happens to occupy and the export canvas is whatever the
- * footage is, so a component that reasoned in real pixels would be correct in
- * exactly one of them.
+ * **Author at 1080p.** Sizes are written as if the frame's short edge were
+ * 1080 and multiplied by `u(width, height)` at draw time. The preview canvas
+ * is however many pixels the video box happens to occupy and the export canvas
+ * is the delivery size, so a component that reasoned in real pixels would be
+ * correct in exactly one of them.
  *
  * **Position is a fraction.** Nothing here takes a pixel coordinate from a
  * spec. That is what lets one composition be 16:9 and 9:16 without a second
@@ -24,8 +24,16 @@ import { clamp01 } from "./engine.js";
 
 /* ------------------------------------------------------------------- scale */
 
-/** Frames are authored 1080 tall. This is the multiplier to the real one. */
-export const u = (height) => height / 1080;
+/**
+ * Frames are authored against a 1080 short edge. This is the multiplier.
+ *
+ * The *narrow* dimension, not the height. Type sized off the height would grow
+ * by 78% the moment the same composition was reframed to 9:16, because 1920
+ * became the height — so a headline that fitted across a landscape frame would
+ * overflow a portrait one that is physically narrower. Scaling on the short
+ * edge keeps a graphic the same size relative to the space it actually has.
+ */
+export const u = (width, height) => Math.min(width, height) / 1080;
 
 /* ------------------------------------------------------------------- fonts */
 

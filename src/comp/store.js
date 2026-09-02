@@ -271,6 +271,37 @@ export function removeAudio(trackId, gesture) {
   return { ok: true };
 }
 
+/**
+ * Slide everything after a removal back by what was removed.
+ *
+ * A layer's `from` is an absolute frame of the finished cut, so cutting a
+ * second out at 0:05 moves every graphic and every sound after it a second
+ * earlier. Nothing else re-times them, and a title card that was placed on a
+ * sentence has no value once it is sitting on the following one.
+ *
+ * A layer that straddles the removal keeps its start and loses the removed
+ * frames from its duration, so it still covers the words it was placed over.
+ */
+export function shiftAfter(atFrame, removedFrames) {
+  if (!(removedFrames > 0)) return;
+
+  const move = (item) => {
+    const end = item.from + item.durationInFrames;
+    if (item.from >= atFrame) {
+      return { ...item, from: Math.max(0, item.from - removedFrames) };
+    }
+    if (end > atFrame) {
+      // Straddles the cut: shorten rather than move, and never below a frame.
+      const overlap = Math.min(removedFrames, end - atFrame);
+      return { ...item, durationInFrames: Math.max(1, item.durationInFrames - overlap) };
+    }
+    return item;
+  };
+
+  doc = { ...doc, layers: doc.layers.map(move), audio: doc.audio.map(move) };
+  emit();
+}
+
 export function clearComposition() {
   doc = emptyComposition();
   emit();

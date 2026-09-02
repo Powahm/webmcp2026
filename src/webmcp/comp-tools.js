@@ -51,11 +51,13 @@ const context = () => ({ cutSeconds: cutSeconds(), fps: composition().fps });
  * graphic confidently in the wrong place.
  */
 async function cutTranscript() {
-  const segments = Editor.timeline;
-  if (!segments.length) return null;
-  const transcripts = await transcriptsFor(segments.map((s) => s.clipId));
+  if (!Editor.timeline.length) return null;
+  const transcripts = await transcriptsFor(Editor.timeline.map((s) => s.clipId));
   if (!transcripts.size) return null;
-  return toCutTime(segments, transcripts);
+  // Re-read after the await. Accepting a cut swaps the whole array, so a
+  // timeline captured before the IndexedDB read could be the pre-cut one, and
+  // a quote resolved against it would stage a range in the wrong place.
+  return toCutTime(Editor.timeline, transcripts);
 }
 
 /* ---------------------------------------------------------- reading it out */
@@ -523,7 +525,7 @@ export const proposeTidy = {
     }
 
     const deadAir = args.min_silence_seconds == null ? undefined : Number(args.min_silence_seconds);
-    const found = findDeadWeight(transcript, deadAir ? { deadAir } : {});
+    const found = findDeadWeight(transcript, deadAir != null ? { deadAir } : {});
     if (!found.length) {
       return json({
         ok: true,

@@ -20,7 +20,8 @@ import { createMixer, createScheduler, speechRanges } from "../comp/audio.js";
 import { generate } from "../comp/codegen.js";
 import { SFX_PRESETS } from "../comp/composition.js";
 import { formatOf, toSeconds } from "../comp/engine.js";
-import { renderComposition } from "../comp/render.js";
+import { palette } from "../comp/paint.js";
+import { fitVideo, renderComposition } from "../comp/render.js";
 import {
   acceptAudio,
   acceptedLayers,
@@ -37,8 +38,9 @@ import {
   removeAudio,
   removeLayer,
   setFormat,
+  shiftAfter,
 } from "../comp/store.js";
-import { applyCut, onCuts, pendingCuts, proposeCut, rejectCut, settle } from "../cuts/store.js";
+import { applyCut, onCuts, pendingCuts, proposeCut, rejectCut, retime, settle } from "../cuts/store.js";
 import { FILLERS, findDeadWeight, toCutTime } from "../transcript/transcript.js";
 import { hasApiKey, onTranscripts, setApiKey, transcriptsFor } from "../transcript/store.js";
 import { transcribe } from "../transcript/whisper.js";
@@ -68,6 +70,19 @@ export const Editor = (() => {
   let refresh = () => {};
 
   const byId = new Map();
+
+  /**
+   * The open window's transcript rebuild, or a no-op when it is closed.
+   *
+   * `addClip`, `trimSelected` and `clear` live out here at module scope but
+   * every one of them re-times the words, and the transcript lives inside
+   * `build`. This is the seam between them: without it, opening the Editor on
+   * a clip (Camera -> click the take) builds the transcript against an empty
+   * timeline and then adds the clip, so the Transcript tab claims the take was
+   * never recorded against a script.
+   */
+  let retimeTranscript = async () => {};
+
   const segDuration = (seg) => Math.max(0.05, (seg.out - seg.in) / seg.speed);
   const total = () => timeline.reduce((sum, seg) => sum + segDuration(seg), 0);
 
@@ -97,6 +112,7 @@ export const Editor = (() => {
     };
     timeline.push(seg);
     if (select) selected = seg.uid;
+    await retimeTranscript();
     refresh();
     return seg;
   }
@@ -198,11 +214,24 @@ export const Editor = (() => {
     let transcript = null;
     let transcribing = false;
 
+    // Rebuilds are fired from a dozen places and each awaits IndexedDB, so two
+    // can be in flight at once. Only the newest may write, or a slow read from
+    // before a trim lands after the fast one from after it.
+    let generation = 0;
+
     async function rebuildTranscript() {
-      if (!timeline.length) { transcript = null; return; }
+      const mine = ++generation;
+      if (!timeline.length) {
+        if (mine === generation) transcript = null;
+        return;
+      }
       const map = await transcriptsFor(timeline.map((s) => s.clipId));
+      if (mine !== generation) return;
+      // Re-read the array after the await: accepting a cut replaces it whole.
       transcript = map.size ? toCutTime(timeline, map) : null;
     }
+
+    retimeTranscript = rebuildTranscript;
 
     /* ---- rendering ---- */
 
@@ -469,18 +498,30 @@ export const Editor = (() => {
      * touched, and only when it actually changes.
      */
     let nowWord = -1;
+    let nowEl = null;
+    let wordEls = null;
     function highlightWord() {
       if (tab !== "words" || !transcript?.words?.length) return;
       const i = transcript.words.findIndex((w) => playhead >= w.start && playhead < w.end);
       if (i === nowWord) return;
       nowWord = i;
-      const buttons = panes.words.querySelectorAll(".trx-word");
-      buttons.forEach((b, k) => b.classList.toggle("now", k === i));
+      // Two class writes, not one per word. A five-minute take is a thousand
+      // buttons and this runs every time the spoken word advances.
+      if (!wordEls) wordEls = [...panes.words.querySelectorAll(".trx-word")];
+      nowEl?.classList.remove("now");
+      nowEl = wordEls[i] ?? null;
+      nowEl?.classList.add("now");
     }
 
     function renderWords() {
       if (tab !== "words") return;
+      // Anything half-typed into the key field survives a re-render. The pane
+      // rebuilds on every transcript change and losing the key mid-paste is
+      // the kind of thing that makes a feature feel broken.
+      const typed = panes.words.querySelector('[data-act="key"]')?.value ?? "";
       nowWord = -1;
+      nowEl = null;
+      wordEls = null;
 
       if (!transcript?.words?.length) {
         panes.words.innerHTML = `
@@ -518,6 +559,10 @@ export const Editor = (() => {
           <p class="trx-words">${words}</p>
           ${whisperHtml()}
         </div>`;
+      if (typed) {
+        const field = panes.words.querySelector('[data-act="key"]');
+        if (field) field.value = typed;
+      }
     }
 
     /** The Whisper upgrade. The key is the user's and stays in this browser. */
@@ -566,8 +611,10 @@ export const Editor = (() => {
       renderInspector();
       renderClock();
       renderCuts();
-      renderWords();
       renderCode();
+      // Not renderWords. The words pane is owned by rebuildTranscript's
+      // callers and the onTranscripts subscription, because it is the
+      // expensive one and the only one holding a text field.
     };
 
     /* ---- playback ---- */
@@ -626,6 +673,7 @@ export const Editor = (() => {
     async function play() {
       if (!timeline.length) return;
       if (playhead >= total() - 0.05) playhead = 0;
+      cancelAnimationFrame(raf);
       playing = true;
       playBtn.dataset.playing = "true";
       playBtn.setAttribute("aria-label", "Pause");
@@ -671,10 +719,16 @@ export const Editor = (() => {
       cancelled = false;
 
       const first = byId.get(timeline[0].clipId);
+      const shape = formatOf(composition().format);
       const canvas = document.createElement("canvas");
-      canvas.width = first?.width || 1280;
-      canvas.height = first?.height || 720;
+      // The composition's format decides the file's shape. Before this, the
+      // canvas took the first clip's dimensions and an accepted reframe to
+      // 9:16 exported a landscape video, which made propose_format a lie.
+      canvas.width = shape.width;
+      canvas.height = shape.height;
       const ctx = canvas.getContext("2d");
+      // One palette snapshot for the whole render, not one per frame.
+      const exportPal = palette();
 
       const stream = canvas.captureStream(30);
       const { ctx: audioCtx, dest } = ensureAudio();
@@ -707,7 +761,18 @@ export const Editor = (() => {
 
           ctx.filter = FILTERS[at.seg.filter] || "none";
           try {
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            // Cover, not stretch. A 16:9 take in a 9:16 frame with bars down
+            // both sides is not a vertical video, it is a landscape video
+            // someone gave up on — and stretching every clip to the canvas
+            // distorted any footage that was not the first clip's shape.
+            const fit = fitVideo(
+              video.videoWidth || first?.width || canvas.width,
+              video.videoHeight || first?.height || canvas.height,
+              canvas.width,
+              canvas.height
+            );
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(video, fit.x, fit.y, fit.w, fit.h);
           } catch { /* frame not ready */ }
 
           // The same functions the preview calls, on the frame being written.
@@ -724,6 +789,7 @@ export const Editor = (() => {
             format: composition().format,
             fps: composition().fps,
             showProposed: false,
+            pal: exportPal,
           });
 
           // Effects fire into the same graph the recorder is capturing, so
@@ -775,6 +841,7 @@ export const Editor = (() => {
     let mixer = null;
     let scheduler = null;
     let beds = [];
+    let bedTimers = [];
 
     /**
      * Built on first use, and only on first use.
@@ -811,25 +878,50 @@ export const Editor = (() => {
       const mix = ensureMixer();
       if (!mix) return;
 
+      const fps = composition().fps;
+
       for (const track of tracks) {
         const clip = byId.get(track.clipId) ?? (await Clips.all()).find((c) => c.id === track.clipId);
         if (!clip) continue;
+
+        // A bed has a window, and it is the window the inspector shows and the
+        // Code tab prints. Honour it: start when the playhead reaches it, stop
+        // when it ends, and enter partway through if the playhead is already
+        // inside.
+        const from = track.from / fps;
+        const until = (track.from + track.durationInFrames) / fps;
+        if (playhead >= until) continue;
+
         const el = new Audio(Clips.url(clip));
         el.loop = true;
         el.crossOrigin = "anonymous";
-        const bed = mix.bed(el, {
-          gain: track.gain,
-          duck: track.duck,
-          speech: track.duck ? speechRanges(transcript) : [],
-          offset: playhead,
-        });
-        if (!bed) continue;
-        await el.play().catch(() => {});
-        beds.push(bed);
+
+        const begin = async () => {
+          const into = Math.max(0, playhead - from);
+          const bed = mix.bed(el, {
+            gain: track.gain,
+            duck: track.duck,
+            speech: track.duck ? speechRanges(transcript) : [],
+            offset: playhead,
+          });
+          if (!bed) return;
+          if (into > 0 && Number.isFinite(el.duration)) el.currentTime = into % Math.max(0.1, el.duration);
+          await el.play().catch(() => {});
+          beds.push(bed);
+          const left = (until - Math.max(playhead, from)) * 1000;
+          if (Number.isFinite(left) && left > 0) {
+            bedTimers.push(setTimeout(() => bed.stop(), left));
+          }
+        };
+
+        if (playhead >= from) await begin();
+        else bedTimers.push(setTimeout(begin, (from - playhead) * 1000));
       }
     }
 
     function stopBeds() {
+      for (const timer of bedTimers) clearTimeout(timer);
+      bedTimers = [];
       for (const bed of beds) bed.stop();
       beds = [];
     }
@@ -853,7 +945,16 @@ export const Editor = (() => {
       timeline = result.timeline;
       if (!timeline.some((s) => s.uid === selected)) selected = null;
       loaded = null;
+
+      // Everything downstream of a removal has just moved. The cuts still
+      // waiting are absolute ranges in the edit and the layers are absolute
+      // frames of it, so both have to slide back by what went — otherwise
+      // accepting the first of a batch quietly aims the rest at the wrong
+      // words, and propose_tidy stages a batch by design.
       settle(id);
+      retime(cut.start, result.removed);
+      shiftAfter(Math.round(cut.start * composition().fps), Math.round(result.removed * composition().fps));
+
       await rebuildTranscript();
       Desk.toast(`Cut ${result.removed.toFixed(2)}s.`, "good");
       refresh();
@@ -1136,7 +1237,30 @@ export const Editor = (() => {
      * same way.
      */
     let gfxFrame = 0;
+    let pal = palette();
+    let palAge = 0;
+    let painted = false;
+
     function paintGraphics() {
+      // The palette is a forced style read plus fourteen property lookups, and
+      // it only changes when someone hits the theme toggle. Re-snapshot three
+      // times a second rather than sixty.
+      if (palAge++ % 20 === 0) pal = palette();
+
+      const anything = liveGraphics().length || liveLayers().length || composition().pendingFormat;
+      if (!anything) {
+        // Clear once, then stop drawing. With nothing to paint this loop was
+        // burning a frame budget forever, including while minimised.
+        if (painted) {
+          gfxCtx.setTransform(1, 0, 0, 1, 0, 0);
+          gfxCtx.clearRect(0, 0, gfx.width, gfx.height);
+          painted = false;
+        }
+        gfxFrame = requestAnimationFrame(paintGraphics);
+        return;
+      }
+      painted = true;
+
       const rect = video.getBoundingClientRect();
       const dpr = Math.min(2, window.devicePixelRatio || 1);
       const w = Math.max(1, Math.round(rect.width));
@@ -1163,6 +1287,7 @@ export const Editor = (() => {
         layers: liveLayers(),
         format: composition().format,
         fps: composition().fps,
+        pal,
         // Guides only while a reframe is waiting, which is the one moment the
         // safe area is a decision rather than clutter.
         guides: Boolean(composition().pendingFormat),
@@ -1191,6 +1316,12 @@ export const Editor = (() => {
       stop();
       stopBeds();
       mixer?.dispose();
+      // Close it, not just disconnect. Each window built its own context and
+      // browsers cap how many may exist at once; leaking one per open/close
+      // means sound stops working after about six visits, with no error.
+      audioGraph?.ctx?.close?.().catch?.(() => {});
+      audioGraph = null;
+      retimeTranscript = async () => {};
       refresh = () => {};
     });
 

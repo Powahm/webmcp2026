@@ -53,7 +53,7 @@ export function renderComposition(ctx, opts = {}) {
   if (!(width > 0) || !(height > 0)) return;
 
   const { safe } = formatOf(format);
-  const scale = u(height);
+  const scale = u(width, height);
 
   const resolved = resolve(layers);
   const active = activeAt(resolved, frame);

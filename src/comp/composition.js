@@ -101,9 +101,21 @@ export function validateLayer(input, context = {}) {
   }
 
   if ("timings" in fields) {
-    props.timings = Array.isArray(input.timings)
-      ? input.timings.map((n) => Math.max(0, Math.round(Number(n) || 0)))
-      : null;
+    if (Array.isArray(input.timings) && input.timings.length) {
+      // One per word or none. A mismatch used to fall through to the even
+      // spread, which is the exact behaviour timings exist to replace — and
+      // the caller was told the layer staged fine.
+      const words = String(input.text ?? "").split(/\s+/).filter(Boolean).length;
+      if (input.timings.length !== words) {
+        return fail(
+          `timings has ${input.timings.length} entries but text has ${words} word(s).`,
+          "Send exactly one frame number per word, in order, or leave timings out and the words spread evenly across the layer."
+        );
+      }
+      props.timings = input.timings.map((n) => Math.max(0, Math.round(Number(n) || 0)));
+    } else {
+      props.timings = null;
+    }
   }
 
   if ("point" in fields) {

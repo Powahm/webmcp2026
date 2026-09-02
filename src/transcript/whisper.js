@@ -48,7 +48,7 @@ export async function transcribe(clip, { signal } = {}) {
     return {
       ok: false,
       error: "No OpenAI API key is set in this browser.",
-      hint: "Open the Composition tab and paste a key into the Transcript panel. It is kept in this browser's localStorage and sent only to api.openai.com.",
+      hint: "Open the Editor's Transcript tab and paste a key into the panel there. It is kept in this browser's localStorage and sent only to api.openai.com.",
     };
   }
   if (!clip?.blob) {

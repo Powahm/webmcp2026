@@ -119,6 +119,28 @@ export function settle(id) {
   emit();
 }
 
+/**
+ * Slide the cuts that come after a removal back by what was removed.
+ *
+ * Every range here is an absolute position in the finished edit, so taking
+ * two seconds out at 0:05 moves everything later two seconds earlier. Without
+ * this, accepting the first of a batch leaves the rest pointing at the wrong
+ * words — and `propose_tidy` exists to stage a whole batch at once, so that is
+ * not an edge case, it is the normal path.
+ *
+ * Cuts that start before the removal are untouched. A cut that overlapped it
+ * cannot exist, because `proposeCut` refuses to stage one.
+ */
+export function retime(removedAt, removedSeconds) {
+  if (!(removedSeconds > 0)) return;
+  cuts = cuts.map((c) =>
+    c.start >= removedAt
+      ? { ...c, start: Math.max(0, c.start - removedSeconds), end: Math.max(0, c.end - removedSeconds) }
+      : c
+  );
+  emit();
+}
+
 export function clearCuts() {
   cuts = [];
   emit();

@@ -38,6 +38,11 @@
   inset: 0;
   margin: auto;
   pointer-events: none;
+  /* The clip's look is set on .ed-screen, and this canvas is a child of it.
+     Without this reset the preview grades the graphics and the export does
+     not, so a mono clip previews a grey title card and exports an orange one.
+     The whole point of one renderer is that the two cannot disagree. */
+  filter: none;
 }
 
 .gfx-list { margin: 0; padding: 8px; list-style: none; display: grid; gap: 8px; }

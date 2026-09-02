@@ -267,14 +267,19 @@ export function series(nodes, { gap = 0 } = {}) {
  * opacity. Centralising this is why every graphic in the library animates in
  * at the same speed without any of them agreeing to.
  */
-export function phase(frame, durationInFrames, { enter = 10, exit = 10 } = {}) {
+export function phase(frame, durationInFrames, { enter = 10, exit = 10, easing = "linear" } = {}) {
   const d = Math.max(1, durationInFrames);
   const inF = Math.min(enter, Math.floor(d / 2));
   const outF = Math.min(exit, Math.floor(d / 2));
+  // The spec's easing is applied here, once, which is what makes it mean
+  // something for all eleven components rather than only the ones that
+  // remembered to look at it.
+  const ease = easingOf(easing);
+  const ramp = (t) => ease(Math.max(0, Math.min(1, t)));
   return {
     progress: Math.max(0, Math.min(1, frame / d)),
-    enter: inF <= 0 ? 1 : Math.max(0, Math.min(1, frame / inF)),
-    exit: outF <= 0 ? 1 : Math.max(0, Math.min(1, (d - frame) / outF)),
+    enter: inF <= 0 ? 1 : ramp(frame / inF),
+    exit: outF <= 0 ? 1 : ramp((d - frame) / outF),
   };
 }
 

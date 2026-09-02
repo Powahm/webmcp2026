@@ -84,7 +84,7 @@ const TitleCard = {
   },
   draw(ctx, f) {
     const { width: W, height: H, scale: s, props, colour, pal, frame, durationInFrames: D } = f;
-    const { enter, exit } = phase(frame, D, { enter: 14, exit: 12 });
+    const { enter, exit } = phase(frame, D, { enter: 14, exit: 12, easing: f.easing });
     const alpha = Math.min(enter, exit);
     const rise = (1 - enter) * 40 * s;
 
@@ -138,7 +138,7 @@ const LowerThird = {
   },
   draw(ctx, f) {
     const { width: W, height: H, scale: s, props, colour, pal, frame, durationInFrames: D, fps, safe } = f;
-    const { enter, exit } = phase(frame, D, { enter: 16, exit: 10 });
+    const { enter, exit } = phase(frame, D, { enter: 16, exit: 10, easing: f.easing });
     const slide = spring({ frame, fps, from: -0.35, to: 0, config: { damping: 14, stiffness: 150 } });
 
     const nameW = measure(ctx, props.text, { family: "display", size: 46, scale: s });
@@ -200,7 +200,7 @@ const CaptionPop = {
   },
   draw(ctx, f) {
     const { width: W, height: H, scale: s, props, colour, pal, frame, durationInFrames: D, safe } = f;
-    const { exit } = phase(frame, D, { enter: 4, exit: 8 });
+    const { exit } = phase(frame, D, { enter: 4, exit: 8, easing: f.easing });
 
     const words = String(props.text ?? "").split(/\s+/).filter(Boolean);
     if (!words.length) return;
@@ -275,7 +275,7 @@ const BulletList = {
   },
   draw(ctx, f) {
     const { width: W, height: H, scale: s, props, colour, pal, frame, durationInFrames: D, safe } = f;
-    const { enter, exit } = phase(frame, D, { enter: 12, exit: 10 });
+    const { enter, exit } = phase(frame, D, { enter: 12, exit: 10, easing: f.easing });
     const list = rows(props.items, 6);
     if (!list.length) return;
 
@@ -343,7 +343,7 @@ const ComparisonCards = {
   },
   draw(ctx, f) {
     const { width: W, height: H, scale: s, props, colour, pal, frame, durationInFrames: D, fps, safe } = f;
-    const { enter, exit } = phase(frame, D, { enter: 12, exit: 10 });
+    const { enter, exit } = phase(frame, D, { enter: 12, exit: 10, easing: f.easing });
     const list = rows(props.items, 3);
     if (!list.length) return;
 
@@ -420,7 +420,7 @@ const ProcessFlow = {
   },
   draw(ctx, f) {
     const { width: W, height: H, scale: s, props, colour, pal, frame, durationInFrames: D, safe } = f;
-    const { enter, exit } = phase(frame, D, { enter: 12, exit: 10 });
+    const { enter, exit } = phase(frame, D, { enter: 12, exit: 10, easing: f.easing });
     const steps = rows(props.items, 5);
     if (!steps.length) return;
 
@@ -495,7 +495,7 @@ const StatBadge = {
   },
   draw(ctx, f) {
     const { width: W, height: H, scale: s, props, colour, pal, frame, durationInFrames: D, safe } = f;
-    const { enter, exit } = phase(frame, D, { enter: 10, exit: 10 });
+    const { enter, exit } = phase(frame, D, { enter: 10, exit: 10, easing: f.easing });
     const k = clamp01(interpolate(frame, [0, D * 0.5], [0, 1], { easing: "out" }));
     const shown = countUp(props.text, k);
 
@@ -548,7 +548,7 @@ const CalloutArrow = {
   },
   draw(ctx, f) {
     const { width: W, height: H, scale: s, props, colour, pal, frame, durationInFrames: D } = f;
-    const { enter, exit } = phase(frame, D, { enter: 12, exit: 10 });
+    const { enter, exit } = phase(frame, D, { enter: 12, exit: 10, easing: f.easing });
     const alpha = Math.min(enter, exit);
 
     const px = clamp01(props.point?.x ?? 0.5) * W;
@@ -611,7 +611,7 @@ const ProgressBar = {
   fields: { text: { type: "string", max: 60, note: "Optional label above the bar." } },
   draw(ctx, f) {
     const { width: W, height: H, scale: s, props, colour, pal, frame, durationInFrames: D, safe } = f;
-    const { enter, exit } = phase(frame, D, { enter: 8, exit: 8 });
+    const { enter, exit } = phase(frame, D, { enter: 8, exit: 8, easing: f.easing });
     const alpha = Math.min(enter, exit);
     const k = clamp01(frame / Math.max(1, D));
 
@@ -657,7 +657,7 @@ const CodeCard = {
   },
   draw(ctx, f) {
     const { width: W, height: H, scale: s, props, colour, pal, frame, durationInFrames: D, safe } = f;
-    const { enter, exit } = phase(frame, D, { enter: 12, exit: 10 });
+    const { enter, exit } = phase(frame, D, { enter: 12, exit: 10, easing: f.easing });
     const list = rows(props.items, 8);
     if (!list.length) return;
 
@@ -724,7 +724,7 @@ const QuoteCard = {
   },
   draw(ctx, f) {
     const { width: W, height: H, scale: s, props, colour, pal, frame, durationInFrames: D } = f;
-    const { enter, exit } = phase(frame, D, { enter: 14, exit: 12 });
+    const { enter, exit } = phase(frame, D, { enter: 14, exit: 12, easing: f.easing });
     const alpha = Math.min(enter, exit);
 
     scrim(ctx, W, H, pal.ink, alpha * 0.72);
