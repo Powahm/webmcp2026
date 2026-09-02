@@ -1,0 +1,29 @@
+/*
+ * Tailwind utilities only. No preflight.
+ *
+ * Preflight is a reset, and this app already has one: styles.css is a complete,
+ * hand-built design system with its own light and dark themes. Layering
+ * Tailwind's reset on top of it would quietly change every element's margin,
+ * border and font, which is exactly the regression a framework migration is
+ * supposed to avoid. Utilities alone add the classes without touching a single
+ * existing rule, so the desktop looks the same today as it did before the port.
+ *
+ * Use Tailwind for new surfaces (the teleprompter, the motion graphics tab).
+ * Leave the desktop, the windows and the two apps to desk.css.
+ */
+@import "tailwindcss/theme.css";
+@import "tailwindcss/utilities.css";
+
+@import "./styles/desk.css";
+
+/*
+ * React needs a mount node, and the original markup put the menubar, the
+ * desktop, the dock and the spotlight directly under <body>. `.desktop` sizes
+ * itself with height: calc(100% - var(--menubar-h)), which resolves against its
+ * parent, so an ordinary wrapper div would collapse it. `display: contents`
+ * removes #root from the layout tree entirely and hands its children back to
+ * body, so the box tree is exactly what it was before the port.
+ */
+#root {
+  display: contents;
+}

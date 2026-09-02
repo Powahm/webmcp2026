@@ -4,7 +4,7 @@
    sandboxed frames) so nothing above this layer has to care.
    ============================================================ */
 
-const Store = (() => {
+export const Store = (() => {
   const DB = "desk-two";
   const VERSION = 1;
   const STORES = ["clips", "scripts"];
@@ -106,7 +106,7 @@ const Store = (() => {
 
 /* ---------- clip helpers shared by camera, editor and scripts ---------- */
 
-const Clips = (() => {
+export const Clips = (() => {
   const urls = new Map();
 
   /* MediaRecorder webm often reports Infinity until it is forced to seek */
@@ -213,7 +213,7 @@ const Clips = (() => {
 })();
 
 /* seconds -> 0:07 / 1:04 */
-function timecode(seconds) {
+export function timecode(seconds) {
   if (!Number.isFinite(seconds) || seconds < 0) seconds = 0;
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);

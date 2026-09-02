@@ -1,10 +1,15 @@
+import { Store, Clips, timecode } from "./store.js";
+import { Desk } from "./shell.js";
+import { Camera } from "./camera.js";
+import { Editor } from "./editor.js";
+
 /* ============================================================
    Scripts — a folder of small programs that drive this computer.
    Scripts run as real async JavaScript with an injected `api`,
    so a script can record, cut and export without touching the UI.
    ============================================================ */
 
-const Scripts = (() => {
+export const Scripts = (() => {
   const TINT = "#F7A501";
   const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 

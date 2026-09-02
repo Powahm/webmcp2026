@@ -1,10 +1,14 @@
+import { Store, Clips, timecode } from "./store.js";
+import { Desk } from "./shell.js";
+import { Editor } from "./editor.js";
+
 /* ============================================================
    Camera — live preview and recording.
    The same recorder backs both the window UI and the scripting
    API, so camera.record(3) in a script behaves identically.
    ============================================================ */
 
-const Camera = (() => {
+export const Camera = (() => {
   const TINT = "#F54E00";
   let stream = null;
   let deviceId = null;

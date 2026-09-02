@@ -1,10 +1,14 @@
+import { Store, Clips, timecode } from "./store.js";
+import { Desk } from "./shell.js";
+import { Camera } from "./camera.js";
+
 /* ============================================================
    Editor — a timeline of trimmed clips with per-clip grading.
    Export replays the timeline into a canvas and records the
    canvas stream, so there is no encoder dependency.
    ============================================================ */
 
-const Editor = (() => {
+export const Editor = (() => {
   const TINT = "#B62AD9";
 
   const FILTERS = {

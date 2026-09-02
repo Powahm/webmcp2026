@@ -1,6 +1,8 @@
-node_modules/
-dist/
-.DS_Store
-.env
+node_modules
+dist
 .vercel
-hackathon-strategy.md
+.env
+
+# Local scratch, never committed.
+ref/
+scratch/

@@ -4,7 +4,7 @@
    a body element to fill when they open.
    ============================================================ */
 
-const Desk = (() => {
+export const Desk = (() => {
   const $ = (sel, root = document) => root.querySelector(sel);
   const desktop = $("#desktop");
   const dock = $("#dock");
@@ -478,9 +478,38 @@ const Desk = (() => {
     });
   }
 
+  /**
+   * What is open, and what has focus.
+   *
+   * Added for the WebMCP layer. The window list lives only in this closure and
+   * the focused flag only in a data attribute on a live element, so nothing
+   * outside this tab has ever known it: no server, no API, and not a scraper
+   * that cannot tell a focused window from a background one. That is the whole
+   * reason get_desktop_state is worth a tool.
+   */
+  function openWindows() {
+    return [...windows.values()].map((rec) => ({
+      id: rec.id,
+      title: rec.title,
+      focused: rec.el.dataset.focused === "true",
+      minimised: rec.el.dataset.state === "min"
+    }));
+  }
+
+  /** Registered apps and folders, whether or not they are open. */
+  function catalogue() {
+    return [...registry.values()].map((a) => ({
+      id: a.id,
+      name: a.name,
+      type: a.type,
+      open: windows.has(a.id)
+    }));
+  }
+
   return {
     register, renderIcons, launch, openWindow, closeWindow, focusWindow,
     addSearchSource, toast, esc, compact, reduced,
-    isOpen: (id) => windows.has(id)
+    isOpen: (id) => windows.has(id),
+    openWindows, catalogue
   };
 })();

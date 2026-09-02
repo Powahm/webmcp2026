@@ -1,8 +1,14 @@
+import { Store, Clips, timecode } from "./store.js";
+import { Desk } from "./shell.js";
+import { Camera } from "./camera.js";
+import { Editor } from "./editor.js";
+import { Scripts } from "./scripts-app.js";
+
 /* ============================================================
    Readme folder + boot. Edit DOCS to change the documentation.
    ============================================================ */
 
-const Readme = (() => {
+export const Readme = (() => {
   const TINT = "#30ABC6";
 
   const DOCS = [
@@ -212,7 +218,7 @@ const Readme = (() => {
    Boot
    ============================================================ */
 
-const ICONS = {
+export const ICONS = {
   camera: `<svg viewBox="0 0 24 24" aria-hidden="true">
     <path d="M4 8h3l1.4-2h7.2L17 8h3v11H4z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/>
     <circle cx="12" cy="13" r="3.6" fill="none" stroke="currentColor" stroke-width="1.9"/></svg>`,
@@ -221,50 +227,59 @@ const ICONS = {
     <path d="M3 10h18M8 6v12M16 6v12" stroke="currentColor" stroke-width="1.6"/></svg>`
 };
 
-Desk.register({
-  id: "readme", name: "Readme", type: "folder", subtitle: "5 documents",
-  tint: "#30ABC6", tintDark: "#1F7E94", open: Readme.open
-});
+/**
+ * Boot.
+ *
+ * Called from React once the chrome is in the DOM. It cannot run at module
+ * evaluation time: shell.js resolves #desktop, #dock and #icons the moment it is
+ * imported, so the legacy modules are loaded dynamically after the first paint.
+ */
+export function boot() {
+  Desk.register({
+    id: "readme", name: "Readme", type: "folder", subtitle: "5 documents",
+    tint: "#30ABC6", tintDark: "#1F7E94", open: Readme.open
+  });
 
-Desk.register({
-  id: "scripts", name: "Scripts", type: "folder", subtitle: "write + run",
-  tint: "#F7A501", tintDark: "#C97F00", open: Scripts.open
-});
+  Desk.register({
+    id: "scripts", name: "Scripts", type: "folder", subtitle: "write + run",
+    tint: "#F7A501", tintDark: "#C97F00", open: Scripts.open
+  });
 
-Desk.register({
-  id: "camera", name: "Camera", type: "app", subtitle: "record",
-  tint: "#F54E00", icon: ICONS.camera, open: Camera.open
-});
+  Desk.register({
+    id: "camera", name: "Camera", type: "app", subtitle: "record",
+    tint: "#F54E00", icon: ICONS.camera, open: Camera.open
+  });
 
-Desk.register({
-  id: "editor", name: "Editor", type: "app", subtitle: "cut + export",
-  tint: "#B62AD9", icon: ICONS.editor, open: Editor.open
-});
+  Desk.register({
+    id: "editor", name: "Editor", type: "app", subtitle: "cut + export",
+    tint: "#B62AD9", icon: ICONS.editor, open: Editor.open
+  });
 
-Desk.renderIcons();
+  Desk.renderIcons();
 
-/* launcher sources: docs, scripts, clips */
+  /* launcher sources: docs, scripts, clips */
 
-Desk.addSearchSource(() =>
-  Readme.DOCS.map((d) => ({
-    name: d.name, where: "Readme", tint: Readme.TINT,
-    text: d.blocks.map((b) => (Array.isArray(b.v) ? b.v.join(" ") : b.v || "")).join(" "),
-    run: () => Readme.openDoc(d, null)
-  }))
-);
+  Desk.addSearchSource(() =>
+    Readme.DOCS.map((d) => ({
+      name: d.name, where: "Readme", tint: Readme.TINT,
+      text: d.blocks.map((b) => (Array.isArray(b.v) ? b.v.join(" ") : b.v || "")).join(" "),
+      run: () => Readme.openDoc(d, null)
+    }))
+  );
 
-Desk.addSearchSource(async () =>
-  (await Store.all("scripts")).map((s) => ({
-    name: s.name, where: "Scripts", tint: Scripts.TINT, text: s.code,
-    run: () => Scripts.openScript(s, null)
-  }))
-);
+  Desk.addSearchSource(async () =>
+    (await Store.all("scripts")).map((s) => ({
+      name: s.name, where: "Scripts", tint: Scripts.TINT, text: s.code,
+      run: () => Scripts.openScript(s, null)
+    }))
+  );
 
-Desk.addSearchSource(async () =>
-  (await Clips.all()).map((c) => ({
-    name: c.name, where: "Clips", tint: Editor.TINT, text: c.kind,
-    run: () => Editor.openWith(c.id)
-  }))
-);
+  Desk.addSearchSource(async () =>
+    (await Clips.all()).map((c) => ({
+      name: c.name, where: "Clips", tint: Editor.TINT, text: c.kind,
+      run: () => Editor.openWith(c.id)
+    }))
+  );
 
-Scripts.seed();
+  Scripts.seed();
+}
