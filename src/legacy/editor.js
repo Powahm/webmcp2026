@@ -159,18 +159,21 @@ export const Editor = (() => {
                code are both full-width things, which is why they live down
                here beside the track rather than in the 196px inspector. -->
           <div class="cmp-tabs" role="tablist" aria-label="Timeline views">
-            <button class="cmp-tab" role="tab" data-tab="track" aria-selected="true">Timeline</button>
-            <button class="cmp-tab" role="tab" data-tab="words" aria-selected="false">Transcript</button>
-            <button class="cmp-tab" role="tab" data-tab="code" aria-selected="false">Code</button>
+            <button class="cmp-tab" role="tab" id="tab-track" aria-controls="pane-track"
+                    data-tab="track" aria-selected="true" tabindex="0">Timeline</button>
+            <button class="cmp-tab" role="tab" id="tab-words" aria-controls="pane-words"
+                    data-tab="words" aria-selected="false" tabindex="-1">Transcript</button>
+            <button class="cmp-tab" role="tab" id="tab-code" aria-controls="pane-code"
+                    data-tab="code" aria-selected="false" tabindex="-1">Code</button>
           </div>
           <button class="btn btn-mini" data-act="clear">Clear</button>
         </div>
-        <div class="cmp-pane" data-pane="track">
+        <div class="cmp-pane" id="pane-track" role="tabpanel" aria-labelledby="tab-track" data-pane="track" tabindex="0">
           <div class="ed-track"></div>
           <div class="cut-strip"></div>
         </div>
-        <div class="cmp-pane" data-pane="words" hidden></div>
-        <div class="cmp-pane" data-pane="code" hidden></div>
+        <div class="cmp-pane" id="pane-words" role="tabpanel" aria-labelledby="tab-words" data-pane="words" tabindex="0" hidden></div>
+        <div class="cmp-pane" id="pane-code" role="tabpanel" aria-labelledby="tab-code" data-pane="code" tabindex="0" hidden></div>
       </div>
 
       <div class="ed-export" hidden>
@@ -596,11 +599,19 @@ export const Editor = (() => {
         </div>`;
     }
 
-    function showTab(next) {
+    const TAB_ORDER = ["track", "words", "code"];
+
+    function showTab(next, { focus = false } = {}) {
       tab = next;
       for (const [name, pane] of Object.entries(panes)) pane.hidden = name !== next;
+      // Roving tabindex: one stop in the tab order for the whole strip, and
+      // the arrow keys move between the tabs. A tablist that does not do this
+      // announces itself as one and then behaves like three buttons.
       body.querySelectorAll(".cmp-tab").forEach((t) => {
-        t.setAttribute("aria-selected", String(t.dataset.tab === next));
+        const on = t.dataset.tab === next;
+        t.setAttribute("aria-selected", String(on));
+        t.setAttribute("tabindex", on ? "0" : "-1");
+        if (on && focus) t.focus();
       });
       renderWords();
       renderCode();
@@ -880,16 +891,16 @@ export const Editor = (() => {
 
       const fps = composition().fps;
 
-      for (const track of tracks) {
-        const clip = byId.get(track.clipId) ?? (await Clips.all()).find((c) => c.id === track.clipId);
+      for (const bedTrack of tracks) {
+        const clip = byId.get(bedTrack.clipId) ?? (await Clips.all()).find((c) => c.id === bedTrack.clipId);
         if (!clip) continue;
 
         // A bed has a window, and it is the window the inspector shows and the
         // Code tab prints. Honour it: start when the playhead reaches it, stop
         // when it ends, and enter partway through if the playhead is already
         // inside.
-        const from = track.from / fps;
-        const until = (track.from + track.durationInFrames) / fps;
+        const from = bedTrack.from / fps;
+        const until = (bedTrack.from + bedTrack.durationInFrames) / fps;
         if (playhead >= until) continue;
 
         const el = new Audio(Clips.url(clip));
@@ -899,9 +910,9 @@ export const Editor = (() => {
         const begin = async () => {
           const into = Math.max(0, playhead - from);
           const bed = mix.bed(el, {
-            gain: track.gain,
-            duck: track.duck,
-            speech: track.duck ? speechRanges(transcript) : [],
+            gain: bedTrack.gain,
+            duck: bedTrack.duck,
+            speech: bedTrack.duck ? speechRanges(transcript) : [],
             offset: playhead,
           });
           if (!bed) return;
@@ -1194,6 +1205,20 @@ export const Editor = (() => {
       seg.muted = !seg.muted;
       refresh();
       seekTo(playhead);
+    });
+
+    body.addEventListener("keydown", (e) => {
+      const onTab = e.target.closest?.(".cmp-tab");
+      if (!onTab) return;
+      const step = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+      if (step) {
+        e.preventDefault();
+        const i = TAB_ORDER.indexOf(tab);
+        showTab(TAB_ORDER[(i + step + TAB_ORDER.length) % TAB_ORDER.length], { focus: true });
+      } else if (e.key === "Home" || e.key === "End") {
+        e.preventDefault();
+        showTab(e.key === "Home" ? TAB_ORDER[0] : TAB_ORDER[TAB_ORDER.length - 1], { focus: true });
+      }
     });
 
     scrub.addEventListener("input", () => {

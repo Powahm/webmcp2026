@@ -21,7 +21,7 @@
  */
 
 import { clamp01, interpolate, phase, spring } from "./engine.js";
-import { anchor, box, isolate, label, measure, panel, scrim, wrap } from "./paint.js";
+import { anchor, box, DARK, isolate, label, measure, panel, scrim, wrap } from "./paint.js";
 
 /* ----------------------------------------------------------------- helpers */
 
@@ -674,7 +674,7 @@ const CodeCard = {
     const alpha = Math.min(enter, exit);
 
     panel(ctx, x, y, w, h, {
-      fill: "#12141B", border: pal.ink, shadow: pal.ink,
+      fill: DARK.panel, border: pal.ink, shadow: pal.ink,
       radius: 12, elevation: 7, scale: s, alpha,
     });
 
@@ -682,7 +682,7 @@ const CodeCard = {
     // without one reads as a screenshot of somewhere else.
     isolate(ctx, () => {
       ctx.globalAlpha = alpha;
-      ctx.fillStyle = "#232735";
+      ctx.fillStyle = DARK.bar;
       ctx.beginPath();
       ctx.rect(x + 2 * s, y + 2 * s, w - 4 * s, barH);
       ctx.fill();
@@ -692,7 +692,7 @@ const CodeCard = {
     });
     if (props.text) {
       label(ctx, props.text, x + padX + 26 * s, y + barH / 2 + 2 * s, {
-        family: "mono", size: 24, colour: "#9BA1B4", baseline: "middle", alpha, scale: s,
+        family: "mono", size: 24, colour: DARK.muted, baseline: "middle", alpha, scale: s,
       });
     }
 
@@ -701,10 +701,10 @@ const CodeCard = {
       if (k <= 0.01) return;
       const ly = y + barH + 26 * s + i * lineH;
       label(ctx, String(i + 1).padStart(2, "0"), x + padX, ly, {
-        family: "mono", size: 22, colour: "#4A5064", baseline: "middle", alpha: k, scale: s,
+        family: "mono", size: 22, colour: DARK.faint, baseline: "middle", alpha: k, scale: s,
       });
       label(ctx, line, x + padX + 44 * s, ly, {
-        family: "mono", size, colour: "#EDEEF2", baseline: "middle", alpha: k, scale: s,
+        family: "mono", size, colour: DARK.text, baseline: "middle", alpha: k, scale: s,
       });
     });
   },

@@ -94,6 +94,22 @@ const FALLBACK = {
   green: "#29963F",
 };
 
+/**
+ * A fixed dark palette, for the one graphic that is dark in both themes.
+ *
+ * The code card is a terminal and a terminal is dark; flipping it to cream in
+ * the light theme would make it stop reading as one. These are the dark
+ * theme's own token values, pinned here so there is one place to change them
+ * rather than six literals inside a drawer.
+ */
+export const DARK = {
+  panel: "#12141B",
+  bar: "#232735",
+  text: "#EDEEF2",
+  muted: "#9BA1B4",
+  faint: "#4A5064",
+};
+
 export function palette() {
   const style = typeof document !== "undefined"
     ? getComputedStyle(document.documentElement)
