@@ -1,132 +1,98 @@
-# Threadweaver
+# Desk Two
 
-A document reader and a link canvas where a human and an AI agent work the same case.
+A small computer in a browser tab. Two folders, two apps, no framework and no build step —
+open `index.html` and it runs.
 
-**You read.** Open a filing, read it, drag across a passage and mark it. An address, a name, a
-date, a question. Raise a line of enquiry in your own words. This is the Document Reader's job in a
-police major incident room, and in this app it is yours.
+- **Readme** — a folder of documentation about the machine.
+- **Scripts** — example programs and a blank one, in an editor that runs them.
+- **Camera** — live preview, one button to record.
+- **Editor** — a timeline. Trim, grade, reorder, export.
 
-**The agent indexes.** Through [WebMCP](https://webmcp.devpost.com) site tools it can see the filing
-you have open, the passage you just highlighted, every mark you have left and the working set on
-your canvas, then cross-references all of it against a corpus you could not hold in your head. It
-comes back with **proposals**: dashed, glowing, unsettled, each carrying a citation, plus its own
-highlights laid alongside yours in the document you are still reading. Click a citation, check the
-filing with the exact span highlighted, then accept or reject. Accepted knowledge locks into the
-physics simulation and the graph re-settles around it.
+Anything the apps can do, a script can do without you clicking.
 
-That split is not ours. Major incident rooms have run it since 1981, for the same reason: the human
-capacity that reads well is not the human capacity that cross-references exhaustively. See
-[`docs/METHOD.md`](docs/METHOD.md).
-
-Built on real UK Companies House public records. No backend. The corpus is static, every tool runs
-in the page.
-
-**Take the agent away and this is still a document reader with typed highlights, an enquiry queue
-and a link canvas you build by hand.** That is the test we hold ourselves to.
-
-**Submission for The WebMCP Challenge. Deadline: 3 September 2026, 1pm PDT.**
-
-## The agent cannot commit anything
-
-There are nineteen tools. Ten read, nine stage a proposal, point at something or report back, and
-**none promotes a proposal into the graph.** That is not a missing feature; it is the design.
-
-Six things have no tool at all, and belong to the human alone: promoting a proposal, rejecting one,
-raising a line of enquiry, filing one, deleting your own markings, and adding a document to the
-working set. The agent works a queue you wrote.
-
-It is guaranteed twice over:
-
-- **Structurally.** No registered tool promotes anything, and nothing under `src/webmcp/` imports
-  `acceptProposal` or `rejectProposal`. `scripts/check-no-commit-tool.ts` runs as part of
-  `npm run build` and fails the build if that ever stops being true.
-- **At runtime.** Promotion requires a DOM event with `isTrusted === true`, an event only the
-  browser can produce from a real input device. A synthetic `MouseEvent`, an `element.click()`, and
-  a tool call all fail it.
-
-`src/state/actions.ts` is the only thing that mutates state. Your clicks and the agent's tool calls
-take the same path through it, so the two of you are equal actors on one model rather than a UI with
-a bot bolted on.
-
-## Quickstart
+## Run it
 
 ```bash
-npm install
-npm run dev              # works fully as an ordinary web app, no agent needed
+open index.html          # that's it
+# or, to get a secure context for the camera
+python3 -m http.server   # then visit http://localhost:8000
 ```
 
-Then open the page in **ChatGPT's browser** and check the **Site tools** panel in the address bar.
-Chrome 149+ works too with `chrome://flags/#enable-webmcp-testing`.
+The camera needs a **secure context**: `https://` or `localhost`. Opening the file over
+`file://` gives you everything except live capture — use **Import video** instead.
 
-### Building the corpus
+## Files
 
-`public/corpus/*.json` is what the app serves. There is no backend, so it has to be in the repo
-that gets deployed. To rebuild it from source records:
-
-```bash
-cp .env.example .env     # add a free Companies House REST API key
-```
-
-Download and unzip both free bulk products, then put them where the scripts look:
-
-| Product | From | Goes in |
-|---|---|---|
-| Free Company Data Product | <http://download.companieshouse.gov.uk/en_output.html> | `raw/bulk/*.csv` |
-| PSC snapshot | <http://download.companieshouse.gov.uk/en_pscdata.html> | `raw/psc/*.txt` |
-
-```bash
-npm run corpus:fetch -- --select-only   # streaming selection, no API calls
-npm run corpus:fetch                    # officers + filing history, cached per company
-npm run corpus:build                    # -> public/corpus/*.json
-npm run corpus:chains                   # candidate 3-4 hop chains, with citations
-npm run corpus:chains -- --lock 09112233 # lock one by company number; writes docs/VERIFIED-CHAIN.md
-```
-
-Then commit the result:
-
-```bash
-git add public/corpus                   # the deployed site has no records without it
-```
-
-If the header shows an orange **DEV FIXTURE. Not real records** badge, the corpus did not load and
-you are looking at the development stand-in.
-
-`raw/` and `.env` are gitignored. `CH_API_KEY` is read only by `scripts/`; the built bundle contains
-neither the key nor the Companies House hostname, and `npm run build` is checked for that.
-
-## Deliberately out of scope
-
-These are decisions, not gaps:
-
-- **No entity extraction or NER.** Every entity and relationship comes from a structured field in a
-  real filing. Nothing is inferred from prose, so nothing is invented.
-- **No graph database.** The canvas holds a working set of tens of nodes, not the corpus. Path
-  finding is a hand-rolled BFS over an adjacency map, because `max_hops <= 4` does not justify a
-  dependency.
-- **No accounts, no server, no stored data.** The page is the API. The agent can never reach data
-  the analyst cannot also see. Markings are mirrored into `sessionStorage` so a refresh does not
-  lose them; they die with the tab, and nothing else is kept at all.
-- **No editing the corpus from the UI.** The records are the records.
-- **No mobile layout.**
-
-## A note on the data
-
-Everything here is a UK public record. The product surfaces **structure**, "these companies share a
-registered address and a common person with significant control, here are the filings", and leaves
-the conclusion to the human. It does not make accusations about named living individuals, and the UI
-copy is written to keep that true. Dates of birth are published by Companies House and are used for
-identity matching, but they are never rendered anywhere in the interface.
-
-## Docs
-
-| File | What's in it |
+| File | Contents |
 |---|---|
-| [`docs/METHOD.md`](docs/METHOD.md) | **Start here.** The incident-room division of labour we implement, and why the human holds the Reader's chair |
-| [`docs/PLAN.md`](docs/PLAN.md) | Features by priority, the reasoning behind each decision, day-by-day schedule, definition of done |
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | System diagrams, full file tree, the one architectural rule that matters |
-| [`docs/TOOLS.md`](docs/TOOLS.md) | All 19 WebMCP tool contracts with JSON Schemas |
-| [`docs/UI.md`](docs/UI.md) | The visual and physics spec. What each force, colour and animation means, and why the canvas is 2D |
-| [`docs/DATA.md`](docs/DATA.md) | Companies House ingestion pipeline and how to find the demo chain |
+| `index.html` | Menubar, desktop, dock, launcher |
+| `styles.css` | Design tokens, both themes, window and app chrome |
+| `store.js` | IndexedDB persistence for clips and scripts, plus clip probing |
+| `shell.js` | Window manager, dock, ⌘K launcher, theme, icons |
+| `camera.js` | Stream acquisition and recording |
+| `editor.js` | Timeline, playback, grading, canvas export |
+| `scripts-app.js` | Script folder, code editor, and the runtime API |
+| `main.js` | Readme documents, app registration, boot |
+
+Scripts load in that order; each attaches one global (`Store`/`Clips`, `Desk`, `Camera`,
+`Editor`, `Scripts`, `Readme`).
+
+## The scripting API
+
+Scripts are ordinary async JavaScript handed an `api` object and a `log()` function.
+
+```js
+const clip = await api.camera.record(3);
+await api.editor.open();
+await api.editor.add(clip);
+api.editor.trim(0.5, 2.5);
+api.editor.look("punch");
+api.editor.speed(1.5);
+```
+
+| Group | Calls |
+|---|---|
+| `api.clips` | `all()`, `last()`, `remove(id)` |
+| `api.camera` | `record(seconds)`, `open()` |
+| `api.editor` | `open()`, `add(clip)`, `trim(in, out)`, `look(name)`, `speed(n)`, `clear()`, `export()` |
+| misc | `api.sleep(ms)`, `api.toast(msg)`, `api.timecode(seconds)` |
+
+Looks are `none`, `mono`, `warm`, `cool`, `punch`, `faded`. Speeds are `0.5`, `1`, `1.5`, `2`.
+
+Scripts are built with the `Function` constructor, so a page served under a CSP without
+`unsafe-eval` will refuse to run them. The editor detects that at load, says so, and still
+saves your code.
+
+## How export works
+
+There is no encoder dependency. Export replays the timeline into a `<canvas>`, applying each
+clip's filter as `ctx.filter`, captures that canvas with `captureStream()`, mixes the audio
+back in through a Web Audio graph, and records the combined stream with `MediaRecorder`.
+
+The consequence: **rendering is real time.** A forty-second cut takes forty seconds.
+
+Exports are saved back into the library as a new clip *and* offered as a download. The library
+copy is the reliable one — some embedded frames block downloads a page starts itself.
+
+## Storage
+
+Clips and scripts live in IndexedDB under the origin serving the page. Nothing is uploaded;
+there is no backend. If IndexedDB is unavailable the apps fall back to memory for the session,
+so nothing breaks, but a refresh loses the library.
+
+## Interactions
+
+- **Click an icon** — folders hinge open, apps press in; the window scales out of the icon's
+  exact rectangle and reverses back into it on close.
+- **Drag** a window by its title bar, **resize** from the bottom-right, **double-click** to maximise.
+- **⌘K / Ctrl+K** searches documents, scripts and clips.
+- **Escape** closes the top window. **⌘Enter** runs a script, **⌘S** saves it.
+
+## Accessibility
+
+Icons and files are real buttons, windows are labelled dialogs, focus moves into a window on
+open and back to the icon on close. `prefers-reduced-motion` disables the window animations
+and the wallpaper parallax.
 
 ## Licence
 
