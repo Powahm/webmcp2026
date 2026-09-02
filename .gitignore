@@ -3,5 +3,4 @@ dist/
 .DS_Store
 .env
 .vercel
-CLAUDE.md
 hackathon-strategy.md
