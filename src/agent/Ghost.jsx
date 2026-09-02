@@ -32,6 +32,8 @@ export default function Ghost() {
   const s = useSyncExternalStore(subscribe, getSnapshot);
   const [bubbles, setBubbles] = useState([]);
   const [eyes, setEyes] = useState({ x: 0, y: 0 });
+  /** The highest call sequence already spoken. Not a count of the log, which
+   *  is capped and stops growing. */
   const seen = useRef(0);
   const ghostRef = useRef(null);
 
@@ -41,12 +43,13 @@ export default function Ghost() {
   useEffect(() => {
     if (s.calls.length === 0) return;
 
-    // calls[] is newest first. Anything above the count we last handled is new.
-    const fresh = s.calls.slice(0, s.calls.length - seen.current).reverse();
+    // calls[] is newest first, and it is capped, so its length stops changing
+    // once it fills. Compare sequence numbers instead: they only go up.
+    const fresh = s.calls.filter((c) => c.seq > seen.current).reverse();
     if (fresh.length === 0) return;
 
     const first = seen.current === 0;
-    seen.current = s.calls.length;
+    seen.current = Math.max(seen.current, ...s.calls.map((c) => c.seq));
 
     setBubbles((prev) => [
       ...prev,

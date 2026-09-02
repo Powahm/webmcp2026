@@ -191,7 +191,9 @@ export const Skills = (() => {
           if (!seg) return Desk.toast("Put a clip on the timeline first.", "bad");
           seg.filter = skill.apply.look;
           seg.speed = skill.apply.speed;
-          Editor.setAll({});
+          // Was setAll({}), an empty patch applied to every segment purely to
+          // trigger a redraw. Repainting is what was meant, so say that.
+          Editor.repaint();
           Desk.toast(`Applied ${skill.apply.look} to the last clip.`, "good");
         });
       }

@@ -222,13 +222,6 @@ export const Camera = (() => {
     return { stop, finished };
   }
 
-  async function recordFor(seconds = 3) {
-    const session = await start();
-    await new Promise((r) => setTimeout(r, Math.max(0.2, seconds) * 1000));
-    session.stop();
-    return session.finished;
-  }
-
   /* ---------------- window UI ---------------- */
 
   function build(body, win) {
@@ -609,5 +602,5 @@ export const Camera = (() => {
     return clip;
   }
 
-  return { open, recordFor, start, acquire, release, state, TINT, describeError };
+  return { open, start, acquire, release, state, TINT, describeError };
 })();

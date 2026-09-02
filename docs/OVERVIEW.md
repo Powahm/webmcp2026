@@ -39,160 +39,38 @@ asks for: reuse your existing application logic and permissions.
 
 ## What exists today
 
-| Piece | File | State |
+Everything below is built and tested.
+
+| Piece | Where | State |
 |---|---|---|
-| Window manager, dock, spotlight, theme, toasts | `shell.js` | Done. `Desk.openWindow`, `Desk.register`, `Desk.addSearchSource`, `Desk.toast`. |
-| Storage | `store.js` | Done. IndexedDB with a memory fallback, `Store` + `Clips` + `timecode()`. |
-| Camera | `camera.js` | Done. `getUserMedia`, MediaRecorder to WebM, device picker, mic toggle, file import, recent strip. |
-| Editor | `editor.js` | Done. Library, preview, clip inspector, timeline, trim, six looks, speed, reorder, and a real export that replays the timeline into a canvas and mixes audio through Web Audio. |
-| Scripts | `scripts-app.js` | Runs real async JS against the `api` object. Seeded with examples. |
-| Readme | `main.js` | Five documents. |
-| Deploy | `vercel.json` | Static. Deploys as-is. |
+| Window manager, dock, spotlight, theme, toasts | `src/legacy/shell.js` | Done. Plus an `onVisibility` hook so an app can let go of a device when it is minimised. |
+| Storage | `src/legacy/store.js` | IndexedDB v2 with a memory fallback: `clips`, `scripts`, `aiskills`. |
+| Camera | `src/legacy/camera.js` | Camera and screen capture, constraint ladder, mic mixed into a display stream, teleprompter over the preview, beat marks written onto the take. |
+| Editor | `src/legacy/editor.js` | Library, timeline, trim, six looks, speed, reorder, real-time canvas export with audio mixed through Web Audio. Graphics overlay. |
+| Scripts | `src/legacy/scripts-app.js` | Lines-and-shot-directions model, blocks and text views, research pane, inline agent proposals, standalone rehearsal prompter. |
+| Skills / AI Skills | `src/legacy/skills.js`, `src/legacy/aiskills.js` | Craft notes, plus a folder of markdown the agent can load, with triggers. |
+| Motion graphics | `src/graphics/` | Six declarative types, one renderer for preview and export, propose and accept. |
+| Ghost folders | `src/folders/` | Manifest from the agent, directory picker from the person. |
+| The agent's presence | `src/agent/`, `src/webmcp/StatusBadge.jsx` | A ghost that names each tool as it is called, and a four-state status badge. |
+| WebMCP layer | `src/webmcp/` | Eighteen tools, registration with fallback, per-call instrumentation. |
 
-Not started: the teleprompter, screen recording, motion graphics, the WebMCP layer.
+### Verified
 
-## What is left to build
+Headless Chromium against a stand-in host built to the spec's shape, plus a real export
+decoded frame by frame to confirm an accepted graphic is genuinely burned into the file.
+Roughly 190 checks across the tool contract, both browsers' picker paths, the recorder,
+the teleprompter, the graphics loop, the folder loop, the skills loop and the ghost.
 
-### 1. Screen recording, in the Camera
+**Not yet verified: any of it inside ChatGPT's browser.** A stand-in host is good evidence
+and it is not the real thing.
 
-Cheap and worth doing. `camera.js` already isolates the whole capture path behind `acquire()`, and
-everything downstream (MediaRecorder, `Clips.save`, the editor, export) is source-agnostic because
-it only ever sees a `MediaStream` and then a Blob.
+## Still open
 
-- Add a source mode: `camera` / `screen` / `screen + mic`.
-- In `acquire()`, branch to `navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })`.
-- For screen plus voiceover, take the display stream and a `getUserMedia({ audio: true })` stream
-  and build one `MediaStream` from the display video track plus the mic audio track. That is three
-  lines, and it is what makes a tutorial recording possible.
-- Save with `kind: "screen"` so the library can label it.
-- Handle the user hitting the browser's own "Stop sharing" button: listen for `ended` on the video
-  track and stop the recorder, or the clip runs on with a frozen frame.
-- `getDisplayMedia` needs a secure context and a user gesture, same as the camera. The existing
-  `describeError` needs one more case for `NotAllowedError` when the picker is dismissed.
-
-Roughly forty minutes.
-
-### 2. The teleprompter, in the Camera
-
-Open the Camera, pick a script, hit record, and the script scrolls as large text over the preview,
-one beat at a time.
-
-- Beats come from the script text split on blank lines. One paragraph, one beat.
-- **Advance manually**, space bar or a large button. A timed prompter that gets ahead of you is
-  worse than no prompter at all.
-- Record `{ beat, atSeconds }` as the take runs and store the array on the clip. That single field
-  is what later lets anything cut on script structure rather than on guesswork, and capturing it now
-  costs nothing.
-- The Camera needs to know which script is loaded, which beat is showing, and how far in it is.
-  That triple is what `get_recorder_state` returns and it is the whole reason the agent can say
-  anything useful about a take.
-
-### 3. Motion graphics, a tab in the Editor
-
-A tab where the creator asks the agent for a graphic and it lands on the timeline as a proposal
-they accept, reject or tweak.
-
-**The agent must not emit CSS, SVG or JavaScript.** It fills in a constrained declarative spec that
-the editor already knows how to render. Faster to build, always on-theme, cannot break the page, and
-it is the difference between a demo that works on the first take and one that works on the fifth.
-
-Six types, one envelope:
-
-```
-lower_third     name + role, slides in from the left
-title_card      full-frame headline, optional subtitle
-caption_pop     word-by-word kinetic captions over a time range
-callout_arrow   arrow plus label pointing at a position
-stat_badge      a number that counts up
-progress_bar    a bar tied to a time range
-```
-
-```js
-{ type, start, duration, text, subtext, position, palette_role, easing }
-```
-
-Palette *roles*, not hex. The agent picks "accent" and the theme decides what that is, so the
-graphic cannot be off-brand and cannot be ugly.
-
-Render it twice, from one spec: as a DOM overlay in the preview, and as canvas draw calls during
-export. The editor already proves this pattern works, its six looks are a CSS filter string in
-preview and the identical string on the canvas at export.
-
-### 4. The WebMCP layer
-
-New file, `webmcp.js`, loaded last from `index.html`.
-
-```js
-const mc = document.modelContext ?? navigator.modelContext;
-if (typeof mc?.registerTool === "function") {
-  for (const tool of TOOLS) await mc.registerTool(tool);
-}
-```
-
-Most tools are a thin wrapper over the `api` object that `scripts-app.js` already builds.
-
-**Read-only**, `annotations: { readOnlyHint: true }` so the browser does not gate them behind a
-confirmation prompt:
-
-| Tool | Returns |
-|---|---|
-| `get_desktop_state` | Which windows are open and which is focused. The agent should know whether you are filming or editing before it says anything. |
-| `list_scripts` | Script ids, names, beat counts. |
-| `get_script` | One script, split into beats. |
-| `get_open_script` | **Flagship.** The script open right now, the beat on screen, the creator's cursor or selection inside it. |
-| `get_recorder_state` | `idle` / `armed` / `recording`, source, elapsed seconds, loaded script, current beat. |
-| `list_clips` | Library: id, name, kind, duration, dimensions. |
-| `get_timeline` | Segments in order with in and out points, look, speed, total runtime. |
-| `get_selection` | **Flagship.** The selected segment or graphic in the Editor. Makes "tighten this bit" mean something. |
-| `get_graphics` | Graphics on the timeline with their specs, so the agent can build on what is there. |
-
-**Pointing**, changes the view and asserts nothing:
-
-| Tool | Effect |
-|---|---|
-| `open_app` | Brings a window to the front. |
-| `load_teleprompter` | Loads a script into the Camera. Does not start recording. |
-| `scroll_teleprompter` | Moves the prompter to a beat. |
-| `seek_preview` | Moves the playhead so the creator sees what the agent is talking about. |
-
-**Staged proposals**, the creator accepts or rejects:
-
-| Tool | Effect |
-|---|---|
-| `propose_graphic` | A ghost graphic on the timeline, visibly unconfirmed, previewing live. |
-| `propose_graphic_change` | A staged edit to an existing graphic. |
-| `propose_cut` | A ghost trim on a segment. Nothing is trimmed until accepted. |
-| `propose_look` | A staged grade on a segment. |
-
-### The line the agent does not cross
-
-**There is no tool that exports, deletes a clip, or accepts a proposal.** Acceptance is a click,
-guarded by a trusted user event. Say it outright in the Devpost description: the agent can compose
-an eight-second animated title card in a single call, and it still cannot put one frame into your
-video. That answers "how do I know it won't wreck my edit" before a judge has to ask, and it
-satisfies the requirement that consequential actions get human review.
-
-## Build order
-
-**Tonight**
-
-1. WebMCP registration live, one tool visible in ChatGPT browser's Site tools panel. Nothing else
-   until a judge's browser can see one tool.
-2. Screen recording in the Camera.
-3. Teleprompter, including the beat index on `get_recorder_state`.
-4. The nine read-only tools. They are cheap once the state is reachable, because the state already
-   exists.
-
-**Thursday morning**
-
-5. `propose_graphic`, the six renderers, accept and reject.
-6. The pointing tools and `propose_cut`.
-
-**Thursday, code freeze at noon Berlin**
-
-7. Video, Devpost description, README.
-
-Cut first, in this order: `propose_look`, `propose_cut`, `get_desktop_state`, script creation.
+- Editor basics beyond trim and reorder: splitting a clip, transitions.
+- Export is real-time canvas capture, so it is WebM at the source clip's dimensions and
+  takes as long as the cut. WebCodecs with `mp4-muxer` is the path to MP4, exact frame
+  rates and 4K, and it replaces `runExport` entirely.
+- The demo video and the Devpost write-up.
 
 ## The demo, three minutes
 

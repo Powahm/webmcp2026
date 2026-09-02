@@ -25,6 +25,14 @@ const state = {
   calls: [],
   inFlight: 0,
   lastCallAt: 0,
+  /**
+   * Total calls ever, which is not the same as calls.length.
+   *
+   * The log is capped, so once it fills, its length stops changing and anything
+   * watching for new calls by comparing lengths goes quiet forever. This
+   * counter only ever goes up.
+   */
+  seq: 0,
 };
 
 const MAX_CALLS = 40;
@@ -60,8 +68,9 @@ export function callStarted(name) {
 export function callFinished(record, ok, summary) {
   state.inFlight = Math.max(0, state.inFlight - 1);
   state.lastCallAt = Date.now();
+  state.seq += 1;
   state.calls = [
-    { ...record, ok, summary, ms: Date.now() - record.at },
+    { ...record, ok, summary, ms: Date.now() - record.at, seq: state.seq },
     ...state.calls,
   ].slice(0, MAX_CALLS);
   commit();

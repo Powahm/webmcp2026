@@ -650,17 +650,8 @@ export const Editor = (() => {
     SPEEDS,
 
     clear() { timeline = []; selected = null; refresh(); },
-    setAll(patch) { timeline.forEach((s) => Object.assign(s, patch)); refresh(); },
-    trimSelected(inS, outS) {
-      const seg = timeline[timeline.length - 1];
-      if (!seg) return;
-      seg.in = Math.max(0, inS);
-      seg.out = Math.max(seg.in + 0.1, outS);
-      refresh();
-    },
-    exportNow() {
-      const body = document.querySelector('[data-win="editor"] .win-body');
-      return body?._editor?.runExport();
-    }
+    /** Repaint the timeline, inspector and clock after something outside this
+     *  module has changed a segment. The Skills app applies a look this way. */
+    repaint: () => refresh()
   };
 })();
