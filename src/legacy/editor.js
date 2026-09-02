@@ -1,4 +1,14 @@
 import { Store, Clips, timecode } from "./store.js";
+import { drawGraphics } from "../graphics/render.js";
+import {
+  accept as acceptGraphic,
+  acceptedGraphics,
+  liveGraphics,
+  onGraphics,
+  pendingGraphics,
+  reject as rejectGraphic,
+  removeGraphic,
+} from "../graphics/store.js";
 import { Desk } from "./shell.js";
 import { Camera } from "./camera.js";
 
@@ -77,6 +87,10 @@ export const Editor = (() => {
       <section class="ed-stage">
         <div class="ed-screen">
           <video class="ed-video" playsinline></video>
+          <!-- Graphics are drawn here, by the same function the export calls.
+               A DOM overlay would have meant two renderers for one spec, and
+               a preview that quietly stops matching the file. -->
+          <canvas class="ed-gfx"></canvas>
           <p class="ed-empty">Add a clip from the library to start cutting.</p>
         </div>
         <div class="ed-transport">
@@ -107,6 +121,8 @@ export const Editor = (() => {
       </div>`;
 
     const video = body.querySelector(".ed-video");
+    const gfx = body.querySelector(".ed-gfx");
+    const gfxCtx = gfx.getContext("2d");
     const screen = body.querySelector(".ed-screen");
     const empty = body.querySelector(".ed-empty");
     const libList = body.querySelector(".ed-lib-list");
@@ -159,10 +175,57 @@ export const Editor = (() => {
         : `<p class="track-empty">Timeline is empty.</p>`;
     }
 
+    /**
+     * The graphics section of the inspector.
+     *
+     * Proposals sit above accepted graphics because a proposal is the thing
+     * asking for a decision. Each carries the reason the agent gave, and
+     * clicking one moves the playhead to it, so judging it means looking at it
+     * rather than imagining it.
+     */
+    function graphicsHtml() {
+      const pending = pendingGraphics();
+      const live = acceptedGraphics();
+      if (!pending.length && !live.length) {
+        return `
+          <div class="ed-head"><span>Graphics</span></div>
+          <p class="insp-empty">Nothing yet. Ask the agent for a title card or a lower third over the bit you have selected.</p>`;
+      }
+
+      const card = (g) => `
+        <li class="gfx ${g.status}" data-gfx="${g.id}">
+          <div class="gfx-head">
+            <span class="gfx-type mono">${Desk.esc(g.type.replace(/_/g, " "))}</span>
+            <span class="gfx-at mono">${timecode(g.start)} · ${g.duration.toFixed(1)}s</span>
+          </div>
+          <p class="gfx-text">${Desk.esc(g.text || g.subtext || "—")}</p>
+          ${g.reason ? `<p class="gfx-reason">${Desk.esc(g.reason)}</p>` : ""}
+          ${
+            g.status === "proposed"
+              ? `<div class="gfx-acts">
+                   <button class="btn btn-mini btn-accent" data-gfx-accept="${g.id}">Accept</button>
+                   <button class="btn btn-mini btn-danger" data-gfx-reject="${g.id}">Reject</button>
+                 </div>`
+              : `<div class="gfx-acts">
+                   <button class="btn btn-mini btn-danger" data-gfx-remove="${g.id}">Remove</button>
+                 </div>`
+          }
+        </li>`;
+
+      return `
+        <div class="ed-head">
+          <span>Graphics</span>
+          ${pending.length ? `<span class="gfx-count">${pending.length} to judge</span>` : ""}
+        </div>
+        <ul class="gfx-list">${[...pending, ...live].map(card).join("")}</ul>`;
+    }
+
     function renderInspector() {
       const seg = timeline.find((s) => s.uid === selected);
       if (!seg) {
-        insp.innerHTML = `<div class="ed-head"><span>Clip</span></div><p class="insp-empty">Select a clip on the timeline.</p>`;
+        insp.innerHTML =
+          `<div class="ed-head"><span>Clip</span></div><p class="insp-empty">Select a clip on the timeline.</p>` +
+          graphicsHtml();
         return;
       }
       const clip = byId.get(seg.clipId);
@@ -202,7 +265,7 @@ export const Editor = (() => {
             <button class="btn btn-mini" data-move="1" aria-label="Move later">→</button>
             <button class="btn btn-mini btn-danger" data-move="x" aria-label="Remove from timeline">Remove</button>
           </div>
-        </div>`;
+        </div>` + graphicsHtml();
     }
 
     function renderClock() {
@@ -339,6 +402,13 @@ export const Editor = (() => {
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
           } catch { /* frame not ready */ }
 
+          // The same function the preview calls, on the frame being written.
+          // Proposals are excluded: only what the analyst accepted is in the
+          // file, and the look never has to be reconciled between two
+          // renderers because there is only one.
+          ctx.filter = "none";
+          drawGraphics(ctx, canvas.width, canvas.height, playhead, acceptedGraphics(), { showProposed: false });
+
           const local = Math.max(0, (video.currentTime - at.seg.in) / at.seg.speed);
           playhead = at.start + local;
           fill.style.width = `${Math.min(100, (playhead / duration) * 100)}%`;
@@ -384,6 +454,20 @@ export const Editor = (() => {
     body.addEventListener("click", async (e) => {
       const t = e.target;
       const act = t.closest("[data-act]")?.dataset.act;
+
+      const yes = t.closest("[data-gfx-accept]");
+      if (yes) return void acceptGraphic(yes.dataset.gfxAccept, e);
+      const no = t.closest("[data-gfx-reject]");
+      if (no) return void rejectGraphic(no.dataset.gfxReject, e);
+      const gone = t.closest("[data-gfx-remove]");
+      if (gone) return void removeGraphic(gone.dataset.gfxRemove, e);
+
+      // Clicking a graphic takes you to it. Judging one means seeing it.
+      const card = t.closest("[data-gfx]");
+      if (card) {
+        const g = liveGraphics().find((x) => x.id === card.dataset.gfx);
+        if (g) return void seekTo(Math.min(total(), g.start + g.duration * 0.45));
+      }
 
       if (act === "play") return playing ? stop() : play();
       if (act === "import") return fileInput.click();
@@ -478,8 +562,45 @@ export const Editor = (() => {
       Desk.toast("Imported.", "good");
     });
 
+    /**
+     * Paint the overlay.
+     *
+     * Runs whether or not the timeline is playing, because a proposal you
+     * cannot see while paused is a proposal you cannot judge. The canvas is
+     * sized in device pixels to the box the video actually occupies, so text
+     * is sharp and the geometry matches the export, which is normalised the
+     * same way.
+     */
+    let gfxFrame = 0;
+    function paintGraphics() {
+      const rect = video.getBoundingClientRect();
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      const w = Math.max(1, Math.round(rect.width));
+      const h = Math.max(1, Math.round(rect.height));
+
+      if (gfx.width !== w * dpr || gfx.height !== h * dpr) {
+        gfx.width = w * dpr;
+        gfx.height = h * dpr;
+        gfx.style.width = `${w}px`;
+        gfx.style.height = `${h}px`;
+      }
+
+      gfxCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      gfxCtx.clearRect(0, 0, w, h);
+      drawGraphics(gfxCtx, w, h, playhead, liveGraphics());
+      gfxFrame = requestAnimationFrame(paintGraphics);
+    }
+    gfxFrame = requestAnimationFrame(paintGraphics);
+
+    const offGraphics = onGraphics(() => renderInspector());
     const off = Store.on("clips", renderLibrary);
-    win.onCleanup(() => { off(); stop(); refresh = () => {}; });
+    win.onCleanup(() => {
+      off();
+      offGraphics();
+      cancelAnimationFrame(gfxFrame);
+      stop();
+      refresh = () => {};
+    });
 
     renderLibrary();
     refresh();

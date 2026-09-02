@@ -1,3 +1,5 @@
+import { EASINGS, PALETTE_ROLES, POSITIONS, TYPES, TYPE_INFO } from "../graphics/spec.js";
+import { liveGraphics, proposeChange, proposeGraphic } from "../graphics/store.js";
 import { Camera } from "../legacy/camera.js";
 import { Editor } from "../legacy/editor.js";
 import { Scripts } from "../legacy/scripts-app.js";
@@ -314,6 +316,130 @@ export const getPlayhead = {
   },
 };
 
+/* --------------------------------------------------------------- graphics */
+
+const GRAPHIC_MENU = TYPES.map((t) => `${t}: ${TYPE_INFO[t].blurb}`).join(" ");
+
+export const getGraphics = {
+  name: "get_graphics",
+  description:
+    "Return the motion graphics on this cut, both the ones you have proposed and the ones the editor has accepted, with their timings and settings. Call it before proposing, so you build on what is there instead of stacking a second title card on top of the first.",
+  inputSchema: NO_INPUT,
+  annotations: READ_ONLY,
+  execute: () =>
+    json({
+      graphics: liveGraphics().map((g) => ({
+        id: g.id,
+        type: g.type,
+        status: g.status,
+        text: g.text,
+        subtext: g.subtext,
+        start: round(g.start),
+        duration: round(g.duration),
+        position: g.position,
+        palette_role: g.palette_role,
+        easing: g.easing,
+        point: g.point,
+        proposed_by: g.origin,
+      })),
+      types: TYPE_INFO,
+      positions: POSITIONS,
+      palette_roles: PALETTE_ROLES,
+      note:
+        "A graphic with status 'proposed' is waiting on the editor and is not in the video. Only they can accept it.",
+    }),
+};
+
+/**
+ * The tool the whole submission turns on.
+ *
+ * The agent composes a piece of motion design in a single call, and still
+ * cannot put one frame of it into the video. It sends a spec, never CSS, SVG or
+ * JavaScript: that is what makes the result always on-theme, impossible to
+ * break the page with, and checkable, so a bad proposal comes back with a hint
+ * rather than rendering as an empty rectangle nobody notices until export.
+ */
+export const proposeGraphicTool = {
+  name: "propose_graphic",
+  description:
+    `Propose a motion graphic over the cut. It appears immediately on the timeline as a dashed, unconfirmed overlay the editor can watch and then accept or reject; it is not in the video until they accept it. Choose a type from: ${GRAPHIC_MENU} Call get_timeline first so the timing lands on the right moment, and get_selection if they asked for it over "this bit".`,
+  inputSchema: {
+    type: "object",
+    properties: {
+      type: { type: "string", enum: [...TYPES] },
+      text: {
+        type: "string",
+        maxLength: 90,
+        description: "The words that appear on screen. Not a description of them. Short: this is a graphic, not a paragraph.",
+      },
+      subtext: { type: "string", maxLength: 90, description: "Optional second line: a role, a source, a label under a number." },
+      start: { type: "number", minimum: 0, description: "Seconds from the start of the finished cut, from get_timeline." },
+      duration: { type: "number", minimum: 0.2, maximum: 30, description: "Seconds on screen. Default 4." },
+      position: { type: "string", enum: [...POSITIONS] },
+      palette_role: {
+        type: "string",
+        enum: [...PALETTE_ROLES],
+        description: "A role, not a colour. The theme decides what it looks like, so this works in light and dark.",
+      },
+      easing: { type: "string", enum: [...EASINGS] },
+      point: {
+        type: "object",
+        description: "callout_arrow only. Where to aim, as fractions of the frame: {x: 0.5, y: 0.5} is the middle.",
+        properties: { x: { type: "number", minimum: 0, maximum: 1 }, y: { type: "number", minimum: 0, maximum: 1 } },
+        required: ["x", "y"],
+        additionalProperties: false,
+      },
+      reason: { type: "string", maxLength: 200, description: "One sentence, shown to the editor on the card. Why this, here." },
+    },
+    required: ["type", "start"],
+    additionalProperties: false,
+  },
+  execute: (args) => {
+    const result = proposeGraphic({ ...args, origin: "agent" }, { timelineLength: Editor.totalDuration });
+    if (!result.ok) return fail(result.error, result.hint);
+    return json({
+      ok: true,
+      graphic_id: result.graphic.id,
+      staged: true,
+      note: "It is on the editor's timeline as a dashed proposal, previewing live. Nothing is in the video until they accept it, and there is no tool that accepts.",
+    });
+  },
+};
+
+export const proposeGraphicChange = {
+  name: "propose_graphic_change",
+  description:
+    "Propose a change to a graphic that is already on the cut: retime it, move it, reword it, recolour it. The original stays exactly as it is until the editor accepts the change, so rejecting costs them nothing. Send only the fields you are changing.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      graphic_id: { type: "string", description: "Id from get_graphics." },
+      text: { type: "string", maxLength: 90 },
+      subtext: { type: "string", maxLength: 90 },
+      start: { type: "number", minimum: 0 },
+      duration: { type: "number", minimum: 0.2, maximum: 30 },
+      position: { type: "string", enum: [...POSITIONS] },
+      palette_role: { type: "string", enum: [...PALETTE_ROLES] },
+      easing: { type: "string", enum: [...EASINGS] },
+      reason: { type: "string", maxLength: 200 },
+    },
+    required: ["graphic_id"],
+    additionalProperties: false,
+  },
+  execute: (args) => {
+    const { graphic_id, ...patch } = args;
+    const result = proposeChange(String(graphic_id ?? ""), patch, { timelineLength: Editor.totalDuration });
+    if (!result.ok) return fail(result.error, result.hint);
+    return json({
+      ok: true,
+      graphic_id: result.graphic.id,
+      replaces: result.graphic.replaces,
+      staged: true,
+      note: "Staged beside the original. The editor sees both and chooses; accepting the change removes the one it replaces.",
+    });
+  },
+};
+
 export const TOOLS = [
   getDesktopState,
   listScripts,
@@ -325,4 +451,7 @@ export const TOOLS = [
   getTimeline,
   getSelection,
   getPlayhead,
+  getGraphics,
+  proposeGraphicTool,
+  proposeGraphicChange,
 ];

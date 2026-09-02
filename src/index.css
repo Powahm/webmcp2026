@@ -27,3 +27,39 @@
 #root {
   display: contents;
 }
+
+/* -------------------------------------------------------------- graphics */
+/* The overlay canvas sits on the video and is never interactive: clicks
+   belong to the picture underneath. */
+.ed-screen { position: relative; }
+
+.ed-gfx {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  pointer-events: none;
+}
+
+.gfx-list { margin: 0; padding: 8px; list-style: none; display: grid; gap: 8px; }
+
+.gfx {
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line);
+  border-radius: var(--radius-s);
+  background: var(--surface-2);
+  cursor: pointer;
+}
+
+/* A proposal is dashed and tinted, the same rule the canvas uses, so the card
+   in the rail and the thing on the picture read as one object. */
+.gfx.proposed { border-style: dashed; border-left-color: var(--accent); background: var(--accent-soft); }
+.gfx.accepted { border-left-color: var(--green); }
+
+.gfx-head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.gfx-type { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
+.gfx-at { font-size: 10px; color: var(--text-muted); }
+.gfx-text { margin: 4px 0 0; font-size: 12.5px; line-height: 1.45; }
+.gfx-reason { margin: 4px 0 0; font-size: 11px; line-height: 1.45; color: var(--text-muted); font-style: italic; }
+.gfx-acts { display: flex; gap: 6px; margin-top: 8px; }
+.gfx-count { font-size: 10px; color: var(--accent); font-weight: 600; }
