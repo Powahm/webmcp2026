@@ -28,3 +28,6 @@ export const TOOL_LABELS = {
 export const isProposal = (name) => name.startsWith("propose_");
 
 export const labelFor = (name) => TOOL_LABELS[name] || "used a tool on this page";
+
+TOOL_LABELS.offer_folder = "offered you a folder it has";
+TOOL_LABELS.get_offered_folders = "checked which folders you let in";

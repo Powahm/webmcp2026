@@ -1,5 +1,6 @@
 import { EASINGS, PALETTE_ROLES, POSITIONS, TYPES, TYPE_INFO } from "../graphics/spec.js";
 import { liveGraphics, proposeChange, proposeGraphic } from "../graphics/store.js";
+import { allFolders, offerFolder } from "../folders/offered.js";
 import { proposalsFor, proposeLine } from "../scripts/proposals.js";
 import { Camera } from "../legacy/camera.js";
 import { Editor } from "../legacy/editor.js";
@@ -542,6 +543,96 @@ export const proposeScriptLine = {
   },
 };
 
+/* ---------------------------------------------------------------- folders */
+
+/**
+ * The agent says what it has; the page draws it; the person opens the door.
+ *
+ * A page cannot see what an agent has access to. WebMCP runs one way, and no
+ * browser lets a page read a directory without a click. So the announcing is
+ * inverted: the agent, which does know, sends a manifest, and a ghost folder
+ * appears on the desktop. Hovering says what is inside. Clicking opens the
+ * browser's own picker, and that gesture is the authorisation.
+ *
+ * Text can ride along in the call, because a script fits. Video cannot, so it
+ * waits for the picker. There is no tool that imports a folder.
+ */
+export const offerFolderTool = {
+  name: "offer_folder",
+  description:
+    "Tell this page about a folder you have access to, so it can offer to import it. Send the folder's name and a list of what is in it; the page draws it on the desktop as a ghost folder the person can accept or ignore. For text files (.txt, .md, .srt, .vtt) you may include the contents and they land immediately as scripts. Do not try to send video: it will not fit, and the page asks the person to point the browser at the folder instead. This does not read anything from their machine and does not import anything by itself.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      name: { type: "string", minLength: 1, maxLength: 60, description: "The folder's name as they would recognise it." },
+      files: {
+        type: "array",
+        minItems: 1,
+        maxItems: 60,
+        description: "What is in the folder. Names only, unless it is a text file you can include.",
+        items: {
+          type: "object",
+          properties: {
+            name: { type: "string", minLength: 1, maxLength: 200, description: "File name including its extension." },
+            size: { type: "integer", minimum: 0, description: "Bytes, if you know. Shown to them, never used to decide anything." },
+            text: {
+              type: "string",
+              maxLength: 20000,
+              description: "Text files only. The contents, which become a script with one line per paragraph. Omit for video.",
+            },
+          },
+          required: ["name"],
+          additionalProperties: false,
+        },
+      },
+      reason: { type: "string", maxLength: 200, description: "One sentence, shown when they hover it. Why this folder is worth importing." },
+    },
+    required: ["name", "files"],
+    additionalProperties: false,
+  },
+  execute: (args) => {
+    const result = offerFolder({
+      name: String(args.name ?? ""),
+      files: Array.isArray(args.files) ? args.files : [],
+      reason: args.reason,
+    });
+    if (!result.ok) return fail(result.error, result.hint);
+
+    const withText = result.folder.files.filter((f) => f.kind === "text" && f.text).length;
+    return json({
+      ok: true,
+      folder_id: result.folder.id,
+      offered: true,
+      files: result.folder.files.length,
+      text_included: withText,
+      note:
+        "It is on their desktop as a ghost folder. Nothing has been read from their machine. " +
+        (withText
+          ? `The ${withText} text file(s) you included will land as scripts the moment they accept; everything else waits for them to point the browser at the folder.`
+          : "They will be asked to point the browser at the folder, which is the only way its contents can be read."),
+    });
+  },
+};
+
+export const getOfferedFolders = {
+  name: "get_offered_folders",
+  description:
+    "Return the folders you have offered this page and whether the person accepted them. Check it before offering again, so you do not offer the same folder twice, and to find out whether the files you expected are actually in their library now.",
+  inputSchema: NO_INPUT,
+  annotations: READ_ONLY,
+  execute: () =>
+    json({
+      folders: allFolders().map((f) => ({
+        id: f.id,
+        name: f.name,
+        status: f.status,
+        files: f.files.length,
+        imported: f.counts ?? null,
+      })),
+      note: "status 'offered' means it is still sitting on their desktop untouched. Only they can accept one.",
+    }),
+};
+
 export const TOOLS = [
   getDesktopState,
   listScripts,
@@ -557,4 +648,6 @@ export const TOOLS = [
   proposeGraphicTool,
   proposeGraphicChange,
   proposeScriptLine,
+  offerFolderTool,
+  getOfferedFolders,
 ];

@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import Ghost from "./agent/Ghost.jsx";
+import GhostFolder from "./folders/GhostFolder.jsx";
 import StatusBadge from "./webmcp/StatusBadge.jsx";
 
 /**
@@ -96,6 +97,9 @@ export default function App() {
         </div>
 
         <div className="icons" id="icons" />
+
+        {/* Folders the agent says it has. Nothing is read until one is clicked. */}
+        <GhostFolder />
 
         <p className="hint" id="hint">
           Record something in <b>Camera</b>, then cut it in <b>Editor</b>.{" "}
