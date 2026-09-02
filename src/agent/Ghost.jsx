@@ -32,6 +32,16 @@ export default function Ghost() {
   const s = useSyncExternalStore(subscribe, getSnapshot);
   const [bubbles, setBubbles] = useState([]);
   const [eyes, setEyes] = useState({ x: 0, y: 0 });
+  /**
+   * The offer to go and get a folder.
+   *
+   * The agent will not volunteer one: it has a folder attached to the chat and
+   * no reason to think a web page wants to hear about it. So the page asks. It
+   * appears a beat after the agent turns up, once, and goes away for good
+   * whether they take it or not — an offer that keeps coming back is a nag.
+   */
+  const [askFolder, setAskFolder] = useState(false);
+  const [asked, setAsked] = useState(false);
   /** The highest call sequence already spoken. Not a count of the log, which
    *  is capped and stops growing. */
   const seen = useRef(0);
@@ -53,17 +63,29 @@ export default function Ghost() {
 
     setBubbles((prev) => [
       ...prev,
-      ...(first ? [{ id: "hello", kind: "hello", text: "Agent connected", at: Date.now() }] : []),
+      ...(first
+        ? [{ id: "hello", kind: "hello", text: "Agent connected", at: Date.now() }]
+        : []),
       ...fresh.map((c, i) => ({
         id: `${c.at}-${i}-${Math.random().toString(36).slice(2, 6)}`,
-        kind: isProposal(c.name) ? "proposal" : "read",
+        kind: !c.ok ? "failed" : isProposal(c.name) ? "proposal" : "read",
         tool: c.name,
-        text: labelFor(c.name),
+        text: c.ok ? labelFor(c.name) : "that one did not work",
         ok: c.ok,
         at: Date.now(),
       })),
     ]);
   }, [s.calls]);
+
+  /* --- the one thing it asks for ---------------------------------------- */
+  useEffect(() => {
+    if (!here || asked) return;
+    const id = setTimeout(() => {
+      setAskFolder(true);
+      setAsked(true);
+    }, 2600);
+    return () => clearTimeout(id);
+  }, [here, asked]);
 
   /* --- and then it stops saying them ------------------------------------ */
   useEffect(() => {
@@ -103,6 +125,32 @@ export default function Ghost() {
   return (
     <div className="agent-ghost" aria-live="polite">
       <div className="agent-bubbles">
+        {askFolder && (
+          <div className="agent-bubble ask">
+            <div className="agent-ask">
+              <p className="agent-ask-text">
+                Want me to see your footage? Pick a folder and I can work with what is in it.
+              </p>
+              <div className="agent-ask-acts">
+                <button
+                  className="btn btn-mini btn-accent"
+                  onClick={async () => {
+                    // The picker has to open from this click, so the import
+                    // module is loaded before anything can await.
+                    const { pickFolderOntoDesk } = await import("../folders/import.js");
+                    setAskFolder(false);
+                    pickFolderOntoDesk();
+                  }}
+                >
+                  Choose a folder
+                </button>
+                <button className="btn btn-mini" onClick={() => setAskFolder(false)}>
+                  Not now
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         {recent.map((b, i) => {
           const last = i === recent.length - 1;
           return (

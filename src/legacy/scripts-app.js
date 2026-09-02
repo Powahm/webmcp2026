@@ -224,8 +224,8 @@ export const Scripts = (() => {
           <div class="scr-bar">
             <input class="scr-name" value="${Desk.esc(script.name)}" aria-label="Script title" spellcheck="false">
             <div class="scr-views" role="tablist" aria-label="View">
-              <button class="scr-view on" data-view="blocks" role="tab" aria-selected="true">Blocks</button>
-              <button class="scr-view" data-view="text" role="tab" aria-selected="false">Text</button>
+              <button class="scr-view on" data-view="text" role="tab" aria-selected="true">Draft</button>
+              <button class="scr-view" data-view="blocks" role="tab" aria-selected="false">Shot list</button>
             </div>
             <button class="btn btn-mini" data-act="research" aria-pressed="false">Research</button>
             <button class="btn btn-mini" data-act="save">Save</button>
@@ -237,13 +237,19 @@ export const Scripts = (() => {
                line per spoken beat with its shot direction. Text is the same
                lines as one editable document, numbered, for when you want to
                rewrite the whole thing rather than nudge a beat. -->
-          <div class="scr-lines" data-pane="blocks"></div>
+          <div class="scr-lines" data-pane="blocks" hidden></div>
 
-          <div class="scr-text" data-pane="text" hidden>
+          <!-- The draft. Where the writing and the researching happen, and so
+               where the agent's suggestions land: a line offered into a shot
+               list is a line offered after the thinking is over. -->
+          <div class="scr-text" data-pane="text">
             <div class="scr-gutter mono" aria-hidden="true"></div>
-            <textarea class="scr-doc" spellcheck="true"
-              aria-label="Script, one line per beat"
-              placeholder="One line per beat. Each line becomes a block."></textarea>
+            <div class="scr-docwrap">
+              <textarea class="scr-doc" spellcheck="true" wrap="off"
+                aria-label="Script, one line per beat"
+                placeholder="One line per beat. Each line becomes a beat in the shot list."></textarea>
+              <div class="scr-suggests" aria-live="polite"></div>
+            </div>
           </div>
 
           <aside class="scr-research" hidden>
@@ -264,6 +270,7 @@ export const Scripts = (() => {
         const textPane = body.querySelector(".scr-text");
         const doc = body.querySelector(".scr-doc");
         const gutter = body.querySelector(".scr-gutter");
+        const suggests = body.querySelector(".scr-suggests");
         const research = body.querySelector(".scr-research");
         const sources = body.querySelector(".scr-sources");
 
@@ -296,49 +303,14 @@ export const Scripts = (() => {
           // rewrites script.lines without re-rendering the blocks, so deleting
           // lines there leaves more elements here than there are lines. Reading
           // past the end used to throw and take the whole window down.
-          list.querySelectorAll(".line:not(.line--proposed)").forEach((el, i) => {
+          list.querySelectorAll(".line").forEach((el, i) => {
             const line = script.lines[i];
             if (!line) return;
             el.querySelector(".line-time").textContent = timecode(seconds(line.text));
           });
         }
 
-        /**
-         * A line the agent wrote, sitting where it would go.
-         *
-         * Shown in place rather than in a side panel, because the only useful
-         * question about a proposed line is how it reads next to the ones
-         * around it.
-         */
-        function proposalCard(p) {
-          return `
-            <article class="line line--proposed" data-proposal="${p.id}">
-              <div class="line-rail">
-                <span class="line-no mono">${p.mode === "replace" ? "↻" : "+"}</span>
-                <span class="line-time mono">${timecode(seconds(p.text))}</span>
-              </div>
-              <div class="line-main">
-                <p class="line-prop-text">${Desk.esc(p.text)}</p>
-                ${p.note ? `<p class="line-prop-note">${Desk.esc(p.note)}</p>` : ""}
-                ${p.reason ? `<p class="line-prop-why">${Desk.esc(p.reason)}</p>` : ""}
-                <div class="line-prop-acts">
-                  <button class="btn btn-mini btn-accent" data-take="${p.id}">
-                    ${p.mode === "replace" ? "Use this instead" : "Add it"}
-                  </button>
-                  <button class="btn btn-mini btn-danger" data-drop="${p.id}">Discard</button>
-                </div>
-              </div>
-            </article>`;
-        }
-
         function render() {
-          const pending = proposalsFor(script.id);
-          const before = new Map();
-          for (const p of pending) {
-            const key = Math.max(0, Math.min(p.index, script.lines.length));
-            before.set(key, [...(before.get(key) || []), p]);
-          }
-
           const rows = script.lines.map((line, i) => `
             <article class="line" data-i="${i}">
               <div class="line-rail">
@@ -358,23 +330,13 @@ export const Scripts = (() => {
               </div>
             </article>`);
 
-          // Interleave: a proposal for index i is drawn just above line i, and
-          // anything aimed past the end lands after the last line.
-          const out = [];
-          for (let i = 0; i < rows.length; i++) {
-            (before.get(i) || []).forEach((p) => out.push(proposalCard(p)));
-            out.push(rows[i]);
-          }
-          for (let i = rows.length; i <= rows.length + 1; i++) {
-            (before.get(i) || []).forEach((p) => out.push(proposalCard(p)));
-          }
-
           list.innerHTML =
-            out.join("") ||
+            rows.join("") ||
             `<p class="scr-empty">No lines yet. Add the first thing you are going to say.</p>`;
           renderTotals();
           autosizeAll();
           renderDoc();
+          paintSuggestions();
         }
 
         /* ---------------- the text view ---------------- */
@@ -400,6 +362,62 @@ export const Scripts = (() => {
           gutter.scrollTop = doc.scrollTop;
         }
 
+        /**
+         * Suggestions, drawn into the draft at the line they are aimed at.
+         *
+         * The textarea does not wrap (wrap="off"), which is what makes this
+         * possible and is worth the horizontal scroll on its own: one line of
+         * the document is one row on screen, so a row's offset is just its
+         * index times the line height. Wrapped lines would put the gutter
+         * numbers out of step with their lines too, which they quietly were.
+         */
+        function lineHeight() {
+          const px = parseFloat(getComputedStyle(doc).lineHeight);
+          return Number.isFinite(px) ? px : 22;
+        }
+
+        function paintSuggestions() {
+          const pending = proposalsFor(script.id);
+          doc.dataset.suggesting = pending.length ? "true" : "false";
+
+          if (pending.length === 0) {
+            suggests.innerHTML = "";
+            doc.style.paddingBottom = "";
+            return;
+          }
+
+          const lh = lineHeight();
+          const padTop = parseFloat(getComputedStyle(doc).paddingTop) || 0;
+          const count = doc.value.split("\n").length;
+
+          suggests.innerHTML = pending
+            .map((p) => {
+              const at = Math.max(0, Math.min(p.index, count));
+              const top = padTop + at * lh;
+              return `
+                <div class="scr-sugg" data-proposal="${p.id}" style="top:${top}px">
+                  <span class="scr-sugg-rail mono">${p.mode === "replace" ? "↻" : "+"}</span>
+                  <div class="scr-sugg-main">
+                    <p class="scr-sugg-text">${Desk.esc(p.text)}</p>
+                    ${p.note ? `<p class="scr-sugg-note">${Desk.esc(p.note)}</p>` : ""}
+                    ${p.reason ? `<p class="scr-sugg-why">${Desk.esc(p.reason)}</p>` : ""}
+                    <div class="scr-sugg-acts">
+                      <button class="btn btn-mini btn-accent" data-take="${p.id}">
+                        ${p.mode === "replace" ? `Replace line ${at + 1}` : `Insert at line ${at + 1}`}
+                      </button>
+                      <button class="btn btn-mini btn-danger" data-drop="${p.id}">Discard</button>
+                    </div>
+                  </div>
+                </div>`;
+            })
+            .join("");
+
+          // Room at the bottom so a suggestion aimed past the last line is not
+          // hanging off the end of the document.
+          suggests.scrollTop = doc.scrollTop;
+          doc.style.paddingBottom = `${Math.max(140, lh * 4)}px`;
+        }
+
         /** Keep a note with its line when the text moves under it. */
         function adoptNotes(texts) {
           const old = script.lines;
@@ -416,9 +434,13 @@ export const Scripts = (() => {
         doc.addEventListener("input", () => {
           script.lines = adoptNotes(doc.value.split("\n"));
           paintGutter();
+          paintSuggestions();
           renderTotals();
         });
-        doc.addEventListener("scroll", () => { gutter.scrollTop = doc.scrollTop; });
+        doc.addEventListener("scroll", () => {
+          gutter.scrollTop = doc.scrollTop;
+          suggests.style.transform = `translateY(${-doc.scrollTop}px)`;
+        });
         doc.addEventListener("blur", () => {
           // Blocks are rebuilt from the document, so switching back shows what
           // was actually typed rather than a stale render.
@@ -429,7 +451,9 @@ export const Scripts = (() => {
           render();
         }
 
-        let view = "blocks";
+        // The draft opens first: it is where the writing and the researching
+        // happen, and the shot list is for the pass before you shoot.
+        let view = "text";
         function setView(next) {
           view = next;
           list.hidden = next !== "blocks";
@@ -498,7 +522,19 @@ export const Scripts = (() => {
             const at = Math.max(0, Math.min(p.index, script.lines.length));
             if (p.mode === "replace" && script.lines[at]) script.lines[at] = line;
             else script.lines.splice(at, 0, line);
+
+            // Rebuild the draft even while it has focus. renderDoc bails when
+            // the textarea is focused, which is right for ordinary typing and
+            // wrong here: the line arrived from outside and has to appear.
+            doc.value = script.lines.map((l) => l.text).join("\n");
+            paintGutter();
             render();
+
+            // Put the caret at the end of the line that just landed, so
+            // carrying on typing continues from it.
+            const upto = script.lines.slice(0, at + 1).map((l) => l.text).join("\n").length;
+            doc.focus();
+            doc.setSelectionRange(upto, upto);
             return;
           }
           const no = e.target.closest("[data-drop]");

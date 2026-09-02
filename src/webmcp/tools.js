@@ -520,7 +520,7 @@ export const proposeGraphicChange = {
 export const proposeScriptLine = {
   name: "propose_script_line",
   description:
-    "Write a line into the script the person has open: a new beat, or a rewrite of one that is already there. It appears in place as a dashed suggestion between the lines around it, and it is not in their script until they accept it. Call get_open_script first, so you write from their research and their current draft rather than from memory, and so you do not repeat a line already waiting for them. One line per call: a beat is one thing said to camera, not a paragraph.",
+    "Write a line into the draft the person has open: a new beat, or a rewrite of one that is already there. It appears in their Draft view, at the line you aimed it at, as a dashed suggestion they accept or discard; it is not in their script until they do. This is where writing and researching happen, so it is where suggestions belong. Call get_open_script first, so you write from their research and their current draft rather than from memory, and so you do not repeat a line already waiting for them. One line per call: a beat is one thing said to camera, not a paragraph. Several lines is several calls, in order.",
   inputSchema: {
     type: "object",
     properties: {

@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import Ghost from "./agent/Ghost.jsx";
+import DeskFolders from "./folders/DeskFolders.jsx";
 import GhostFolder from "./folders/GhostFolder.jsx";
 import StatusBadge from "./webmcp/StatusBadge.jsx";
 
@@ -98,7 +99,9 @@ export default function App() {
 
         <div className="icons" id="icons" />
 
-        {/* Folders the agent says it has. Nothing is read until one is clicked. */}
+        {/* Folders that were actually imported, and folders the agent says it
+            has but nobody has opened yet. */}
+        <DeskFolders />
         <GhostFolder />
 
         <p className="hint" id="hint">

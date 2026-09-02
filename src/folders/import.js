@@ -1,3 +1,4 @@
+import { addDeskFolder } from "./desk.js";
 import { folderById, markImported } from "./offered.js";
 
 /**
@@ -38,14 +39,74 @@ function linesFrom(text) {
 const stem = (name) => name.replace(/\.[^.]+$/, "");
 
 async function saveScript(Store, name, text) {
-  await Store.put("scripts", {
+  const script = {
     id: `script-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     name: stem(name).slice(0, 80) || "Imported script",
     lines: linesFrom(text),
     sources: "",
     created: Date.now(),
     updated: Date.now(),
-  });
+  };
+  await Store.put("scripts", script);
+  return script;
+}
+
+/**
+ * The person asks for a folder themselves.
+ *
+ * No agent involved, and no manifest: they press the button, the browser opens
+ * its picker, and what comes back lands on the desktop as a folder they can
+ * open. This is the path that actually gets used, because the agent has no
+ * reason to volunteer a folder it was never asked about.
+ */
+export async function pickFolderOntoDesk() {
+  // Before any await, so the click is still the current user activation.
+  const picking = chooseFiles();
+
+  const { Store, Clips } = await import("../legacy/store.js");
+  const { Desk } = await import("../legacy/shell.js");
+
+  const chosen = await picking;
+  if (!chosen || chosen.length === 0) return null;
+
+  const entries = [];
+  for (const file of chosen) {
+    if (file.type.startsWith("video/")) {
+      const clip = await Clips.save(file, { name: stem(file.name), kind: "import" });
+      entries.push({ name: file.name, size: file.size, clipId: clip.id });
+    } else if (file.type.startsWith("text/") || TEXT_FILE.test(file.name)) {
+      const script = await saveScript(Store, file.name, await file.text());
+      entries.push({ name: file.name, size: file.size, scriptId: script.id });
+    }
+    // Anything else is listed but not opened: an image or a project file is
+    // worth seeing in the folder and is not something this app can act on.
+    else entries.push({ name: file.name, size: file.size });
+  }
+
+  const name = folderNameFrom(chosen);
+  const folder = addDeskFolder({ name, files: entries });
+
+  const clips = entries.filter((e) => e.clipId).length;
+  const scripts = entries.filter((e) => e.scriptId).length;
+  const bits = [];
+  if (clips) bits.push(`${clips} clip${clips === 1 ? "" : "s"}`);
+  if (scripts) bits.push(`${scripts} script${scripts === 1 ? "" : "s"}`);
+  Desk.toast(bits.length ? `${bits.join(" and ")} in from ${name}` : `${name} is on your desk`, "good");
+
+  // Show them what arrived. The icon lands on the desktop behind whatever
+  // window they already had open, so without this the only sign anything
+  // happened is a toast that has already started fading.
+  const { openDeskFolder } = await import("./window.js");
+  openDeskFolder(folder.id);
+
+  return folder;
+}
+
+/** The directory's own name, from whatever the picker gave us. */
+function folderNameFrom(files) {
+  const path = files[0]?.webkitRelativePath || "";
+  const first = path.split("/")[0];
+  return first || "Imported";
 }
 
 /**
