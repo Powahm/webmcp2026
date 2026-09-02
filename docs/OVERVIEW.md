@@ -25,10 +25,21 @@ The state that decides whether the agent is useful has never left the page:
 - whether the Camera is idle, armed or rolling, and how far into the take you are
 - which clip is selected on the timeline, and where the playhead sits
 - which take you just decided was the keeper
+- **what you said and when you said it** — and this one is the sharpest, because it is the fact
+  a transcription service *cannot* give you. A server can tell you what is in a file you
+  uploaded. It cannot tell you what you were reading off the prompter when you said it, because
+  the prompter is in this tab and so are the clicks that advanced it.
 
 No server has any of it. The clips are Blobs in IndexedDB; the timeline is an array in
-`editor.js`; the recorder's elapsed time exists only in a running interval. A server-side MCP
-cannot reach it and a screen-scraping agent has to infer it from pixels.
+`editor.js`; the recorder's elapsed time exists only in a running interval; the transcript is
+derived from `clip.beats`, which is a log of when someone pressed a key in this window. A
+server-side MCP cannot reach any of it and a screen-scraping agent has to infer it from pixels.
+
+There is a second half to the argument that is easy to miss. The tools do not only *read* state
+no server has, they **write into the surface the creator is already looking at**. A proposal is
+not a message in a chat log describing a graphic; it is a dashed overlay on the frame at the
+second in question, previewing live, next to an Accept button. Nothing off-page can put a
+suggestion *there*.
 
 **The strongest fact about this codebase, and the one to lead the write-up with:** the app already
 had a scripting API for humans before any agent existed. `scripts-app.js` hands a script an `api`
@@ -48,8 +59,18 @@ asks for: reuse your existing application logic and permissions.
 | Scripts | `scripts-app.js` | Runs real async JS against the `api` object. Seeded with examples. |
 | Readme | `main.js` | Five documents. |
 | Deploy | `vercel.json` | Static. Deploys as-is. |
+| Teleprompter | `scripts-app.js` | Done. Scrolls the script, records `{ line, at }` marks onto the clip. |
+| Motion graphics | `graphics/` | Done. Six types, one spec, drawn in preview and export by one function. |
+| WebMCP layer | `webmcp/` | Done. 23 tools on `document.modelContext`, read-only hints, staged writes. |
+| **Composition engine** | `comp/` | Done. Frames at 30fps, `Sequence` resolution, `interpolate`/`spring`, eleven components, three formats, synthesised sound, TSX codegen. |
+| **Transcripts** | `transcript/` | Done. Word timing derived from prompter marks; Whisper as an opt-in upgrade on the user's own key. |
+| **Staged cuts** | `cuts/` | Done. Cut by quoting the words; `applyCut` splits a segment. |
 
-Not started: the teleprompter, screen recording, motion graphics, the WebMCP layer.
+The composition engine is a purpose-built alternative to a React video framework rather than
+an integration of one. The reason is structural: this is a static page with no backend, and
+the render path of every such framework needs Node and a headless browser. The model was
+worth taking — frames rather than seconds, time-shifting sequences, animation as a pure
+function of the frame — and the dependency was not.
 
 ## What is left to build
 
@@ -199,14 +220,27 @@ Cut first, in this order: `propose_look`, `propose_cut`, `get_desktop_state`, sc
 1. **20s.** The desktop. Open a script in the Scripts folder. No AI on screen yet.
 2. Open the Camera, load the script, hit record. The teleprompter scrolls while you deliver a beat
    to camera. Stop.
-3. Open the Editor. The take is in the library and on the timeline. Select a range.
-4. Ask the agent for a title card over the opening. It calls `get_selection` and `get_timeline`,
-   then `propose_graphic`. A ghost graphic appears and previews live.
-5. **Accept it.** It goes solid.
-6. Second ask, on the thing you just accepted: "hold it two seconds longer and use the accent
-   colour." `get_graphics`, then `propose_graphic_change`. This compounding turn is the whole
-   argument, because a page-scraper cannot know what you just chose to keep.
-7. Show the Site tools panel on screen at some point, so WebMCP itself is visible.
+3. Open the Editor. The take is in the library and on the timeline. **Open the Transcript tab:
+   the words are already there, timed, because the prompter was watching.** Nothing was uploaded
+   and no key was needed. Click a word; the playhead goes to it.
+4. Ask the agent for a list over the bit where you say "three things". It calls `get_transcript`
+   with that quote, gets exact seconds back, then `propose_layer`. A dashed list appears at that
+   frame and previews live.
+5. **Accept it.** It goes solid. Open the **Code tab** — the composition is a TSX file with
+   `<Sequence from={115} durationInFrames={150}>`. That is not a description of the graphic,
+   those are the frames it renders on.
+6. Second ask, on the thing you just accepted: "hold it two seconds longer and put a thump under
+   it." `get_composition`, then `propose_layer_change` and `propose_sound`. This compounding turn
+   is the whole argument, because a page-scraper cannot know what you just chose to keep.
+7. "Tidy up the ums." One `propose_tidy` call marks every hesitation under the track, each with
+   its own reason, to take or leave one at a time.
+8. "Make it a short." `propose_format` stages 9:16 and the safe-area guides appear over the
+   preview, so the reframe is a decision rather than a surprise.
+9. Show the Site tools panel on screen at some point, so WebMCP itself is visible.
+
+The line to say out loud while doing it: **every one of those was a proposal.** The agent
+composed a graphic, a sound, a reframe and a list of cuts, and it never put one frame into the
+video. Acceptance is a click, and there is no tool that clicks.
 
 ## Non-negotiables
 
