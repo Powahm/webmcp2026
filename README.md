@@ -1,14 +1,15 @@
 # Desk Two
 
-A small computer in a browser tab. Two folders, two apps, no framework and no build step —
+A small computer in a browser tab. Three folders, two apps, no framework and no build step —
 open `index.html` and it runs.
 
-- **Readme** — a folder of documentation about the machine.
-- **Scripts** — example programs and a blank one, in an editor that runs them.
+- **Readme** — documentation about the machine.
+- **Scripts** — what you are going to say on camera, with a teleprompter.
+- **Skills** — craft notes on cutting, pacing and looks.
 - **Camera** — live preview, one button to record.
 - **Editor** — a timeline. Trim, grade, reorder, export.
 
-Anything the apps can do, a script can do without you clicking.
+Write the script, read it off the prompter while you record, then cut what you shot.
 
 ## Run it
 
@@ -31,37 +32,30 @@ The camera needs a **secure context**: `https://` or `localhost`. Opening the fi
 | `shell.js` | Window manager, dock, ⌘K launcher, theme, icons |
 | `camera.js` | Stream acquisition and recording |
 | `editor.js` | Timeline, playback, grading, canvas export |
-| `scripts-app.js` | Script folder, code editor, and the runtime API |
+| `scripts-app.js` | Script folder, line editor, teleprompter |
+| `skills.js` | Craft notes; the style ones apply to the timeline |
 | `main.js` | Readme documents, app registration, boot |
 
 Scripts load in that order; each attaches one global (`Store`/`Clips`, `Desk`, `Camera`,
-`Editor`, `Scripts`, `Readme`).
+`Editor`, `Scripts`, `Skills`, `Readme`).
 
-## The scripting API
+## Scripts
 
-Scripts are ordinary async JavaScript handed an `api` object and a `log()` function.
+A script is a title and a list of lines. Each line carries the **spoken text** and an optional
+**shot direction** — where the camera is, what the b-roll is, what the tone should be.
 
-```js
-const clip = await api.camera.record(3);
-await api.editor.open();
-await api.editor.add(clip);
-api.editor.trim(0.5, 2.5);
-api.editor.look("punch");
-api.editor.speed(1.5);
-```
+Runtime is estimated at 2.5 words per second (about 150 wpm, an unhurried speaking pace) and
+totalled across the script. The teleprompter scrolls the whole thing across roughly that
+runtime, brightening the line you should be on, with speed control while it runs.
 
-| Group | Calls |
-|---|---|
-| `api.clips` | `all()`, `last()`, `remove(id)` |
-| `api.camera` | `record(seconds)`, `open()` |
-| `api.editor` | `open()`, `add(clip)`, `trim(in, out)`, `look(name)`, `speed(n)`, `clear()`, `export()` |
-| misc | `api.sleep(ms)`, `api.toast(msg)`, `api.timecode(seconds)` |
+Scripts saved by the earlier code-based version are migrated on boot: each non-empty source
+line becomes a spoken line, so nothing is lost.
 
-Looks are `none`, `mono`, `warm`, `cool`, `punch`, `faded`. Speeds are `0.5`, `1`, `1.5`, `2`.
+## Skills
 
-Scripts are built with the `Function` constructor, so a page served under a CSP without
-`unsafe-eval` will refuse to run them. The editor detects that at load, says so, and still
-saves your code.
+Short craft notes in three kinds — `cut`, `edit` and `style`. The style notes carry an
+**Apply** button that sets that look and speed on the last clip on the timeline, so the
+reference is usable rather than only readable.
 
 ## How export works
 

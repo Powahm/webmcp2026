@@ -106,6 +106,34 @@ export default function App() {
 
       <div className="toaster" id="toaster" aria-live="polite" />
 
+      {/* The teleprompter. Markup only: scripts-app.js resolves #prompter by id
+          and drives the scroll itself, so this must stay outside any window and
+          keep every class it targets. */}
+      <div className="prompter" id="prompter" hidden>
+        <div className="prompter-scrim" data-close-prompter />
+        <div className="prompter-panel" role="dialog" aria-modal="true" aria-label="Teleprompter">
+          <header className="prompter-head">
+            <span className="prompter-title" />
+            <button className="btn btn-mini" data-act="prompt-camera">Open Camera</button>
+            <button className="btn btn-mini" data-act="prompt-close" aria-label="Close teleprompter">Esc</button>
+          </header>
+          <div className="prompter-scroll" />
+          <footer className="prompter-foot">
+            <button className="btn btn-mini" data-act="prompt-slower" aria-label="Slower">−</button>
+            <span className="prompter-speed mono">1.0×</span>
+            <button className="btn btn-mini" data-act="prompt-faster" aria-label="Faster">+</button>
+            <button className="btn btn-play" data-act="prompt-play" data-playing="true" aria-label="Pause">
+              <svg className="ico-play" viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M4 2.5v11l9-5.5z" />
+              </svg>
+              <svg className="ico-pause" viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M4.5 2.5h3v11h-3zM8.5 2.5h3v11h-3z" />
+              </svg>
+            </button>
+          </footer>
+        </div>
+      </div>
+
       <div className="spotlight" id="spotlight" hidden>
         <div className="spotlight-scrim" data-close-spotlight />
         <div className="spotlight-panel" role="dialog" aria-modal="true" aria-label="Search">
@@ -117,7 +145,7 @@ export default function App() {
             <input
               id="spotlight-input"
               type="text"
-              placeholder="Search docs, scripts and clips…"
+              placeholder="Search docs, skills, scripts and clips…"
               autoComplete="off"
               spellCheck="false"
               aria-controls="spotlight-results"

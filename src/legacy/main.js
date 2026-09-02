@@ -3,6 +3,7 @@ import { Desk } from "./shell.js";
 import { Camera } from "./camera.js";
 import { Editor } from "./editor.js";
 import { Scripts } from "./scripts-app.js";
+import { Skills } from "./skills.js";
 
 /* ============================================================
    Readme folder + boot. Edit DOCS to change the documentation.
@@ -19,16 +20,18 @@ export const Readme = (() => {
       eyebrow: "Start here",
       title: "This is a computer",
       blocks: [
-        { t: "lede", v: "Two folders and two apps. Record something, cut it, and automate the whole thing with a script." },
-        { t: "h", v: "The four things on the desktop" },
+        { t: "lede", v: "Three folders and two apps. Write what you are going to say, record it, cut it." },
+        { t: "h", v: "The five things on the desktop" },
         { t: "ul", v: [
           "**Readme** — this folder. What everything does.",
-          "**Scripts** — example programs, and a blank one you can write.",
+          "**Scripts** — what you are going to say on camera, with a teleprompter.",
+          "**Skills** — craft notes on cutting, pacing and looks.",
           "**Camera** — live preview, one button to record.",
           "**Editor** — a timeline. Trim, grade, reorder, export."
         ] },
         { t: "h", v: "A first run" },
         { t: "ul", v: [
+          "Open Scripts, write a couple of lines, and hit Teleprompter.",
           "Open Camera and press the red button. Press it again to stop.",
           "Open Editor. Your clip is in the library on the left — click it to add it to the timeline.",
           "Drag the Start and End sliders to trim, pick a look, press Export."
@@ -36,9 +39,9 @@ export const Readme = (() => {
         { t: "note", v: "No camera? Every app has an Import video button. The editor works the same on a file you already have." },
         { t: "h", v: "Keyboard" },
         { t: "ul", v: [
-          "⌘K / Ctrl+K — search clips, scripts and docs.",
-          "Escape — close the top window.",
-          "⌘Enter inside a script — run it. ⌘S — save it."
+          "⌘K / Ctrl+K — search docs, skills, scripts and clips.",
+          "Escape — close the top window, or leave the teleprompter.",
+          "⌘S inside a script — save it."
         ] }
       ]
     },
@@ -85,40 +88,24 @@ export const Readme = (() => {
       ]
     },
     {
-      id: "scripting",
-      name: "Scripting API",
+      id: "scripts-doc",
+      name: "Writing a script",
       kind: "doc",
-      eyebrow: "Reference",
-      title: "Scripting API",
+      eyebrow: "Folder",
+      title: "Writing a script",
       blocks: [
-        { t: "lede", v: "Scripts are real async JavaScript. They get an `api` object and a `log()` function." },
-        { t: "p", v: "Anything the two apps can do, a script can do without you clicking. There is no separate language and no sandbox dialect — top-level await works, and a thrown error lands in the output pane." },
-        { t: "h", v: "Clips" },
+        { t: "lede", v: "A script here is what you are going to say out loud, broken into lines you can actually deliver." },
+        { t: "p", v: "Each line has two parts: the **spoken text**, and a **shot direction** — where the camera is, what the b-roll is, what the tone should be. The direction is for you while filming; it never appears in the teleprompter." },
+        { t: "h", v: "Runtime" },
+        { t: "p", v: "Every line shows an estimated duration, and the script totals them. The estimate assumes about 150 words a minute, which is an unhurried speaking pace — if you read fast, treat it as an upper bound." },
+        { t: "h", v: "The teleprompter" },
         { t: "ul", v: [
-          "`api.clips.all()` — every clip, oldest first.",
-          "`api.clips.last()` — the most recent one.",
-          "`api.clips.remove(id)` — delete it."
+          "Scrolls the whole script across roughly its estimated runtime.",
+          "The line you should be on is bright; the rest sit back.",
+          "− and + change speed while it runs. Space it out rather than racing it.",
+          "**Open Camera** puts the recorder up beside it. Escape leaves."
         ] },
-        { t: "h", v: "Camera" },
-        { t: "ul", v: [
-          "`api.camera.record(seconds)` — records and resolves with the saved clip.",
-          "`api.camera.open()` — brings the window up."
-        ] },
-        { t: "h", v: "Editor" },
-        { t: "ul", v: [
-          "`api.editor.open()` — open the editor window.",
-          "`api.editor.add(clip)` — append a clip, by object or by id.",
-          "`api.editor.trim(in, out)` — set in and out points, in seconds.",
-          "`api.editor.look(name)` — none, mono, warm, cool, punch, faded.",
-          "`api.editor.speed(n)` — 0.5, 1, 1.5 or 2.",
-          "`api.editor.clear()` — empty the timeline.",
-          "`api.editor.export()` — render it."
-        ] },
-        { t: "h", v: "Odds and ends" },
-        { t: "ul", v: [
-          "`api.sleep(ms)`, `api.toast(message)`, `api.timecode(seconds)`."
-        ] },
-        { t: "note", v: "Scripts are constructed with the Function constructor. A page served under a Content-Security-Policy without unsafe-eval will refuse to run them — the editor says so up front and still saves your code." }
+        { t: "note", v: "Write the hook last. You rarely know what the video is about until you have written the rest of it." }
       ]
     },
     {
@@ -246,6 +233,11 @@ export function boot() {
   });
 
   Desk.register({
+    id: "skills", name: "Skills", type: "folder", subtitle: "cuts + looks",
+    tint: "#29963F", tintDark: "#1C6B2C", open: Skills.open
+  });
+
+  Desk.register({
     id: "camera", name: "Camera", type: "app", subtitle: "record",
     tint: "#F54E00", icon: ICONS.camera, open: Camera.open
   });
@@ -267,9 +259,18 @@ export function boot() {
     }))
   );
 
+  Desk.addSearchSource(() =>
+    Skills.SKILLS.map((k) => ({
+      name: k.name, where: "Skills", tint: Skills.TINT,
+      text: k.blocks.map((b) => (Array.isArray(b.v) ? b.v.join(" ") : b.v || "")).join(" "),
+      run: () => Skills.openSkill(k, null)
+    }))
+  );
+
   Desk.addSearchSource(async () =>
     (await Store.all("scripts")).map((s) => ({
-      name: s.name, where: "Scripts", tint: Scripts.TINT, text: s.code,
+      name: s.name, where: "Scripts", tint: Scripts.TINT,
+      text: s.lines.map((l) => `${l.text} ${l.note || ""}`).join(" "),
       run: () => Scripts.openScript(s, null)
     }))
   );

@@ -53,7 +53,7 @@ export const getDesktopState = {
 export const listScripts = {
   name: "list_scripts",
   description:
-    "Return every script saved on this desktop, with its name and how many beats it has. A beat is one paragraph, and it is the unit the teleprompter advances through. Returns names and sizes, not the text; call get_script for that.",
+    "Return every script saved on this desktop with its title, how many lines it has and its estimated spoken runtime. A line is one spoken beat plus an optional shot direction, and it is the unit the teleprompter advances through. Returns titles and lengths, not the words; call get_script for those.",
   inputSchema: NO_INPUT,
   annotations: READ_ONLY,
   execute: async () => {
@@ -62,8 +62,9 @@ export const listScripts = {
       scripts: scripts.map((s) => ({
         id: s.id,
         name: s.name,
-        beats: Scripts.beatsOf(s.code).length,
-        characters: s.code.length,
+        lines: s.lines?.length ?? 0,
+        runtime_seconds: round(Scripts.runtime(s)),
+        runtime: timecode(Scripts.runtime(s)),
         updated: s.updated ?? s.created,
       })),
     });
@@ -73,7 +74,7 @@ export const listScripts = {
 export const getScript = {
   name: "get_script",
   description:
-    "Return one saved script in full, split into beats. Use it to read what the user plans to say before suggesting anything about the take or the edit.",
+    "Return one saved script in full: every line with what is said out loud, its shot direction, and how long that line takes to say. Read it before suggesting anything about the take or the edit, because the shot directions say what the footage is meant to show.",
   inputSchema: {
     type: "object",
     properties: { script_id: { type: "string", description: "Id from list_scripts." } },
@@ -87,13 +88,19 @@ export const getScript = {
     if (!script) {
       return fail(
         `No script with id "${id}".`,
-        "Call list_scripts for the ids on this desktop. They look like 'script-1788...'."
+        "Call list_scripts for the ids on this desktop. They look like 'script-1788...' or 'example-intro'."
       );
     }
     return json({
       id: script.id,
       name: script.name,
-      beats: Scripts.beatsOf(script.code).map((text, i) => ({ index: i, text })),
+      runtime_seconds: round(Scripts.runtime(script)),
+      lines: (script.lines ?? []).map((l, i) => ({
+        index: i,
+        text: l.text,
+        note: l.note || null,
+        seconds: round(Scripts.seconds(l.text)),
+      })),
     });
   },
 };
@@ -101,7 +108,7 @@ export const getScript = {
 export const getOpenScript = {
   name: "get_open_script",
   description:
-    "Return the script the user has open in front of them right now, including any unsaved text, where their caret is, and what they have selected. Use this before answering anything phrased as 'this line', 'what I just wrote', or 'this bit'. It is the live editor, not the saved file, so it can differ from get_script.",
+    "Return the script the writer has open in front of them right now, taken from the live fields rather than the saved record, so a line they are still typing is included. Says which line and which field their caret is in and what they have selected. Use this before answering anything phrased as 'this line', 'what I just wrote', or 'this bit'.",
   inputSchema: NO_INPUT,
   annotations: READ_ONLY,
   execute: () => {
@@ -114,13 +121,38 @@ export const getOpenScript = {
     }
     return json({
       open: {
-        id: open.id,
-        name: open.name,
-        unsaved: open.unsaved,
-        caret: open.caret,
-        selection: open.selection,
-        beats: open.beats.map((text, i) => ({ index: i, text })),
+        ...open,
+        runtime_seconds: round(open.runtime_seconds),
+        runtime: timecode(open.runtime_seconds),
       },
+    });
+  },
+};
+
+export const getPrompterState = {
+  name: "get_prompter_state",
+  description:
+    "Return what the teleprompter is showing at this instant: the line the speaker is on, its shot direction, how far through the script they are, and whether it is scrolling or paused. Only meaningful while the prompter is up. If it is running, the person is mid-performance: keep any answer to one short sentence, or say nothing.",
+  inputSchema: NO_INPUT,
+  annotations: READ_ONLY,
+  execute: () => {
+    const state = Scripts.prompterState();
+    if (!state) {
+      return json({
+        running: false,
+        prompter: null,
+        note: "The teleprompter is closed. Open a script and press Teleprompter to start it.",
+      });
+    }
+    return json({
+      prompter: {
+        ...state,
+        progress: Math.round(state.progress * 100) / 100,
+        runtime_seconds: round(state.runtime_seconds),
+      },
+      note: state.running
+        ? "The prompter is scrolling, so they are speaking to camera right now. Do not answer at length."
+        : undefined,
     });
   },
 };
@@ -139,7 +171,11 @@ export const getRecorderState = {
       status: state.status,
       elapsed_seconds: round(state.elapsed),
       elapsed: timecode(state.elapsed),
+      // What the stream actually carries. acquire() walks a constraint ladder
+      // and will drop audio to get a picture at all, so asking for a mic and
+      // having one are two different facts.
       audio: state.audio,
+      audio_requested: state.audioRequested,
       window_open: state.windowOpen,
       note:
         state.status === "recording"
@@ -277,6 +313,7 @@ export const TOOLS = [
   listScripts,
   getScript,
   getOpenScript,
+  getPrompterState,
   getRecorderState,
   listClips,
   getTimeline,
