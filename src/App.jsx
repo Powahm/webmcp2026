@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import Ghost from "./agent/Ghost.jsx";
 import StatusBadge from "./webmcp/StatusBadge.jsx";
 
 /**
@@ -107,6 +108,9 @@ export default function App() {
       </nav>
 
       <div className="toaster" id="toaster" aria-live="polite" />
+
+      {/* The agent, once it has actually used the page. */}
+      <Ghost />
 
       {/* The teleprompter. Markup only: scripts-app.js resolves #prompter by id
           and drives the scroll itself, so this must stay outside any window and
