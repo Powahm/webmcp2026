@@ -81,13 +81,13 @@
   background: var(--accent);
   border-color: color-mix(in srgb, var(--accent) 70%, var(--line));
   color: #fff;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, .12), 0 6px 16px color-mix(in srgb, var(--accent) 35%, transparent);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .14);
 }
 .win-body.ed .btn-accent:hover,
 .win-body.cam .btn-accent:hover {
   background: var(--accent);
-  filter: brightness(1.06);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, .14), 0 10px 24px color-mix(in srgb, var(--accent) 45%, transparent);
+  filter: brightness(1.05);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .18);
 }
 .win-body.ed .btn-mini { padding: 4px 10px; font-size: 12px; }
 .win-body.ed .btn:disabled,
@@ -119,9 +119,13 @@
   background: var(--accent);
   border-color: color-mix(in srgb, var(--accent) 70%, var(--line));
   color: #fff;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, .12), 0 6px 16px color-mix(in srgb, var(--accent) 35%, transparent);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .14);
 }
-.win-body.ed .ed-page[aria-pressed="true"]:hover { background: var(--accent); filter: brightness(1.06); }
+.win-body.ed .ed-page[aria-pressed="true"]:hover { background: var(--accent); filter: brightness(1.05); }
+
+/* Icon-only buttons: undo and redo. Square, the glyph drawn as a stroke. */
+.win-body.ed .btn-icon { width: 28px; height: 26px; padding: 0; }
+.win-body.ed .btn-icon svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 
 /* ------------------------------------------------------ segmented tabs */
 
@@ -251,7 +255,6 @@
 }
 .win-body.cam .shutter:hover { transform: scale(1.04); border-color: color-mix(in srgb, var(--accent) 55%, var(--m-hair-strong)); box-shadow: var(--m-shadow-raise); }
 .win-body.cam .shutter:active { transform: scale(.94); }
-.win-body.cam .shutter-core { box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 45%, transparent); }
 .win-body.cam .shutter[data-recording="true"] { border-color: var(--accent); box-shadow: var(--m-shadow), 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent); }
 
 /* ------------------------------------------------------------- formats */
@@ -300,7 +303,7 @@
 .win-body.ed .tl-item:hover { filter: brightness(1.06); }
 .win-body.ed .tl-item[aria-pressed="true"] {
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px var(--accent), 0 6px 18px color-mix(in srgb, var(--accent) 35%, transparent);
+  box-shadow: 0 0 0 2px var(--accent);
 }
 .win-body.ed .tl-item--gfx.is-proposed,
 .win-body.ed .tl-item--sfx.is-proposed,
@@ -311,7 +314,7 @@
 .win-body.ed .tl-playhead {
   width: 2px;
   background: var(--accent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 20%, transparent), 0 0 10px color-mix(in srgb, var(--accent) 55%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 20%, transparent);
 }
 .win-body.ed .tl-playhead-grab { border-radius: 4px 4px 6px 6px; }
 
