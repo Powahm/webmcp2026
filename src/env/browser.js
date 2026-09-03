@@ -102,3 +102,227 @@ export async function describeEnvironment() {
   if (!window.showDirectoryPicker) bits.push("no folder picker");
   return bits.join(" · ");
 }
+
+/* ============================================================
+   The permissions the app actually needs, in one place.
+   ============================================================ */
+
+/**
+ * Why this is a list rather than five special cases.
+ *
+ * The browser has no single place that says what this page may do. The camera
+ * and the microphone answer to the Permissions API; screen capture answers to
+ * nothing and asks every time; a folder is not a permission at all but a
+ * picker that either opens or does not; and whether the clips survive being
+ * closed is a fourth thing again, under Storage. A person does not care about
+ * that taxonomy. They want to know which of the things this app does are
+ * switched on, so they are one list, with one shape, and each knows how to ask
+ * for itself.
+ *
+ * Three states, not two. Green is granted. Red is refused, and the important
+ * part about red is that pressing a button cannot undo it: once an origin is
+ * denied the camera, the browser stops asking and starts refusing instantly,
+ * so the only way back is its own site settings and the panel has to say so.
+ * Amber is the honest middle: not asked yet, or something that asks every
+ * time, which is most of them on a page nobody has used yet.
+ */
+export const PERMISSIONS = [
+  {
+    id: "camera",
+    name: "Camera",
+    what: "Recording yourself in the Camera app.",
+    ask: "Allow camera",
+  },
+  {
+    id: "microphone",
+    name: "Microphone",
+    what: "Sound on your takes, and the transcript that comes from them.",
+    ask: "Allow microphone",
+  },
+  {
+    id: "screen",
+    name: "Screen",
+    what: "Recording a window or a screen instead of yourself.",
+    ask: "Test screen capture",
+  },
+  {
+    id: "files",
+    name: "Files",
+    what: "Bringing a folder of footage and scripts onto the desktop.",
+    ask: "Choose a folder",
+  },
+  {
+    id: "storage",
+    name: "Storage",
+    what: "Keeping your clips when the browser is short of space.",
+    ask: "Keep my clips",
+  },
+];
+
+/**
+ * Was this frame given the feature at all?
+ *
+ * A page inside somebody else's frame only has the camera if that page passed
+ * it down, and no amount of asking will change that from in here. Where the
+ * browser exposes its own answer, use it: it is the difference between a
+ * permission the person can grant and one that was never on offer, which is
+ * the difference between a button worth pressing and a button that lies.
+ */
+function policyAllows(feature) {
+  try {
+    const policy = document.featurePolicy || document.permissionsPolicy;
+    if (!policy?.allowsFeature) return null;
+    return policy.allowsFeature(feature);
+  } catch {
+    return null;
+  }
+}
+
+const OFF = (why) => ({ state: "off", why });
+const ASK = (why) => ({ state: "ask", why });
+const ON = (why) => ({ state: "on", why });
+
+async function readOne(id) {
+  if (!secure() && id !== "files") {
+    return OFF("This page is not on https or localhost, so the browser will not offer it.");
+  }
+
+  if (id === "camera" || id === "microphone") {
+    const feature = id === "camera" ? "camera" : "microphone";
+    if (!navigator.mediaDevices?.getUserMedia) {
+      return OFF("This browser does not offer recording to the page at all.");
+    }
+    if (policyAllows(feature) === false) {
+      return OFF(
+        `This page is inside another page's frame, and that page did not pass the ${feature} down. Open it in a tab of its own.`
+      );
+    }
+    const state = await permissionState(feature);
+    if (state === "granted") return ON("Allowed.");
+    if (state === "denied") {
+      return OFF("Refused for this site. The browser will not ask again: change it in the site settings from the address bar, then press Recheck.");
+    }
+    // "prompt", and "unknown" where the query is not supported, are the same
+    // thing to a person: nobody has been asked yet.
+    return ASK("Not asked yet. Pressing the button asks.");
+  }
+
+  if (id === "screen") {
+    if (!navigator.mediaDevices?.getDisplayMedia) {
+      return OFF("This browser does not offer screen capture to the page.");
+    }
+    if (policyAllows("display-capture") === false) {
+      return OFF("This page is inside another page's frame that cannot capture a screen. Open it in a tab of its own.");
+    }
+    return ASK("Screen capture asks every time, and cannot be granted in advance.");
+  }
+
+  if (id === "files") {
+    if (window.showDirectoryPicker && !framed()) return ON("The folder picker is available.");
+    return ASK("The folder picker is not available here, so a folder is chosen through a file dialog instead. It still works.");
+  }
+
+  if (id === "storage") {
+    try {
+      const kept = await navigator.storage?.persisted?.();
+      if (kept) return ON("Your clips are kept even when the browser is short of space.");
+      return ASK("Clips are stored, but the browser may clear them if it needs the space.");
+    } catch {
+      return ASK("This browser does not say whether it will keep them.");
+    }
+  }
+
+  return ASK("");
+}
+
+/** Every permission, with its state and a sentence about it. */
+export async function readPermissions() {
+  return Promise.all(
+    PERMISSIONS.map(async (p) => ({ ...p, ...(await readOne(p.id)) }))
+  );
+}
+
+/**
+ * Ask for one of them.
+ *
+ * Asking is the same act as using it, for all but storage: there is no way to
+ * request the camera except to open it and let go again, which is what this
+ * does. Where the browser has already refused, the request fails instantly
+ * rather than prompting, and saying that plainly is the only useful thing left
+ * to do.
+ */
+export async function requestPermission(id) {
+  if (id === "camera" || id === "microphone") {
+    const result = await askForCameraAndMic({
+      video: id === "camera",
+      audio: id === "microphone",
+    });
+    if (result.ok) return { ok: true, message: `${id === "camera" ? "Camera" : "Microphone"} allowed.` };
+    if (result.error === "NotAllowedError" || result.error === "SecurityError") {
+      return {
+        ok: false,
+        message: framed()
+          ? "The page this one is inside did not pass it down. Open Deskmate in a tab of its own."
+          : "The browser refused without asking. Open the site settings from the address bar, set it to Allow, then press Recheck.",
+      };
+    }
+    if (result.error === "NotFoundError") return { ok: false, message: "No device of that kind on this machine." };
+    if (result.error === "NotReadableError") return { ok: false, message: "Another app is holding it." };
+    return { ok: false, message: result.detail || "It could not be started." };
+  }
+
+  if (id === "screen") {
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+      stream.getTracks().forEach((t) => t.stop());
+      return { ok: true, message: "Screen capture works here." };
+    } catch (err) {
+      if (err?.name === "NotAllowedError") return { ok: false, message: "Cancelled, or refused by this browser." };
+      return { ok: false, message: err?.message || "Screen capture is not available here." };
+    }
+  }
+
+  if (id === "files") {
+    const { pickFolderOntoDesk } = await import("../folders/import.js");
+    const folder = await pickFolderOntoDesk();
+    return folder
+      ? { ok: true, message: `${folder.name} is on your desk.` }
+      : { ok: false, message: "No folder came back." };
+  }
+
+  if (id === "storage") {
+    try {
+      const kept = await navigator.storage?.persist?.();
+      return kept
+        ? { ok: true, message: "Your clips will be kept." }
+        : { ok: false, message: "The browser decided not to. It usually says yes once the site has been used a few times." };
+    } catch {
+      return { ok: false, message: "This browser does not offer it." };
+    }
+  }
+
+  return { ok: false, message: "" };
+}
+
+/**
+ * Tell me when one of these changes underneath us.
+ *
+ * Someone who flips the camera back on in the site settings has not touched
+ * this page, and a row of lights that is only right until the moment it
+ * matters is worse than no lights. Only the Permissions API reports changes,
+ * so the rest are re-read whenever the panel is opened.
+ */
+export function watchPermissions(fn) {
+  const stops = [];
+  for (const name of ["camera", "microphone"]) {
+    navigator.permissions
+      ?.query({ name })
+      .then((status) => {
+        const handler = () => fn();
+        status.addEventListener?.("change", handler);
+        stops.push(() => status.removeEventListener?.("change", handler));
+      })
+      .catch(() => { /* the query is not supported; the panel re-reads on open */ });
+  }
+  return () => stops.forEach((stop) => stop());
+}

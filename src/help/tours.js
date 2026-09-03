@@ -272,6 +272,12 @@ const SYSTEM = [
     spot: 4,
   },
   {
+    title: "What the browser lets it do",
+    text: "Five lights: the camera, the microphone, screen capture, folders and whether your clips survive the browser needing space. Green is allowed, amber is nobody has been asked yet, and the accent colour means refused. Press one to ask for it.",
+    target: "#permissions",
+    spot: 4,
+  },
+  {
     title: "Search",
     text: "Command K, or click here. It searches your documents, skills, scripts and clips at once, and opens whatever you pick.",
     target: "#spotlight-open",

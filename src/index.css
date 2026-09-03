@@ -17,6 +17,7 @@
 @import "./styles/desk.css";
 @import "./styles/modern.css";
 @import "./styles/help.css";
+@import "./styles/permissions.css";
 
 /*
  * React needs a mount node, and the original markup put the menubar, the

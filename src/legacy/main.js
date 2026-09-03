@@ -67,7 +67,8 @@ export const Readme = (() => {
           "**Import video**: pulls a file into the library without a camera."
         ] },
         { t: "h", v: "If the camera will not start" },
-        { t: "p", v: "The app tells you which of the three it is: permission was refused, no device exists, or another program holds it. Camera access also needs a secure context, so this works on https and on localhost, and an embedded preview frame may refuse it outright." }
+        { t: "p", v: "The app tells you which of the three it is: permission was refused, no device exists, or another program holds it. Camera access also needs a secure context, so this works on https and on localhost, and an embedded preview frame may refuse it outright." },
+        { t: "p", v: "**Ask for camera and mic** on that panel puts the question to the browser deliberately, which matters in an agent's browser: a prompt that appears on its own, that nobody pressed anything for, is one some browsers answer for you. The **Permissions** chip in the menubar shows the same thing for everything at once." }
       ]
     },
     {
@@ -137,6 +138,9 @@ export const Readme = (() => {
           "If IndexedDB is unavailable, the apps fall back to memory for the session so nothing breaks, but a refresh loses the library.",
           "Export a cut you want to keep, and save the file."
         ] },
+        { t: "h", v: "Permissions" },
+        { t: "p", v: "The **Permissions** chip in the menubar is five lights: camera, microphone, screen capture, folders, and whether the browser will keep your clips when it is short of space. Green is allowed, amber means nobody has asked yet, and the accent colour means refused. Press one to ask for it." },
+        { t: "note", v: "A refusal cannot be undone from in here. Once a browser has been told no for a site it stops asking and starts refusing instantly, so the way back is that browser's own site settings, and the panel says so rather than offering a button that would do nothing. **Storage** is the odd one out: it is not about access at all, it is asking the browser to keep your clips rather than clear them when space runs short." },
         { t: "h", v: "The theme" },
         { t: "p", v: "Light and dark are both designed. The page follows your system until you press the toggle, which stores an explicit choice." }
       ]

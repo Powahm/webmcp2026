@@ -3,6 +3,7 @@ import Presence from "./agent/Presence.jsx";
 import Ghost from "./agent/Ghost.jsx";
 import DeskFolders from "./folders/DeskFolders.jsx";
 import GhostFolder from "./folders/GhostFolder.jsx";
+import Permissions from "./env/Permissions.jsx";
 import StatusBadge from "./webmcp/StatusBadge.jsx";
 
 /**
@@ -62,6 +63,9 @@ export default function App() {
 
         <div className="menubar-right">
           <StatusBadge />
+          {/* What the browser lets this page do, before it is found out the
+              hard way by pressing record and watching nothing happen. */}
+          <Permissions />
           <button className="chip" id="spotlight-open" aria-keyshortcuts="Meta+K Control+K">
             <span>Search</span>
             <kbd className="mono">⌘K</kbd>
