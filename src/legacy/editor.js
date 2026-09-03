@@ -720,16 +720,35 @@ export const Editor = (() => {
     floatEnd = () => floats.reduce((max, f) => Math.max(max, f.at + f.seconds), 0);
     let floatNo = 0;
 
-    function addFloatingClip({ at = 0, seconds = 5, title = "Overlay" } = {}) {
+    function addFloatingClip({ at = 0, seconds = 5, title = "Overlay", laneId = null } = {}) {
       mark();
       const clip = {
         id: `mcf-${Date.now().toString(36)}-${(floatNo++).toString(36)}`,
         title,
         at: Math.max(0, at),
         seconds: Math.max(0.5, Math.min(60, seconds)),
+        // The video lane it sits on, when a person put it on one. Null means
+        // the motion lane drawn above every video track, which is where the
+        // agent's loose clips live too.
+        laneId,
       };
       floats = [...floats, clip];
       return clip;
+    }
+
+    /**
+     * The first video lane with nothing on it between two cut-seconds,
+     * bottom-up: V2 before V3. An overlay added at the playhead goes on the
+     * lowest track with room rather than on a fresh one above everything.
+     * Null when every lane is busy there, or there are no lanes at all.
+     */
+    function freeVideoLaneAt(start, end) {
+      const busy = (a0, a1) => a0 < end && a1 > start;
+      return lanes.find((lane) =>
+        lane.kind === "video" &&
+        !lane.items.some((it) => busy(it.at, itemEnd(it))) &&
+        !floats.some((f) => f.laneId === lane.id && busy(f.at, f.at + f.seconds))
+      ) || null;
     }
 
     /** Clips a person or the agent actually placed, in cut seconds. */
@@ -1310,8 +1329,12 @@ export const Editor = (() => {
      * there was no clip to put it in. They behave the same: one bar, open it
      * to work inside it.
      */
-    function motionLaneHtml() {
-      const clips = motionClips().filter((c) => c.kind === "loose" || c.kind === "float");
+    function motionLaneHtml(laneId = null) {
+      const clips = motionClips().filter((c) =>
+        laneId === null
+          ? c.kind === "loose" || (c.kind === "float" && !c.float.laneId)
+          : c.kind === "float" && c.float.laneId === laneId
+      );
       return clips.map((c) => {
         const els = layersIn(c);
         const waiting = els.filter((l) => l.status === "proposed").length;
@@ -1820,7 +1843,7 @@ export const Editor = (() => {
         rows.push(`<div class="tl-lane" data-lane="${lane.id}"${laneStyle(lane.id)}>
           <span class="tl-lane-name mono">${lane.name}</span>
           <button class="tl-lane-x" data-drop-lane="${lane.id}" aria-label="Remove lane ${lane.name}">×</button>
-          <div class="tl-lane-body">${lane.items.map((it) => laneItemHtml(lane, it)).join("")}</div>
+          <div class="tl-lane-body">${lane.items.map((it) => laneItemHtml(lane, it)).join("")}${motionLaneHtml(lane.id)}</div>
           ${laneGrip(lane.id)}
         </div>`);
       }
@@ -3403,8 +3426,13 @@ export const Editor = (() => {
           return void Desk.toast("Add a clip first: an overlay goes over footage.", "bad");
         }
         const room = Math.max(1, total() - playhead);
-        const made = addFloatingClip({ at: playhead, seconds: Math.min(5, room) });
-        Desk.toast("Overlay added over the cut. Open it to build inside it.", "good");
+        const seconds = Math.min(5, room);
+        const lane = freeVideoLaneAt(playhead, playhead + seconds);
+        const made = addFloatingClip({ at: playhead, seconds, laneId: lane?.id ?? null });
+        Desk.toast(
+          lane ? `Overlay added on ${lane.name}. Open it to build inside it.` : "Overlay added over the cut. Open it to build inside it.",
+          "good"
+        );
         refresh();
         return void enterScope(made.id);
       }
@@ -3455,6 +3483,7 @@ export const Editor = (() => {
       const dropLane = t.closest("[data-drop-lane]");
       if (dropLane) {
         lanes = lanes.filter((l) => l.id !== dropLane.dataset.dropLane);
+        floats = floats.map((f) => (f.laneId === dropLane.dataset.dropLane ? { ...f, laneId: null } : f));
         return refresh();
       }
 
