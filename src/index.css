@@ -1654,9 +1654,24 @@ body.agent-working::after { opacity: 1; animation: agent-edge 1.9s ease-in-out i
 .ed[data-page="motion"] .cmp-tabs [data-tab="words"],
 .ed[data-page="motion"] .cmp-tabs [data-tab="code"] { display: none; }
 
-/* ---- tracks you can size ---- */
+/* ---- tracks you can size ----
 
-.tl-lane { height: var(--lane-h, auto); }
+   Every row on the main timeline is a clip, so every row is the same
+   height by default: a video track never grows taller than another one
+   just because the clip inside it holds more (elements, sound, whatever).
+   The default is a preset per lane kind, not `auto` off the content, and
+   the drag handle on a lane's bottom edge (`--lane-h`, set in JS) still
+   overrides it per lane -- sizing stays a person's decision, never a side
+   effect of adding things to a clip.
+
+   The packed lanes are the one exception: gfx and sfx stack overlapping
+   proposals into rows of their own, so they still grow with `--rows`. */
+
+.tl-lane { height: var(--lane-h, 58px); }
+.tl-lane--motion { height: var(--lane-h, 50px); }
+.tl-lane--a1 { height: var(--lane-h, 40px); }
+.tl-lane--el { height: var(--lane-h, 26px); }
+.tl-lane--gfx, .tl-lane--sfx { height: var(--lane-h, auto); }
 .tl-lane-resize {
   position: absolute;
   left: 0; right: 0; bottom: -3px;
