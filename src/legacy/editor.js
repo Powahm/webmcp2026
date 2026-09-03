@@ -303,6 +303,7 @@ export const Editor = (() => {
             <button class="btn btn-mini" data-act="split" title="Split the clip under the playhead (S)">Split</button>
             <button class="btn btn-mini" data-act="add-text" title="Add a text clip at the playhead (T)">Text</button>
             <button class="btn btn-mini" data-act="add-blank" title="Add a motion graphics clip (B)">Motion graphics</button>
+            <button class="btn btn-mini" data-act="add-overlay" title="Add a motion graphics clip over the footage">Overlay</button>
             <button class="btn btn-mini" data-act="add-lane" title="Add another video lane">+ Video</button>
             <button class="btn btn-mini" data-act="add-audio" title="Add another audio lane">+ Audio</button>
             <input type="file" accept="audio/*" multiple hidden data-act="audio-file">
@@ -582,9 +583,40 @@ export const Editor = (() => {
       (l.props?.text || l.props?.items?.[0] || l.props?.shape || l.props?.effect
         || l.component || "Graphic").toString();
 
+    /**
+     * Motion graphics clips that float over the cut.
+     *
+     * A clip on the spine takes a turn: the footage stops and the graphics
+     * play. A floating one does not — it sits above the pictures for a stretch
+     * of the cut, which is the only way to build a title sequence over someone
+     * talking. It needs no compositing work because the graphics canvas already
+     * draws over the frame; what it adds is a container to hold and name them,
+     * so a person can open one and work in it.
+     */
+    let floats = [];
+    let floatNo = 0;
+
+    function addFloatingClip({ at = 0, seconds = 5, title = "Overlay" } = {}) {
+      const clip = {
+        id: `mcf-${Date.now().toString(36)}-${(floatNo++).toString(36)}`,
+        title,
+        at: Math.max(0, at),
+        seconds: Math.max(0.5, Math.min(60, seconds)),
+      };
+      floats = [...floats, clip];
+      return clip;
+    }
+
     /** Clips a person or the agent actually placed, in cut seconds. */
     function explicitClips() {
-      const out = [];
+      const out = floats.map((f) => ({
+        id: f.id,
+        float: f,
+        kind: "float",
+        title: f.title || "Overlay",
+        start: f.at,
+        end: f.at + f.seconds,
+      }));
       let at = 0;
       for (const seg of timeline) {
         const dur = segDuration(seg);
@@ -934,13 +966,14 @@ export const Editor = (() => {
      * to work inside it.
      */
     function motionLaneHtml() {
-      const clips = motionClips().filter((c) => c.kind === "loose");
+      const clips = motionClips().filter((c) => c.kind === "loose" || c.kind === "float");
       return clips.map((c) => {
         const els = layersIn(c);
         const waiting = els.filter((l) => l.status === "proposed").length;
         const n = els.length + soundsIn(c).length;
         return `
           <div class="tl-item tl-item--mclip ${waiting ? "is-proposed" : ""}" data-mclip="${c.id}"
+               ${c.kind === "float" ? `data-float="${c.id}"` : ""}
                style="left:${pctOf(c.start)}%; width:${pctLen(Math.max(0.25, c.end - c.start))}%"
                role="button" tabindex="0"
                title="Double click to open this motion graphics clip"
@@ -948,6 +981,8 @@ export const Editor = (() => {
             <span class="tl-item-name">${Desk.esc(c.title.slice(0, 40))}</span>
             <span class="tl-item-time mono">${n} element${n === 1 ? "" : "s"}${waiting ? ` · ${waiting} new` : ""}</span>
             <span class="tl-mini" aria-hidden="true">${miniHtml(c)}</span>
+            ${c.kind === "float" ? `<span class="tl-grip tl-grip--in" data-grip="in" data-float="${c.id}"></span>
+            <span class="tl-grip tl-grip--out" data-grip="out" data-float="${c.id}"></span>` : ""}
             <button class="tl-open" data-open-mclip="${c.id}"
                     aria-label="Open ${Desk.esc(c.title)}">Open</button>
           </div>`;
@@ -2745,6 +2780,18 @@ export const Editor = (() => {
           if (made?.uid) enterScope(made.uid);
         });
       }
+      if (act === "add-overlay") {
+        // An overlay is graphics over a picture. With no cut under it there is
+        // nothing to overlay, and the bar would be drawn wider than the track.
+        if (total() < 0.5) {
+          return void Desk.toast("Add a clip first — an overlay goes over footage.", "bad");
+        }
+        const room = Math.max(1, total() - playhead);
+        const made = addFloatingClip({ at: playhead, seconds: Math.min(5, room) });
+        Desk.toast("Overlay added over the cut. Open it to build inside it.", "good");
+        refresh();
+        return void enterScope(made.id);
+      }
       if (act === "scope-out") return void leaveScope();
       if (act === "scope-text") return void addInScope("text", e);
       if (act === "scope-shape") return void addInScope("shape", e);
@@ -2755,6 +2802,8 @@ export const Editor = (() => {
       if (act === "clear") {
         timeline = [];
         lanes = [];
+        floats = [];
+        scope = null;
         selected = null;
         loaded = null;
         video.removeAttribute("src");
@@ -3181,6 +3230,7 @@ export const Editor = (() => {
       }
 
       const grip = e.target.closest("[data-grip]");
+      const floatBar = e.target.closest("[data-float]");
       const item = e.target.closest("[data-item]");
       const seg = e.target.closest("[data-seg]");
       const layer = e.target.closest("[data-layer]");
@@ -3195,6 +3245,7 @@ export const Editor = (() => {
           laneId: grip.dataset.lane || null,
           layerId: grip.dataset.layer || null,
           soundId: grip.dataset.sound || null,
+          floatId: grip.dataset.float || null,
           from: timeAtPointer(e),
         };
       } else if (onHead) {
@@ -3208,6 +3259,8 @@ export const Editor = (() => {
       } else if (sound) {
         select(sound.dataset.sound);
         gesture = { type: "move-sound", soundId: sound.dataset.sound, from: timeAtPointer(e) };
+      } else if (floatBar) {
+        gesture = { type: "move-float", floatId: floatBar.dataset.float, from: timeAtPointer(e) };
       } else if (seg) {
         select(seg.dataset.seg);
         return;
@@ -3260,6 +3313,15 @@ export const Editor = (() => {
         return;
       }
 
+      if (gesture.type === "move-float") {
+        // The remainder is kept, not thrown away, so a slow drag still moves.
+        if (shiftFloat(gesture.floatId, now - gesture.from, e)) {
+          gesture.from = now;
+          renderTrack();
+        }
+        return;
+      }
+
       if (gesture.type === "move-layer") {
         const fps = composition().fps || 30;
         const frames = Math.round((now - gesture.from) * fps);
@@ -3280,7 +3342,55 @@ export const Editor = (() => {
     }
 
     /** Move one edge of whatever is under the grip. */
+    /**
+     * Move an overlay clip, and everything in it.
+     *
+     * A container that slides out from under its own contents is not a
+     * container, it is a rectangle. Both edges of the clip and every element
+     * inside move by the same seconds, which is what a precomp does anywhere
+     * else and what anyone dragging one expects.
+     */
+    function shiftFloat(id, seconds, e) {
+      const f = floats.find((x) => x.id === id);
+      if (!f) return false;
+      const fps = composition().fps || 30;
+
+      /* The clip moves in whole frames, because its contents can only move in
+         whole frames. Moving the container by the exact pointer delta and the
+         elements by the rounded one is how a drag walks them apart: three
+         pixels of rounding per pointermove, sixty times a second. Below a
+         frame nothing moves at all and the caller keeps the remainder for the
+         next event. */
+      const frames = Math.round(seconds * fps);
+      if (frames === 0) return false;
+      const moved = frames / fps;
+      if (f.at + moved < 0) return false;
+
+      const before = { start: f.at, end: f.at + f.seconds };
+      f.at = f.at + moved;
+      for (const l of liveLayers()) {
+        if (withinClip(before, l.from / fps)) editLayer(l.id, { from: Math.max(0, l.from + frames) }, e);
+      }
+      for (const a of liveAudio()) {
+        if (withinClip(before, a.from / fps)) editAudio(a.id, { from: Math.max(0, a.from + frames) }, e);
+      }
+      return true;
+    }
+
     function trimBy(g, delta, e) {
+      if (g.floatId) {
+        const f = floats.find((x) => x.id === g.floatId);
+        if (!f) return;
+        if (g.edge === "in") {
+          // Dragging the head moves the clip and takes its contents with it.
+          const at0 = f.at;
+          const want = Math.min(delta, f.seconds - 0.5);
+          if (shiftFloat(f.id, want, e)) f.seconds = Math.max(0.5, f.seconds - (f.at - at0));
+        } else {
+          f.seconds = Math.max(0.5, Math.min(60, f.seconds + delta));
+        }
+        return;
+      }
       if (g.segUid) {
         const seg = timeline.find((x) => x.uid === g.segUid);
         if (!seg) return;
