@@ -57,14 +57,14 @@ Everything below is built and tested.
 | Window manager, dock, spotlight, theme, toasts | `src/legacy/shell.js` | Done. Plus an `onVisibility` hook so an app can let go of a device when it is minimised. |
 | Storage | `src/legacy/store.js` | IndexedDB v2 with a memory fallback: `clips`, `scripts`, `aiskills`. |
 | Camera | `src/legacy/camera.js` | Camera and screen capture, constraint ladder, mic mixed into a display stream, teleprompter over the preview, beat marks written onto the take. |
-| Editor | `src/legacy/editor.js` | Library, timeline, trim, six looks, speed, reorder, real-time canvas export with audio mixed through Web Audio. Timeline, Transcript and Code panes. |
+| Editor | `src/legacy/editor.js` | Lanes in one timebase, trim, split, drag-to-reorder with a seam marker, six looks, speed, per-clip and per-item volume, sound unlinked from picture onto its own lane, transform with keyframes, three frame shapes with a pan that tracks the cursor, inline rename, real-time canvas export at the composition's size with audio mixed through Web Audio. Timeline, Transcript and Code panes. |
 | Scripts | `src/legacy/scripts-app.js` | Lines-and-shot-directions model, Draft and Shot list views, research pane, suggestions drawn into the draft, standalone rehearsal prompter. |
 | Skills / AI Skills | `src/legacy/skills.js`, `src/legacy/aiskills.js` | Craft notes, plus a folder of markdown the agent can load, with triggers. |
 | Motion graphics | `src/graphics/` | Six declarative types, one renderer for preview and export, propose and accept. |
 | **Motion graphics clips** | `src/legacy/editor.js`, `src/comp/store.js` | A clip is a span of the cut that holds elements. Open one and it becomes the timeline: its own length, one element to a row, trim and move in local time. Explicit on the spine, floating over the footage, or gathered implicitly around elements the agent proposed with no clip to hold them. Ownership is a field on the element, not a question about where its start second lands, so shortening a clip cannot hand its contents to the clip beside it and trimming its head takes frames off the head. An element pushed only partly outside keeps its own origin and gets a window, so it draws from the clip's edge half-animated rather than replaying its entrance there; one pushed out entirely is parked and comes back when the clip widens. The composition underneath is still one flat list in cut frames, so the tool contract, the codegen and the export never learned about any of this. |
 | **Undo and redo** | `src/legacy/editor.js` | Over the cut: add, trim, move, reorder, split, delete, clear, and accepted cuts. Ctrl+Z and Ctrl+Shift+Z, or the buttons. A snapshot carries the composition with it, because a timeline edit takes composition state with it. Restoring goes through `restoreComposition`, which takes the same trusted gesture every other decision does, so undo is a person's click and there is still no route from a tool to a state nobody clicked their way into. |
 | **The agent's cursor** | `src/agent/Cursor.jsx` | A pointer that springs to the surface each tool call actually touched and presses it, and a border that breathes on the window while a call is in flight. Driven only by real calls, like the ghost. |
-| **Composition engine** | `src/comp/` | Frames at 30fps, `Sequence` resolution, `interpolate`/`spring`, eleven components, three formats, synthesised sound, TSX codegen. |
+| **Composition engine** | `src/comp/` | Frames at 30fps, `Sequence` resolution, `interpolate`/`spring`, fourteen components, three formats with a per-clip cover-or-contain fit, synthesised sound, TSX codegen. |
 | **Transcripts** | `src/transcript/` | Word timing derived from prompter marks; Whisper as an opt-in upgrade on the user's own key. |
 | **Staged cuts** | `src/cuts/` | Cut by quoting the words; `applyCut` splits a segment. |
 | Ghost folders | `src/folders/` | Manifest from the agent, directory picker from the person. |
@@ -90,8 +90,15 @@ and it is not the real thing.
 ## Still open
 
 - Export is real-time canvas capture, so it takes as long as the cut and is
-  whatever container the browser will encode. WebCodecs with `mp4-muxer` is the
-  path to exact frame rates and 4K, and it replaces `runExport` entirely.
+  whatever container the browser will encode. It is now sized to the
+  composition's format rather than the first clip, so a reframe reaches the
+  file; WebCodecs with `mp4-muxer` is still the path to exact frame rates and
+  4K, and it replaces `runExport` entirely.
+- No caption track on the exported file. The transcript exists and is
+  frame-accurate in cut time, so this is plumbing rather than a question.
+- Dragging the picture to reposition a reframe is pointer-only. The same
+  numbers are on sliders, so nothing is unreachable, but the direct gesture
+  needs a mouse.
 - Undo covers the cut, not the composition on its own. Accepting a proposal is
   not an undo step; Reject is the button for that.
 - The demo video and the Devpost write-up.

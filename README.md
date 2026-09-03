@@ -36,7 +36,7 @@ backend to receive anything.
 | **Scripts** | What you are going to say, one line per spoken beat with its shot direction. Two views of one document: a **Draft** you write in, and a **Shot list** for the pass before you shoot. A **Research** pane for links and notes you gathered while browsing. A teleprompter. |
 | **Skills** | Craft notes on cutting and pacing, plus **AI Skills**: markdown you drop in that the agent can load and follow. |
 | **Camera** | Camera or screen capture with your mic mixed in. The teleprompter runs over the preview and records which line you were on at which second. |
-| **Editor** | Library, timeline, trim, six looks, speed, and an export that replays the cut into a canvas. The bottom pane switches between **Timeline**, **Transcript** and **Code**. Motion graphics and sound compose here. |
+| **Editor** | Lanes of clips, graphics and sound in one timebase. Trim, split, reorder by dragging, six looks, speed, per-clip volume, transform with keyframes, three frame shapes, and an export that replays the cut into a canvas. The bottom pane switches between **Timeline**, **Transcript** and **Code**. |
 
 ## Twenty-eight site tools
 
@@ -121,10 +121,15 @@ and a headless browser. What was worth taking from them is the model, not the de
   group of graphics moves as a unit and children are clipped to their parent's window.
 - **`interpolate` and `spring`** are pure functions of the frame. A component holds no state,
   so there is nothing to get wrong when the playhead jumps.
-- **Eleven components**: title card, lower third, caption pop, bullet list, comparison cards,
-  process flow, stat badge, callout arrow, progress bar, code card, quote card.
-- **Colour is a role**, not a hex value. `accent` resolves against the live theme, so one spec
-  is legible in light and dark.
+- **Fourteen components**: title card, lower third, caption pop, bullet list, comparison
+  cards, process flow, stat badge, callout arrow, progress bar, code card, quote card, plus
+  three free-form ones: **text** you style completely, a **shape** in eight kinds, and a
+  full-frame **effect** (dip, flash, vignette, grain, scanlines, glitch, letterbox, wash).
+  Text and shape both carry an **opacity**, so either can sit over the picture without hiding
+  it.
+- **Colour is a role by default.** `accent` resolves against the live theme, so one spec is
+  legible in light and dark. A hex is accepted where a person has picked one deliberately;
+  a role is what an agent is offered, because it cannot then choose something off-brand.
 
 `comp/render.js` draws a frame, and the preview loop and the export loop call it with the same
 arguments. One renderer is what stops the preview from quietly ceasing to match the file.
@@ -171,10 +176,35 @@ Short craft notes in three kinds: `cut`, `edit` and `style`. The style notes car
 **Apply** button that sets that look and speed on the last clip on the timeline, so the
 reference is usable rather than only readable.
 
+## Reframing, and what it keeps
+
+**16:9**, **9:16** and **1:1** sit beside the picture, and changing one moves no graphic,
+because every position in a composition is a fraction of the frame. What it does change is
+how much of the *footage* survives, so that is a choice per clip:
+
+- **Fill frame** crops to the frame. 16:9 to 9:16 loses about 70% of the width.
+- **Fit whole clip** keeps all of it and pads the edges.
+- **Drag the picture** to choose what stays in frame.
+
+The pan is `object-position`, not a transform. That distinction is the whole feature: with
+`object-fit: cover` the element *is* the frame, so translating it slides the crop and its
+contents together and reveals the backdrop rather than more of the shot. `fitVideo()` applies
+the same two percentages at export, and the drag is geared to the overflow so the picture
+tracks the cursor exactly and stops where the hidden part runs out.
+
+## Unlinking sound
+
+A1 is drawn from the spine rather than stored beside it, because a cut is a cut: trimming the
+picture trims the sound. **Unlink sound from picture** lifts a clip's audio onto its own audio
+lane, where it has its own position, trim and volume, so a line can run under the next shot or
+be replaced. It remembers where it came from, which is what makes **Relink** possible.
+
 ## How export works
 
-There is no encoder dependency. Export replays the timeline into a `<canvas>`, applying each
-clip's filter as `ctx.filter`, drawing the accepted composition layers over the frame, captures
+There is no encoder dependency. Export replays the timeline into a `<canvas>` **sized to the
+composition's format**, not to the first clip, so an accepted reframe reaches the file. It
+applies each clip's filter as `ctx.filter`, fits the picture with the clip's own
+cover-or-contain and pan, draws the accepted composition layers over the frame, captures
 that canvas with `captureStream()`, mixes the audio back in through a Web Audio graph (the
 same graph the synthesised sound effects fire into) and records the combined stream with
 `MediaRecorder`.
@@ -186,9 +216,15 @@ copy is the reliable one: some embedded frames block downloads a page starts its
 
 ## Storage
 
-Clips and scripts live in IndexedDB under the origin serving the page. Nothing is uploaded;
-there is no backend. If IndexedDB is unavailable the apps fall back to memory for the session,
-so nothing breaks, but a refresh loses the library.
+Four stores in IndexedDB (v3) under the origin serving the page: `clips`, `scripts`,
+`aiskills` and `libfolders`. Nothing is uploaded; there is no backend. If IndexedDB is
+unavailable the apps fall back to memory for the session, so nothing breaks, but a refresh
+loses the library.
+
+A transcript rides on its own clip record rather than in a store of its own: it is
+meaningless without the clip and should die with it, which living on the record gives for
+free. The one thing kept outside IndexedDB is an OpenAI key, if you paste one in for Whisper.
+That is in `localStorage` and is sent nowhere but `api.openai.com`.
 
 ## The wallpaper
 
@@ -219,6 +255,9 @@ readable on a picture that was never designed to have text on it.
 - In the Editor, the bottom pane switches between **Timeline**, **Transcript** and **Code**.
   Clicking a word seeks to it; clicking a staged layer takes the playhead into it, past its
   entrance, so what you judge is the graphic and not its first three frames.
+- **Drag a clip along V1** to reorder it: it snaps to a seam and a marker shows which one.
+  `[` and `]` do the same from the keyboard. **Drag the picture** to choose what a reframe
+  keeps. **Backspace** removes whatever is selected, a suggestion included.
 
 ## Accessibility
 
@@ -268,8 +307,13 @@ Camera and screen capture need a **secure context**, so `https://` or `localhost
 | `src/styles/desk.css` | Design tokens, both themes, window and app chrome |
 | `assets/*.png` | The wallpaper exports, untouched |
 | `tools/wallpaper.mjs` | Turns those into the `.webp` the page loads |
+| `src/main.jsx` | React entry |
 | `src/App.jsx` | Desktop chrome, boot, tool registration |
-| `src/legacy/store.js` | IndexedDB persistence for clips, scripts and AI skills, plus clip probing |
+| `src/env/browser.js` | What this browser will and will not allow |
+| `src/env/Permissions.jsx` | The menubar chip: one light per thing that can be refused |
+| `src/help/tours.js` | The guided tours, per window and for the machine |
+| `src/help/tour.js` | The spotlight, the dimming and the arrow-key walk |
+| `src/legacy/store.js` | IndexedDB v3: clips, scripts, AI skills, library folders, plus clip probing |
 | `src/legacy/shell.js` | Window manager, dock, ⌘K launcher, theme, icons |
 | `src/a11y/focus-work.js` | The live region, the focus trap, and arrow-key movement |
 | `src/legacy/camera.js` | Stream acquisition, recording, prompter marks |
@@ -285,7 +329,7 @@ The composition engine, which owns everything layered over the cut:
 |---|---|
 | `src/comp/engine.js` | Frames, `interpolate`, `spring`, easings, `Sequence` resolution, formats |
 | `src/comp/paint.js` | Canvas primitives in the house form language; the palette roles |
-| `src/comp/components.js` | The eleven graphics, each a pure function of its own frame |
+| `src/comp/components.js` | The fourteen graphics, each a pure function of its own frame |
 | `src/comp/composition.js` | The document, and the checking of anything proposed into it |
 | `src/comp/store.js` | Staging and the trusted-gesture guard |
 | `src/comp/render.js` | Draws one frame. Called by the preview *and* the export |
@@ -303,8 +347,13 @@ And the agent's side of the page:
 | `src/webmcp/tools.js` | The desktop, camera, scripts and graphics tools |
 | `src/webmcp/comp-tools.js` | Composition, transcript and cut tools |
 | `src/webmcp/register.js` | Host detection, registration, per-call instrumentation |
+| `src/webmcp/result.js` | The one envelope every tool returns, and the hint on a refusal |
+| `src/webmcp/status.js` | Host, tool count and call count, for the badge |
+| `src/webmcp/nudge.js` | Offering a matching AI Skill back inside a tool result |
 | `src/webmcp/StatusBadge.jsx` | Whether a host is present, and whether it has called anything |
 | `src/agent/Ghost.jsx` | The ghost, and a line for every call that actually happened |
+| `src/agent/Presence.jsx` | Whether an agent is watching, and what it last touched |
+| `src/agent/toolLabels.js` | What to call each tool in front of a person |
 | `src/graphics/` | The six-type declarative graphics layer and its renderer |
 | `src/scripts/proposals.js` | Lines staged into a draft, and the trusted-gesture guard |
 | `src/folders/` | Folders the agent offers, and the picker that authorises one |
