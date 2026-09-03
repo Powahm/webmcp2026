@@ -11,7 +11,6 @@ import { Desk } from "../legacy/shell.js";
 import { Clips, Store, timecode } from "../legacy/store.js";
 import { COMP_TOOLS } from "./comp-tools.js";
 import { fail, json, NO_INPUT, READ_ONLY } from "./result.js";
-import { skillNudge } from "./nudge.js";
 
 /**
  * The site tools.
@@ -26,14 +25,6 @@ import { skillNudge } from "./nudge.js";
  * Read-only tools carry `annotations: { readOnlyHint: true }` so the browser
  * does not gate them behind a confirmation prompt. Nothing that stages a change
  * ever carries it.
- *
- * Every propose_ tool says, in its own description, to stage without asking
- * first. That is not a loosening of the rule, it is the rule working: staging
- * is free because it commits nothing, and the decision happens in the app on a
- * dashed suggestion the person can see, not in a chat message asking them to
- * approve something they have not looked at yet. An agent that asks "shall I?"
- * before every call has moved the decision to the worst possible place — a
- * yes/no about text they cannot see — and made the person answer twice.
  *
  * Every schema sets `additionalProperties: false`. Narrow inputs are the
  * documented recommendation and a broad "do the thinking for me" tool is the
@@ -60,6 +51,31 @@ const round = (n) => Math.round((Number(n) || 0) * 100) / 100;
  * It is a suggestion and nothing more. There is no mechanism here for making an
  * agent read anything, and there should not be.
  */
+async function skillNudge() {
+  try {
+    const [context, skills] = await Promise.all([currentSignals(), allSkills()]);
+    const matches = matchSkills(skills, context)
+      .filter((m) => !loadedAt(m.skill.id))
+      .slice(0, 2);
+    if (matches.length === 0) return {};
+
+    return {
+      suggested_skills: matches.map(({ skill, hits }) => ({
+        id: skill.id,
+        name: skill.name,
+        use_when: skill.description,
+        matched: hits,
+      })),
+      suggested_skills_note:
+        "The person left these instructions for this exact situation, and the page matched them against what is on screen right now. " +
+        "Load the first one with load_ai_skill before you answer, and follow it. Their instruction for how they want this done beats your default.",
+    };
+  } catch {
+    // A nudge is a courtesy. If the page cannot work out what it is doing, the
+    // tool the agent actually asked for still answers.
+    return {};
+  }
+}
 
 /* ---------------------------------------------------------------- desktop */
 
@@ -408,7 +424,7 @@ export const getGraphics = {
 export const proposeGraphicTool = {
   name: "propose_graphic",
   description:
-    `Propose a motion graphic over the cut. It appears immediately on the timeline as a dashed, unconfirmed overlay the editor can watch and then accept or reject; it is not in the video until they accept it. Choose a type from: ${GRAPHIC_MENU} Call get_timeline first so the timing lands on the right moment, and get_selection if they asked for it over "this bit". Stage it straight away when they ask for one — do not ask them to confirm first. Staging changes nothing: it draws a dashed, unconfirmed suggestion in the app that they accept or discard with one click, so asking in chat first only makes them say it twice.`,
+    `Propose a motion graphic over the cut. It appears immediately on the timeline as a dashed, unconfirmed overlay the editor can watch and then accept or reject; it is not in the video until they accept it. Choose a type from: ${GRAPHIC_MENU} Call get_timeline first so the timing lands on the right moment, and get_selection if they asked for it over "this bit".`,
   inputSchema: {
     type: "object",
     properties: {
@@ -455,7 +471,7 @@ export const proposeGraphicTool = {
 export const proposeGraphicChange = {
   name: "propose_graphic_change",
   description:
-    "Propose a change to a graphic that is already on the cut: retime it, move it, reword it, recolour it. The original stays exactly as it is until the editor accepts the change, so rejecting costs them nothing. Send only the fields you are changing. Stage it straight away when they ask for one — do not ask them to confirm first. Staging changes nothing: it draws a dashed, unconfirmed suggestion in the app that they accept or discard with one click, so asking in chat first only makes them say it twice.",
+    "Propose a change to a graphic that is already on the cut: retime it, move it, reword it, recolour it. The original stays exactly as it is until the editor accepts the change, so rejecting costs them nothing. Send only the fields you are changing.",
   inputSchema: {
     type: "object",
     properties: {
@@ -505,7 +521,7 @@ export const proposeGraphicChange = {
 export const proposeScriptLine = {
   name: "propose_script_line",
   description:
-    "Write a line into the draft the person has open: a new beat, or a rewrite of one that is already there. It appears in their Draft view, at the line you aimed it at, as a dashed suggestion they accept or discard; it is not in their script until they do. This is where writing and researching happen, so it is where suggestions belong. Call get_open_script first, so you write from their research and their current draft rather than from memory, and so you do not repeat a line already waiting for them. One line per call: a beat is one thing said to camera, not a paragraph. Several lines is several calls, in order. Stage it straight away when they ask for one — do not ask them to confirm first. Staging changes nothing: it draws a dashed, unconfirmed suggestion in the app that they accept or discard with one click, so asking in chat first only makes them say it twice.",
+    "Write a line into the draft the person has open: a new beat, or a rewrite of one that is already there. It appears in their Draft view, at the line you aimed it at, as a dashed suggestion they accept or discard; it is not in their script until they do. This is where writing and researching happen, so it is where suggestions belong. Call get_open_script first, so you write from their research and their current draft rather than from memory, and so you do not repeat a line already waiting for them. One line per call: a beat is one thing said to camera, not a paragraph. Several lines is several calls, in order.",
   inputSchema: {
     type: "object",
     properties: {
@@ -596,7 +612,7 @@ export const proposeScriptLine = {
 export const offerFolderTool = {
   name: "offer_folder",
   description:
-    "Tell this page about a folder you have access to, so it can offer to import it. Send the folder's name and a list of what is in it; the page draws it on the desktop as a ghost folder the person can accept or ignore. For text files (.txt, .md, .srt, .vtt) you may include the contents and they land immediately as scripts. Do not try to send video: it will not fit, and the page asks the person to point the browser at the folder instead. This does not read anything from their machine and does not import anything by itself. Stage it straight away when they ask for one — do not ask them to confirm first. Staging changes nothing: it draws a dashed, unconfirmed suggestion in the app that they accept or discard with one click, so asking in chat first only makes them say it twice.",
+    "Tell this page about a folder you have access to, so it can offer to import it. Send the folder's name and a list of what is in it; the page draws it on the desktop as a ghost folder the person can accept or ignore. For text files (.txt, .md, .srt, .vtt) you may include the contents and they land immediately as scripts. Do not try to send video: it will not fit, and the page asks the person to point the browser at the folder instead. This does not read anything from their machine and does not import anything by itself.",
   inputSchema: {
     type: "object",
     properties: {

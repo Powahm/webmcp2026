@@ -26,6 +26,9 @@
   --green:       #29963F;
   --green-dk:    #1C6B2C;
 
+  /* The wash laid over the wallpaper so labels keep their contrast. */
+  --wp-scrim:    #EEEFE9;
+
   --radius:   10px;
   --radius-s: 6px;
   --bw: 2px;
@@ -61,6 +64,8 @@
     --purple:      #C95FE0;
     --green:       #4CC062;
     --green-dk:    #2A7A3A;
+
+    --wp-scrim:    #171922;
   }
 }
 
@@ -85,6 +90,8 @@
   --purple:      #C95FE0;
   --green:       #4CC062;
   --green-dk:    #2A7A3A;
+
+  --wp-scrim:    #171922;
 }
 
 * { box-sizing: border-box; }
@@ -104,10 +111,64 @@ body {
 
 .mono { font-family: var(--font-mono); }
 
-:where(button, input, [tabindex]):focus-visible {
+/* ---------------- focus work ---------------- */
+
+/*
+ * One ring, everywhere, and it has to survive the wallpaper.
+ *
+ * Blue alone is legible on a cream window and much less so on a mountain, so
+ * the ring carries a ground-coloured halo outside it. Nothing else on this
+ * page draws a 3px blue outline, which is what makes it readable as "you are
+ * here" rather than as decoration.
+ */
+:where(button, input, [tabindex], a[href]):focus-visible {
   outline: 3px solid var(--blue);
   outline-offset: 2px;
+  border-radius: 3px;
 }
+
+.icon:focus-visible,
+.desk-folder:focus-visible,
+.dock-btn:focus-visible {
+  outline-offset: 3px;
+  box-shadow: 0 0 0 7px color-mix(in srgb, var(--ground) 82%, transparent);
+}
+
+/* For anything only a screen reader needs: the live region that narrates
+   windows opening and closing, mostly. */
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* The first tab stop on the page. Off-screen until it is focused, which is the
+   only time it is any use. */
+.skip-link {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 600;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  text-decoration: none;
+  background: var(--surface);
+  border: var(--bw) solid var(--line);
+  border-radius: var(--radius-s);
+  box-shadow: 3px 3px 0 var(--shadow);
+  transform: translateY(-160%);
+  transition: transform .16s var(--ease-out);
+}
+.skip-link:focus-visible { transform: none; }
+
+#icons:focus-visible { outline: none; }
 
 /* ---------------- menubar ---------------- */
 
@@ -206,9 +267,94 @@ body {
   height: calc(100% - var(--menubar-h));
   overflow: hidden;
   background-color: var(--ground);
-  background-image: radial-gradient(circle, var(--dot) 1.1px, transparent 1.1px);
-  background-size: 26px 26px;
 }
+
+/* ---------------- wallpaper ---------------- */
+
+.wallpaper { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+
+/*
+ * The picture itself, one per theme.
+ *
+ * Referenced from here rather than from `public/`, so the bundler hashes both
+ * files and the browser can cache them forever. The dark rule is not inside a
+ * media query alone: an explicit `data-theme` has to win over the system
+ * preference in both directions, which is the same rule every colour token in
+ * this file follows.
+ *
+ * Only the file the current theme asks for is fetched — a background image on
+ * a selector that does not match is never requested.
+ */
+.wp-photo {
+  position: absolute;
+  inset: 0;
+  background-image: url("../../assets/Light_theme.webp");
+  background-size: cover;
+  background-position: center 42%;
+  background-repeat: no-repeat;
+}
+
+:root[data-theme="dark"] .wp-photo { background-image: url("../../assets/Dark_theme.webp"); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .wp-photo { background-image: url("../../assets/Dark_theme.webp"); }
+}
+
+/*
+ * The scrim is the whole reason the icons are still readable.
+ *
+ * A band of the ground colour, strongest exactly where the icon row sits and
+ * lightest across the horizon, which is the part of the photograph worth
+ * seeing. The wallpaper keeps its light; the labels keep their contrast.
+ */
+.wp-scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--wp-scrim) 52%, transparent) 0%,
+    color-mix(in srgb, var(--wp-scrim) 62%, transparent) 34%,
+    /* the horizon is the one part left alone — it is the whole picture */
+    color-mix(in srgb, var(--wp-scrim) 26%, transparent) 58%,
+    color-mix(in srgb, var(--wp-scrim) 42%, transparent) 78%,
+    color-mix(in srgb, var(--wp-scrim) 54%, transparent) 100%
+  );
+}
+
+/*
+ * Labels sitting on a photograph.
+ *
+ * Two levels of help, because the desktop has two kinds of label on it.
+ *
+ * The app and folder icons sit in the calm band the scrim protects, so a halo
+ * in the ground colour is enough: no offset, no drama, just an edge for the
+ * letterform to end on.
+ */
+.icon-label, .icon-sub {
+  text-shadow:
+    0 0 4px var(--ground),
+    0 0 9px var(--ground),
+    0 0 16px color-mix(in srgb, var(--ground) 80%, transparent);
+}
+
+/*
+ * The imported folders and the ghost folders sit lower, over the valley, where
+ * the picture has detail of its own and a halo alone starts to look like fog.
+ * They get an actual plate — the same soft pill the hint uses — so the words
+ * are read against a colour this stylesheet chose.
+ */
+.desk-folder-name, .desk-folder-sub,
+.ghost-folder-name, .ghost-folder-sub {
+  justify-self: center;
+  padding: 1px 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+}
+
+/* Nothing on the desktop is muted any more: over a photograph, "quiet" reads
+   as "unreadable". The subtitle stays smaller instead. */
+.desk-folder-sub, .ghost-folder-sub { color: var(--text); }
+.desk-folder--add .desk-folder-name { color: var(--text); }
+.desk-folder--add:hover .desk-folder-name { color: var(--text); }
 
 .doodles { position: absolute; inset: 0; pointer-events: none; }
 
@@ -218,13 +364,16 @@ body {
   stroke: var(--text);
   stroke-width: 2.4;
   stroke-linecap: round;
-  opacity: .13;
+  /* Quieter than they were: there is a valley behind them now. */
+  opacity: .09;
   will-change: transform;
 }
-.d1 { width: 190px; top: 12%;  left: 7%;  }
-.d2 { width: 64px;  top: 22%;  right: 13%; }
-.d3 { width: 130px; bottom: 20%; left: 13%; }
-.d4 { width: 110px; bottom: 13%; right: 9%; }
+/* All four live in the sky now. Down among the ridges they read as scribbles
+   on a drawing that already has lines of its own. */
+.d1 { width: 170px; top: 14%; left: 6%;  }
+.d2 { width: 58px;  top: 6%;  left: 21%; }
+.d3 { width: 116px; top: 31%; left: 5%; }
+.d4 { width: 96px;  top: 24%; right: 5%; }
 
 .icons {
   position: relative;
@@ -338,15 +487,25 @@ body {
   margin-top: -8px;
 }
 
+/* The hint sits lowest of anything on the desktop, right on the near ridge,
+   so it gets a real plate rather than a halo. It is the same chip the menubar
+   uses, which is why it does not read as a new component. */
 .hint {
   position: absolute;
-  left: 0; right: 0;
+  left: 50%;
   bottom: 92px;
   z-index: 2;
   margin: 0;
+  transform: translateX(-50%);
+  max-width: min(92vw, 620px);
+  padding: 5px 14px;
   text-align: center;
   font-size: 13.5px;
   color: var(--text-muted);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  border: var(--bw) solid var(--line);
+  border-radius: 999px;
+  box-shadow: 2px 2px 0 var(--shadow);
   transition: opacity .35s var(--ease-out);
 }
 .hint-sub { opacity: .7; }
@@ -649,13 +808,32 @@ body {
 .dock-btn:hover { background: var(--accent-soft); transform: translateY(-2px); }
 .dock-btn[aria-current="true"] { background: var(--accent-soft); box-shadow: inset 0 0 0 2px var(--accent); }
 
-.dock-swatch {
-  width: 11px; height: 11px;
+/* The dock used to show a coloured square. It now shows the same glyph the
+   icon does, on the same tint tile, so a docked window is recognisable at a
+   glance rather than by reading four labels. */
+.dock-glyph {
+  display: grid;
+  place-items: center;
+  width: 20px; height: 20px;
   flex: none;
+  color: #fff;
   background: var(--sw, var(--yellow));
   border: 1.5px solid var(--line);
-  border-radius: 3px;
+  border-radius: 5px;
 }
+.dock-glyph svg {
+  width: 14px; height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+/* A minimised window is still listed, but it is not on screen — the dimmed
+   tile is the only thing that says so. */
+.dock-btn[data-minimised="true"] .dock-glyph { filter: saturate(.25); }
+.dock-btn[data-minimised="true"] .dock-label { color: var(--text-muted); }
+
 .dock-label { overflow: hidden; text-overflow: ellipsis; }
 
 /* ---------------- spotlight ---------------- */
@@ -767,7 +945,6 @@ body {
     animation-iteration-count: 1 !important;
     transition-duration: .01ms !important;
   }
-  .doodle { transform: none !important; }
 }
 
 /* ============================================================

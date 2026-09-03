@@ -42,7 +42,9 @@ export const Readme = (() => {
         { t: "ul", v: [
           "⌘K / Ctrl+K — search docs, skills, scripts and clips.",
           "Escape — close the top window, or leave the teleprompter.",
-          "⌘S inside a script — save it."
+          "F6 — cycle through the open windows.",
+          "⌘S inside a script — save it.",
+          "Everything here works from the keyboard. See **Accessibility** for the rest."
         ] }
       ]
     },
@@ -128,6 +130,59 @@ export const Readme = (() => {
         { t: "h", v: "The theme" },
         { t: "p", v: "Light and dark are both designed. The page follows your system until you press the toggle, which stores an explicit choice." }
       ]
+    },
+    {
+      id: "accessibility",
+      name: "Accessibility",
+      kind: "doc",
+      eyebrow: "Reference",
+      title: "Working without a mouse",
+      blocks: [
+        { t: "lede", v: "A desktop is a pointing metaphor by default. Everything here exists so the same machine can be driven from the keyboard, and so the things that happen on their own get said out loud." },
+
+        { t: "h", v: "Focus work" },
+        { t: "p", v: "**Focus work** is the name for how Tab moves through this page and how it shows you where it has got to. Every control on the desktop is a real button, so Tab reaches all of them in the order they are drawn — menubar, then the desktop icons, then any open window, then the dock." },
+        { t: "ul", v: [
+          "**Tab / Shift+Tab** — step forward and back through everything you can use.",
+          "**A visible ring** — 3px of blue with a halo of the page's own ground colour behind it, so it stays readable over the wallpaper as well as over a window.",
+          "**Skip to the desktop** — the first thing Tab reaches on a fresh page, so you can jump the menubar and land on the icons.",
+          "**Arrow keys, Home and End** — move along the row of desktop icons without tabbing through every one. Tab still reaches them individually; the arrows are in addition.",
+          "**Enter or Space** — open whatever the ring is on."
+        ] },
+        { t: "note", v: "Focus is never dropped on the floor. Close a window and focus returns to the icon that opened it, or to the window underneath if one is still up. Minimise a window and focus moves to the dock button that brings it back." },
+
+        { t: "h", v: "Windows from the keyboard" },
+        { t: "ul", v: [
+          "**F6 / Shift+F6** — cycle through the open windows, front to back. It is the only way to reach a window sitting behind another one without dragging.",
+          "**Escape** — close the top window.",
+          "**⌘K / Ctrl+K** — the launcher. Type, arrow through the results, Enter to open."
+        ] },
+        { t: "p", v: "The launcher is a combobox: focus stays in the field while the arrows move the highlight, and the highlighted row is reported as you go rather than only when you pick it. Both it and the teleprompter hold focus inside themselves while they are up, and hand it back to whatever opened them when they close." },
+
+        { t: "h", v: "The teleprompter" },
+        { t: "ul", v: [
+          "Opening it moves focus onto the play button, not into the page behind it.",
+          "**Space** pauses and restarts the scroll — the thing you reach for when you are looking at the lens and not at the screen.",
+          "**Escape** leaves, and focus goes back to the script you started from."
+        ] },
+
+        { t: "h", v: "Said out loud" },
+        { t: "p", v: "Windows opening, closing and folding into the dock are silent events: they change the screen without anyone pressing anything visible. Each of them is announced through a polite live region, along with the prompter starting and stopping and the number of results a search found." },
+
+        { t: "h", v: "Motion" },
+        { t: "p", v: "Turn on **Reduce motion** in your system settings and this page listens. The window-open flight, the folder lids, the dock's entrance and the wallpaper's drift under the pointer all stop; windows simply appear and disappear. Nothing is lost but the animation." },
+
+        { t: "h", v: "Contrast, and the wallpaper" },
+        { t: "p", v: "The wallpaper is a photograph, which means text has to sit on top of a picture nobody designed for text. Three things keep it legible: a wash of the ground colour across the band where the icons sit, a halo in the same colour behind every desktop label, and a solid plate under the hint along the bottom. Each theme has its own photograph rather than one image dimmed — dark is the same valley at last light, not the light one turned down." },
+
+        { t: "h", v: "What is still not there" },
+        { t: "ul", v: [
+          "Reordering clips on the timeline is drag-and-drop only. Everything else in the Editor has keys — J K L, Space, arrows, S to split — but reordering needs a pointer.",
+          "Exported video has no caption track. The transcript exists in the Editor; it does not yet travel with the file.",
+          "The desktop has not been tested against a screen magnifier at high zoom."
+        ] },
+        { t: "note", v: "If something here is unreachable from a keyboard, that is a bug rather than a limitation, and it is worth reporting as one." }
+      ]
     }
   ];
 
@@ -206,13 +261,30 @@ export const Readme = (() => {
    Boot
    ============================================================ */
 
+/**
+ * The glyphs.
+ *
+ * Camera and Editor draw theirs on the 92×100 desktop tile. The three folders
+ * draw a hinged folder out there instead — but the dock has room for one small
+ * square and nothing else, so every registered thing needs a glyph that reads
+ * at 14 pixels, folders included.
+ */
 export const ICONS = {
   camera: `<svg viewBox="0 0 24 24" aria-hidden="true">
     <path d="M4 8h3l1.4-2h7.2L17 8h3v11H4z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/>
     <circle cx="12" cy="13" r="3.6" fill="none" stroke="currentColor" stroke-width="1.9"/></svg>`,
   editor: `<svg viewBox="0 0 24 24" aria-hidden="true">
     <rect x="3" y="6" width="18" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.9"/>
-    <path d="M3 10h18M8 6v12M16 6v12" stroke="currentColor" stroke-width="1.6"/></svg>`
+    <path d="M3 10h18M8 6v12M16 6v12" stroke="currentColor" stroke-width="1.6"/></svg>`,
+  readme: `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor"
+    stroke-width="1.9" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M4 5.5h6a2 2 0 0 1 2 2v11a2 2 0 0 0-2-2H4zM20 5.5h-6a2 2 0 0 0-2 2v11a2 2 0 0 1 2-2h6z"/></svg>`,
+  scripts: `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor"
+    stroke-width="1.9" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M5.5 3.5h13v17h-13z"/><path d="M8.5 8h7M8.5 12h7M8.5 16h4"/></svg>`,
+  skills: `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor"
+    stroke-width="1.9" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M12 3.5l2.5 5.2 5.5.8-4 3.9 1 5.6-5-2.7-5 2.7 1-5.6-4-3.9 5.5-.8z"/></svg>`
 };
 
 /**
@@ -224,18 +296,18 @@ export const ICONS = {
  */
 export function boot() {
   Desk.register({
-    id: "readme", name: "Readme", type: "folder", subtitle: "5 documents",
-    tint: "#30ABC6", tintDark: "#1F7E94", open: Readme.open
+    id: "readme", name: "Readme", type: "folder", subtitle: "6 documents",
+    tint: "#30ABC6", tintDark: "#1F7E94", icon: ICONS.readme, open: Readme.open
   });
 
   Desk.register({
     id: "scripts", name: "Scripts", type: "folder", subtitle: "write + run",
-    tint: "#F7A501", tintDark: "#C97F00", open: Scripts.open
+    tint: "#F7A501", tintDark: "#C97F00", icon: ICONS.scripts, open: Scripts.open
   });
 
   Desk.register({
     id: "skills", name: "Skills", type: "folder", subtitle: "cuts + looks",
-    tint: "#29963F", tintDark: "#1C6B2C", open: Skills.open
+    tint: "#29963F", tintDark: "#1C6B2C", icon: ICONS.skills, open: Skills.open
   });
 
   Desk.register({
