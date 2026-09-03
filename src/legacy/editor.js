@@ -334,9 +334,12 @@ export const Editor = (() => {
             <button class="btn btn-mini ed-page" data-page-to="edit" aria-pressed="true">Edit</button>
             <button class="btn btn-mini ed-page" data-page-to="motion" aria-pressed="false" hidden>Motion</button>
           </div>
-          <button class="btn btn-mini" data-act="undo" title="Undo the last timeline edit (Ctrl+Z)" disabled>Undo</button>
-          <button class="btn btn-mini" data-act="redo" title="Redo the last undone edit (Ctrl+Shift+Z)" disabled>Redo</button>
-          <button class="btn btn-mini" data-act="clear">Clear</button>
+          <button class="btn btn-mini btn-icon" data-act="undo" title="Undo the last timeline edit (Ctrl+Z)" aria-label="Undo" disabled>
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6.2 3.5 2.7 7l3.5 3.5M3.2 7h6.3a3.3 3.3 0 0 1 0 6.6H7"/></svg>
+          </button>
+          <button class="btn btn-mini btn-icon" data-act="redo" title="Redo the last undone edit (Ctrl+Shift+Z)" aria-label="Redo" disabled>
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m9.8 3.5 3.5 3.5-3.5 3.5M12.8 7H6.5a3.3 3.3 0 0 0 0 6.6H9"/></svg>
+          </button>
         </div>
         <div class="cmp-pane" id="pane-track" data-pane="track" tabindex="0">
           <div class="tl-tools">
