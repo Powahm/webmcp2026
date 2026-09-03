@@ -106,7 +106,28 @@ export function parseSkill(filename, raw) {
   };
 }
 
-export const allSkills = () => Store.all("aiskills");
+/**
+ * Records written by an older build can predate a field. A skill saved before
+ * `triggers` existed has none, and the window's render read `.length` off it,
+ * threw, and left the list blank under a title that still said "5 skills".
+ * Fill in what is missing from what is there, so an old record reads the same
+ * as a new one everywhere downstream.
+ */
+function normalise(skill) {
+  const body = String(skill.body ?? "");
+  return {
+    ...skill,
+    filename: skill.filename || "skill.md",
+    name: skill.name || "Untitled skill",
+    description: skill.description || "",
+    triggers: Array.isArray(skill.triggers) ? skill.triggers : [],
+    body,
+    words: Number.isFinite(skill.words) ? skill.words : body.split(/\s+/).filter(Boolean).length,
+    meta: skill.meta && typeof skill.meta === "object" ? skill.meta : {},
+  };
+}
+
+export const allSkills = async () => (await Store.all("aiskills")).map(normalise);
 
 /**
  * Which skills fit what is happening on the page right now.
