@@ -257,6 +257,29 @@ export function setFormat(name, gesture) {
   return { ok: true };
 }
 
+/**
+ * Move or resize a layer by hand.
+ *
+ * The agent has no route to this: it proposes and the proposal waits. This is
+ * the person dragging the block on the timeline, so it takes the same trusted
+ * gesture every other decision here takes, and it edits the layer in place
+ * rather than staging a change nobody asked to review.
+ */
+export function editLayer(layerId, patch, gesture) {
+  if (!trusted(gesture)) return denied("move a layer");
+  const target = doc.layers.find((l) => l.id === layerId);
+  if (!target) return { ok: false, error: "No layer with that id." };
+
+  const from = Math.max(0, Math.round(patch.from ?? target.from));
+  const durationInFrames = Math.max(3, Math.round(patch.durationInFrames ?? target.durationInFrames));
+  doc = {
+    ...doc,
+    layers: doc.layers.map((l) => (l.id === layerId ? { ...l, from, durationInFrames } : l)),
+  };
+  emit();
+  return { ok: true };
+}
+
 export function removeLayer(layerId, gesture) {
   if (!trusted(gesture)) return denied("delete a layer");
   doc = { ...doc, layers: doc.layers.filter((l) => l.id !== layerId) };
