@@ -3624,9 +3624,15 @@ export const Editor = (() => {
     });
 
     scrub.addEventListener("input", () => {
+      // Read where the drag put it before anything else touches the input.
+      // `stop()` below calls `renderClock()`, which writes `scrub.value` right
+      // back to wherever the playhead already was -- so reading it after stop
+      // read the position this drag was leaving, not the one it landed on,
+      // and the bar snapped back under your thumb on every scrub.
+      const target = (Number(scrub.value) / 1000) * total();
       const wasPlaying = playing;
       stop();
-      seekTo((Number(scrub.value) / 1000) * total()).then(() => wasPlaying && play());
+      seekTo(target).then(() => wasPlaying && play());
     });
 
     /* drag to reorder the spine */
