@@ -61,6 +61,8 @@ Everything below is built and tested.
 | Scripts | `src/legacy/scripts-app.js` | Lines-and-shot-directions model, Draft and Shot list views, research pane, suggestions drawn into the draft, standalone rehearsal prompter. |
 | Skills / AI Skills | `src/legacy/skills.js`, `src/legacy/aiskills.js` | Craft notes, plus a folder of markdown the agent can load, with triggers. |
 | Motion graphics | `src/graphics/` | Six declarative types, one renderer for preview and export, propose and accept. |
+| **Motion graphics clips** | `src/legacy/editor.js` | A clip is a span of the cut that holds elements. Open one and it becomes the timeline: its own length, one element to a row, trim and move in local time. Explicit on the spine, floating over the footage, or gathered implicitly around elements the agent proposed with no clip to hold them. Exactly one clip owns an element, and the composition underneath is still one flat list in cut frames, so the tool contract, the codegen and the export never learned about any of this. |
+| **The agent's cursor** | `src/agent/Cursor.jsx` | A pointer that springs to the surface each tool call actually touched and presses it, and a border that breathes on the window while a call is in flight. Driven only by real calls, like the ghost. |
 | **Composition engine** | `src/comp/` | Frames at 30fps, `Sequence` resolution, `interpolate`/`spring`, eleven components, three formats, synthesised sound, TSX codegen. |
 | **Transcripts** | `src/transcript/` | Word timing derived from prompter marks; Whisper as an opt-in upgrade on the user's own key. |
 | **Staged cuts** | `src/cuts/` | Cut by quoting the words; `applyCut` splits a segment. |
@@ -86,6 +88,9 @@ and it is not the real thing.
 
 ## Still open
 
+- A motion graphics clip that runs past the end of the cut is drawn up to the
+  cut's end and no further. `total()` is the spine plus the overlay lanes, and
+  a floating clip is not in it.
 - Editor basics beyond trim and reorder: splitting a clip, transitions.
 - Export is real-time canvas capture, so it is WebM at the source clip's dimensions and
   takes as long as the cut. WebCodecs with `mp4-muxer` is the path to MP4, exact frame
