@@ -34,7 +34,6 @@ import { Clips, timecode } from "../legacy/store.js";
 import { findDeadWeight, findWords, toCutTime } from "../transcript/transcript.js";
 import { hasApiKey, transcriptsFor } from "../transcript/store.js";
 import { fail, json, NO_INPUT, READ_ONLY } from "./result.js";
-import { skillNudge } from "./nudge.js";
 
 const round = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
@@ -69,7 +68,7 @@ export const getComposition = {
     "Return the motion graphics, sound and format layered over the cut, with every timing in both seconds and frames. Call it before proposing anything so you build on what is there instead of stacking a second title card on the first, and so you know the format: a graphic laid out for 16:9 reads differently once the same composition is reframed to 9:16.",
   inputSchema: NO_INPUT,
   annotations: READ_ONLY,
-  execute: async () => {
+  execute: () => {
     const doc = composition();
     const { fps } = doc;
     const format = formatOf(doc.format);
@@ -85,7 +84,6 @@ export const getComposition = {
       pending_format: doc.pendingFormat
         ? { format: doc.pendingFormat.format, reason: doc.pendingFormat.reason }
         : null,
-      ...(await skillNudge()),
       layers: liveLayers().map((l) => ({
         id: l.id,
         component: l.component,
@@ -99,9 +97,6 @@ export const getComposition = {
         palette_role: l.palette_role,
         easing: l.easing,
         props: l.props,
-        // Keyframes, so an agent can see what a person animated by hand and
-        // reason about it rather than proposing over the top of it.
-        keys: (l.keys ?? []).length ? l.keys : null,
         reason: l.reason,
         proposed_by: l.origin,
       })),
@@ -319,7 +314,7 @@ const COMPONENT_MENU = COMPONENT_KEYS
 export const proposeLayerTool = {
   name: "propose_layer",
   description:
-    `Propose a motion graphic over the cut. It appears at once on the timeline as a dashed, unconfirmed layer that previews live, and it is not in the video until the editor accepts it. Choose from: ${COMPONENT_MENU} For anything the preset graphics do not cover, use 'text' (full control of typeface, size, colour, alignment and animation), 'shape' (rectangles, ellipses, pills, triangles, lines, arrows, rings and stars in any colour and rotation) or 'effect' (flash, vignette, grain, scanlines, glitch, letterbox, wash). Colour is a palette role or a hex. Call get_composition first for the format and what is already there, and get_transcript if they asked for it over something they said. Stage it straight away when they ask for one — do not ask them to confirm first. Staging changes nothing: it draws a dashed, unconfirmed suggestion in the app that they accept or discard with one click, so asking in chat first only makes them say it twice.`,
+    `Propose a motion graphic over the cut. It appears at once on the timeline as a dashed, unconfirmed layer that previews live, and it is not in the video until the editor accepts it. Choose from: ${COMPONENT_MENU} For anything the preset graphics do not cover, use 'text' (full control of typeface, size, colour, alignment and animation), 'shape' (rectangles, ellipses, pills, triangles, lines, arrows, rings and stars in any colour and rotation) or 'effect' (flash, vignette, grain, scanlines, glitch, letterbox, wash). Colour is a palette role or a hex. Call get_composition first for the format and what is already there, and get_transcript if they asked for it over something they said.`,
   inputSchema: {
     type: "object",
     properties: {
@@ -364,7 +359,7 @@ export const proposeLayerTool = {
 export const proposeBlankTool = {
   name: "propose_blank_clip",
   description:
-    "Propose a blank clip on the timeline: a solid colour that takes up time, for building motion graphics on when there is no footage to put them over. Stage this first when they ask for a title sequence, an animated card or a graphics-only piece, then propose layers over it with propose_layer. It appears as a dashed block on the base track and is not part of the cut until the editor accepts it. Stage it straight away when they ask for one — do not ask them to confirm first. Staging changes nothing: it draws a dashed, unconfirmed suggestion in the app that they accept or discard with one click, so asking in chat first only makes them say it twice.",
+    "Propose a blank clip on the timeline: a solid colour that takes up time, for building motion graphics on when there is no footage to put them over. Stage this first when they ask for a title sequence, an animated card or a graphics-only piece, then propose layers over it with propose_layer. It appears as a dashed block on the base track and is not part of the cut until the editor accepts it.",
   inputSchema: {
     type: "object",
     properties: {
@@ -398,7 +393,7 @@ export const proposeBlankTool = {
 export const proposeLayerChangeTool = {
   name: "propose_layer_change",
   description:
-    "Propose a change to a layer that is already on the cut: retime it, move it, reword it, recolour it. The original stays exactly as it is until the editor accepts the change, so rejecting costs them nothing. Send only the fields you are changing; everything else is kept. Stage it straight away when they ask for one — do not ask them to confirm first. Staging changes nothing: it draws a dashed, unconfirmed suggestion in the app that they accept or discard with one click, so asking in chat first only makes them say it twice.",
+    "Propose a change to a layer that is already on the cut: retime it, move it, reword it, recolour it. The original stays exactly as it is until the editor accepts the change, so rejecting costs them nothing. Send only the fields you are changing; everything else is kept.",
   inputSchema: {
     type: "object",
     properties: {
@@ -432,7 +427,7 @@ export const proposeLayerChangeTool = {
 export const proposeSound = {
   name: "propose_sound",
   description:
-    `Propose sound: a one-shot effect on a moment, or a music bed under a stretch of the cut. Effects are synthesised in the browser, so there is nothing to load and nothing to license — pick one of: ${SFX_NAMES.map((n) => `${n} (${SFX_PRESETS[n].blurb})`).join(" ")} A music bed takes an existing clip from the library and ducks itself under speech automatically, using the transcript's word boundaries, so you do not need to shape the volume yourself. Stage it straight away when they ask for one — do not ask them to confirm first. Staging changes nothing: it draws a dashed, unconfirmed suggestion in the app that they accept or discard with one click, so asking in chat first only makes them say it twice.`,
+    `Propose sound: a one-shot effect on a moment, or a music bed under a stretch of the cut. Effects are synthesised in the browser, so there is nothing to load and nothing to license — pick one of: ${SFX_NAMES.map((n) => `${n} (${SFX_PRESETS[n].blurb})`).join(" ")} A music bed takes an existing clip from the library and ducks itself under speech automatically, using the transcript's word boundaries, so you do not need to shape the volume yourself.`,
   inputSchema: {
     type: "object",
     properties: {
@@ -472,7 +467,7 @@ export const proposeSound = {
 export const proposeFormatTool = {
   name: "propose_format",
   description:
-    "Propose reframing the whole composition to a different aspect ratio. Every graphic is laid out as fractions of the frame, so this moves nothing and rewrites nothing — the same composition simply becomes 16:9, 9:16 or 1:1, with the safe margins that format needs. Use it when they mention shorts, reels, vertical or a square post. Stage it straight away when they ask for one — do not ask them to confirm first. Staging changes nothing: it draws a dashed, unconfirmed suggestion in the app that they accept or discard with one click, so asking in chat first only makes them say it twice.",
+    "Propose reframing the whole composition to a different aspect ratio. Every graphic is laid out as fractions of the frame, so this moves nothing and rewrites nothing — the same composition simply becomes 16:9, 9:16 or 1:1, with the safe margins that format needs. Use it when they mention shorts, reels, vertical or a square post.",
   inputSchema: {
     type: "object",
     properties: {
@@ -502,7 +497,7 @@ export const proposeFormatTool = {
 export const proposeCutTool = {
   name: "propose_cut",
   description:
-    "Propose removing a stretch of the cut. Give it a quote and it finds the words in the transcript and stages a cut over exactly them, which is how 'take out the bit where I stumble over the second point' becomes a precise range. It appears as a marked region on the timeline and nothing is removed until the editor accepts it. Removing footage is the most destructive thing in this app, so it is also the one most firmly behind a click. Stage it straight away when they ask for one — do not ask them to confirm first. Staging changes nothing: it draws a dashed, unconfirmed suggestion in the app that they accept or discard with one click, so asking in chat first only makes them say it twice.",
+    "Propose removing a stretch of the cut. Give it a quote and it finds the words in the transcript and stages a cut over exactly them, which is how 'take out the bit where I stumble over the second point' becomes a precise range. It appears as a marked region on the timeline and nothing is removed until the editor accepts it. Removing footage is the most destructive thing in this app, so it is also the one most firmly behind a click.",
   inputSchema: {
     type: "object",
     properties: {
@@ -575,7 +570,7 @@ export const proposeCutTool = {
 export const proposeTidy = {
   name: "propose_tidy",
   description:
-    "Find every hesitation and every silence in the cut and stage a cut over each one, in a single call. Only mechanical things: 'um' and 'uh' and holes in the audio longer than about a second. It never proposes cutting a sentence for being weak, because that is a judgement and this is a list. Each one is marked separately on the timeline so they can be taken or left one at a time. Stage it straight away when they ask for one — do not ask them to confirm first. Staging changes nothing: it draws a dashed, unconfirmed suggestion in the app that they accept or discard with one click, so asking in chat first only makes them say it twice.",
+    "Find every hesitation and every silence in the cut and stage a cut over each one, in a single call. Only mechanical things: 'um' and 'uh' and holes in the audio longer than about a second. It never proposes cutting a sentence for being weak, because that is a judgement and this is a list. Each one is marked separately on the timeline so they can be taken or left one at a time.",
   inputSchema: {
     type: "object",
     properties: {

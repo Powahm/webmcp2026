@@ -43,6 +43,12 @@ export default function App() {
 
   return (
     <>
+      {/* The first thing a keyboard lands on. Without it, reaching the desktop
+          means tabbing through the whole menubar on every load. */}
+      <a className="skip-link" href="#icons">
+        Skip to the desktop
+      </a>
+
       <header className="menubar">
         <div className="brand">
           <span className="brand-mark" aria-hidden="true">
@@ -50,7 +56,7 @@ export default function App() {
               <path d="M5 8h6l2 2h6v8H5V8Z" fill="currentColor" />
             </svg>
           </span>
-          <span className="brand-name">Desk Two</span>
+          <span className="brand-name">Deskmate</span>
         </div>
 
         <div className="menubar-right">
@@ -80,6 +86,25 @@ export default function App() {
       </header>
 
       <main className="desktop" id="desktop">
+        {/*
+          The wallpaper.
+
+          Two photographs, one per theme, because a picture cannot re-light
+          itself the way a set of tokens can: light is the valley at sunrise,
+          dark is the same valley at last light. They are referenced from
+          `desk.css` so the bundler hashes them; the originals live in
+          `assets/` and the WebP beside each one is what actually ships.
+
+          The scrim on top is not decoration. Desktop labels sit directly on
+          this picture, and a wash of the ground colour under the icon row is
+          what keeps them readable over a sky that was never designed to have
+          text on it.
+        */}
+        <div className="wallpaper" aria-hidden="true">
+          <div className="wp-photo" />
+          <div className="wp-scrim" />
+        </div>
+
         <div className="doodles" aria-hidden="true">
           <svg className="doodle d1" viewBox="0 0 120 40">
             <path d="M4 22c14-20 26 16 40-2s26 14 40-6 26 6 32 2" />
@@ -97,7 +122,9 @@ export default function App() {
           </svg>
         </div>
 
-        <div className="icons" id="icons" />
+        {/* tabIndex -1 so the skip link has somewhere to land: an anchor only
+            moves focus if what it points at can take it. */}
+        <div className="icons" id="icons" tabIndex={-1} role="group" aria-label="Desktop icons" />
 
         {/* Folders that were actually imported, and folders the agent says it
             has but nobody has opened yet. */}
@@ -161,6 +188,9 @@ export default function App() {
               placeholder="Search docs, skills, scripts and clips…"
               autoComplete="off"
               spellCheck="false"
+              role="combobox"
+              aria-expanded="true"
+              aria-autocomplete="list"
               aria-controls="spotlight-results"
             />
             <kbd className="mono">esc</kbd>

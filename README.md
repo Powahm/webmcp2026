@@ -190,6 +190,25 @@ Clips and scripts live in IndexedDB under the origin serving the page. Nothing i
 there is no backend. If IndexedDB is unavailable the apps fall back to memory for the session,
 so nothing breaks, but a refresh loses the library.
 
+## The wallpaper
+
+Two photographs of the same valley, one per theme: `Light_theme` at sunrise,
+`Dark_theme` at last light. The exports live in `assets/` as PNG and are never
+touched; `tools/wallpaper.mjs` writes the `.webp` beside each one, which is what
+`desk.css` actually loads. It does two things on the way — WebP takes 1.9MB down
+to about 100KB, and the brand lock-up is moved. It ships across the middle of each
+export, which is exactly where the desktop icons and their labels land, so the
+script lifts it off the sky and puts it back above the icon row: a clean plate
+crossfaded from the sky either side of it, then a difference matte against that
+plate, which is what gives grey letters and an orange mark a shared alpha channel
+that no colour key could.
+
+Nothing else has to know: the picture is a `background-image` on one element, so
+swapping in a different export is two lines of CSS. What sits on top of it is a
+scrim in the ground colour, strongest across the icon row and lightest across the
+horizon, plus a halo behind every desktop label — which is what keeps the labels
+readable on a picture that was never designed to have text on it.
+
 ## Interactions
 
 - **Click an icon** — folders hinge open, apps press in; the window scales out of the icon's
@@ -205,7 +224,25 @@ so nothing breaks, but a refresh loses the library.
 
 Icons and files are real buttons, windows are labelled dialogs, focus moves into a window on
 open and back to the icon on close. `prefers-reduced-motion` disables the window animations
-and the wallpaper parallax.
+and the wallpaper parallax. The **Accessibility** document in the Readme folder is the
+user-facing version of this list.
+
+**Focus work** — `src/a11y/focus-work.js` — is the keyboard's map of the desktop:
+
+- A **skip link** as the first tab stop, and one 3px focus ring with a ground-coloured halo
+  so it survives the wallpaper as well as a window body.
+- **Arrow keys, Home and End** walk the desktop icons; Tab still reaches each one.
+- **F6 / Shift+F6** cycles the open windows — the only way to reach one that is behind
+  another. Closing a window hands focus back to its icon, minimising hands it to the dock
+  button, and both are announced.
+- The **launcher** and the **teleprompter** hold focus inside themselves and give it back to
+  whatever opened them. The launcher is a combobox with `aria-activedescendant`, so arrowing
+  through results is audible and not only visible. **Space** pauses the prompter.
+- One polite live region narrates what happens without a click: windows opening, closing and
+  minimising, the prompter starting and stopping, how many results a search found.
+
+Known gaps, also listed in the document: reordering timeline clips is drag-only, and exported
+video carries no caption track.
 
 ## Running it
 
@@ -229,9 +266,12 @@ Camera and screen capture need a **secure context**, so `https://` or `localhost
 | `index.html` | Mount node and fonts |
 | `src/index.css` | Tailwind utilities, then the design system; the newer surfaces |
 | `src/styles/desk.css` | Design tokens, both themes, window and app chrome |
+| `assets/*.png` | The wallpaper exports, untouched |
+| `tools/wallpaper.mjs` | Turns those into the `.webp` the page loads |
 | `src/App.jsx` | Desktop chrome, boot, tool registration |
 | `src/legacy/store.js` | IndexedDB persistence for clips, scripts and AI skills, plus clip probing |
 | `src/legacy/shell.js` | Window manager, dock, ⌘K launcher, theme, icons |
+| `src/a11y/focus-work.js` | The live region, the focus trap, and arrow-key movement |
 | `src/legacy/camera.js` | Stream acquisition, recording, prompter marks |
 | `src/legacy/editor.js` | Timeline, playback, grading, canvas export, composition views |
 | `src/legacy/scripts-app.js` | Script folder, Draft and Shot list, research, teleprompter |

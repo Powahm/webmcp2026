@@ -4,6 +4,8 @@
    a body element to fill when they open.
    ============================================================ */
 
+import { announce, linearNav, trapFocus } from "../a11y/focus-work.js";
+
 export const Desk = (() => {
   const $ = (sel, root = document) => root.querySelector(sel);
   const desktop = $("#desktop");
@@ -143,6 +145,7 @@ export const Desk = (() => {
 
     hint.dataset.faded = "true";
     $(".win-dot--close", el).focus({ preventScroll: true });
+    announce(`${title} opened.`);
     return rec;
   }
 
@@ -176,9 +179,15 @@ export const Desk = (() => {
       if (source) source.dataset.open = "false";
       syncDock();
       if (!windows.size) hint.dataset.faded = "false";
+      // Focus has to land somewhere real. The icon that opened this window is
+      // the honest place, and the window underneath is the next best: leaving
+      // it on <body> means the next Tab starts again from the menubar.
       const next = [...windows.values()].pop();
-      if (next) focusWindow(next.id);
-      else if (source) source.focus({ preventScroll: true });
+      if (next) {
+        focusWindow(next.id);
+        $(".win-dot--close", next.el)?.focus({ preventScroll: true });
+      } else if (source) source.focus({ preventScroll: true });
+      announce(`${rec.title} closed.`);
     };
 
     if (reduced.matches || compact.matches) return done();
@@ -212,7 +221,16 @@ export const Desk = (() => {
       const act = e.target.closest("[data-act]")?.dataset.act;
       if (!act) return;
       if (act === "close") closeWindow(id);
-      if (act === "min") { setWindowState(rec, "minimised"); syncDock(); }
+      if (act === "min") {
+        setWindowState(rec, "minimised");
+        syncDock();
+        announce(`${rec.title} minimised to the dock.`);
+        // The window it was on has just gone display:none, so send focus to the
+        // dock button that brings it back.
+        dockList
+          .querySelector(`.dock-btn[data-win-id="${CSS.escape(id)}"]`)
+          ?.focus({ preventScroll: true });
+      }
       if (act === "max") toggleMax(rec);
     });
 
@@ -285,6 +303,35 @@ export const Desk = (() => {
 
   /* ---------------- dock ---------------- */
 
+  /**
+   * What a docked window looks like at 16 pixels.
+   *
+   * The dock used to be a coloured square and a word, which is fine until four
+   * windows are open and three of them are documents. Window ids are already
+   * namespaced by what opened them — `doc:`, `script:`, `skill:`, `folder:` —
+   * so the prefix picks the glyph and an app supplies its own.
+   */
+  const DOCK_GLYPHS = {
+    doc: `<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v5h4"/><path d="M9 13h6M9 17h6"/>`,
+    script: `<path d="M5 3h11l3 3v15H5z"/><path d="M8 8h8M8 12h8M8 16h5"/>`,
+    skill: `<path d="M12 3.5l2.5 5.2 5.5.8-4 3.9 1 5.6-5-2.7-5 2.7 1-5.6-4-3.9 5.5-.8z"/>`,
+    folder: `<path d="M3 6h6l2 2h10v11H3z"/>`,
+    aiskills: `<path d="M12 3.5l2.5 5.2 5.5.8-4 3.9 1 5.6-5-2.7-5 2.7 1-5.6-4-3.9 5.5-.8z"/>`,
+    window: `<rect x="3.5" y="5" width="17" height="14" rx="2"/><path d="M3.5 9.5h17"/>`,
+  };
+
+  const glyph = (body) =>
+    `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor"
+       stroke-width="1.9" stroke-linejoin="round" stroke-linecap="round">${body}</svg>`;
+
+  function dockGlyph(id) {
+    const app = registry.get(id);
+    if (app?.icon) return app.icon;
+    if (app?.type === "folder") return glyph(DOCK_GLYPHS.folder);
+    const kind = id.includes(":") ? id.slice(0, id.indexOf(":")) : id;
+    return glyph(DOCK_GLYPHS[kind] ?? DOCK_GLYPHS.window);
+  }
+
   function syncDock() {
     dockList.innerHTML = "";
     dock.hidden = windows.size === 0;
@@ -293,9 +340,16 @@ export const Desk = (() => {
       const li = document.createElement("li");
       const btn = document.createElement("button");
       btn.className = "dock-btn";
+      btn.dataset.winId = rec.id;
       btn.style.setProperty("--sw", rec.tint || "var(--yellow)");
-      btn.setAttribute("aria-current", String(rec.el.dataset.focused === "true" && rec.el.dataset.state === "open"));
-      btn.innerHTML = `<span class="dock-swatch" aria-hidden="true"></span><span class="dock-label">${esc(rec.title)}</span>`;
+      const minimised = rec.el.dataset.state === "minimised";
+      btn.dataset.minimised = String(minimised);
+      btn.setAttribute("aria-current", String(rec.el.dataset.focused === "true" && !minimised));
+      // The glyph is decorative — the label beside it already names the window,
+      // so a second reading of the same word would be noise.
+      btn.innerHTML =
+        `<span class="dock-glyph" aria-hidden="true">${dockGlyph(rec.id)}</span>` +
+        `<span class="dock-label">${esc(rec.title)}</span>`;
       btn.addEventListener("click", () => {
         setWindowState(rec, "open");
         focusWindow(rec.id);
@@ -336,6 +390,10 @@ export const Desk = (() => {
     });
   }
 
+  // Tab still reaches every icon. The arrows are the second habit: someone who
+  // treats the desktop as one thing can walk it without twelve Tab presses.
+  linearNav(iconsEl, ".icon");
+
   function launch(id) {
     const app = registry.get(id);
     if (!app) return;
@@ -363,14 +421,21 @@ export const Desk = (() => {
     return lists.flat();
   }
 
+  /** Released when the launcher closes, which is also what restores focus. */
+  let releaseSpotlight = null;
+
   async function openSpotlight() {
     spotlight.hidden = false;
     spotInput.value = "";
     await renderSpotlight("");
-    spotInput.focus();
+    releaseSpotlight = trapFocus($(".spotlight-panel", spotlight), { initial: spotInput });
   }
 
-  function closeSpotlight() { spotlight.hidden = true; }
+  function closeSpotlight() {
+    spotlight.hidden = true;
+    releaseSpotlight?.();
+    releaseSpotlight = null;
+  }
 
   async function renderSpotlight(query) {
     const q = query.trim().toLowerCase();
@@ -380,23 +445,30 @@ export const Desk = (() => {
 
     if (!matches.length) {
       spotResults.innerHTML = `<li class="sp-empty">Nothing matches “${esc(query)}”.</li>`;
+      spotInput.removeAttribute("aria-activedescendant");
+      announce(`No results for ${query}.`);
       return;
     }
 
+    // Highlighting a row is a visual act. `aria-activedescendant` is what makes
+    // the same move audible: focus stays in the field, and the option the
+    // arrows landed on is read out.
     spotResults.innerHTML = matches
       .map((it, i) => `
-        <li role="option" aria-selected="${i === 0}" class="sp-item" data-i="${i}" style="--sw:${it.tint}">
+        <li role="option" id="sp-opt-${i}" aria-selected="${i === 0}" class="sp-item" data-i="${i}" style="--sw:${it.tint}">
           <span class="sp-swatch" aria-hidden="true"></span>
           <span class="sp-name">${esc(it.name)}</span>
           <span class="sp-where">${esc(it.where)}</span>
         </li>`)
       .join("");
+    spotInput.setAttribute("aria-activedescendant", "sp-opt-0");
   }
 
   function moveSpotlight(delta) {
     if (!matches.length) return;
     cursor = (cursor + delta + matches.length) % matches.length;
     [...spotResults.children].forEach((li, i) => li.setAttribute("aria-selected", String(i === cursor)));
+    spotInput.setAttribute("aria-activedescendant", `sp-opt-${cursor}`);
     spotResults.children[cursor]?.scrollIntoView({ block: "nearest" });
   }
 
@@ -428,6 +500,20 @@ export const Desk = (() => {
       spotlight.hidden ? openSpotlight() : closeSpotlight();
       return;
     }
+    // F6 is the desktop convention for "next window", and it is the only way
+    // to reach a window that is behind another one without a mouse.
+    if (e.key === "F6") {
+      const open = [...windows.values()].filter((r) => r.el.dataset.state === "open");
+      if (!open.length) return;
+      e.preventDefault();
+      const here = open.findIndex((r) => r.el.dataset.focused === "true");
+      const next = open[(here + (e.shiftKey ? -1 : 1) + open.length) % open.length];
+      focusWindow(next.id);
+      $(".win-dot--close", next.el)?.focus({ preventScroll: true });
+      announce(`${next.title}, window ${open.indexOf(next) + 1} of ${open.length}.`);
+      return;
+    }
+
     if (e.key !== "Escape") return;
     if (!spotlight.hidden) return closeSpotlight();
     if (document.activeElement?.closest(".code-input")) return;
@@ -471,25 +557,6 @@ export const Desk = (() => {
   const tick = () => (clock.textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
   tick();
   setInterval(tick, 10000);
-
-  /* ---------------- ambient parallax ---------------- */
-
-  if (!reduced.matches && matchMedia("(hover: hover)").matches) {
-    const doodles = [...document.querySelectorAll(".doodle")];
-    let queued = false;
-    desktop.addEventListener("pointermove", (e) => {
-      if (queued) return;
-      queued = true;
-      requestAnimationFrame(() => {
-        queued = false;
-        const cx = e.clientX / innerWidth - 0.5;
-        const cy = e.clientY / innerHeight - 0.5;
-        doodles.forEach((d, i) => {
-          d.style.transform = `translate(${cx * (i + 1) * 7}px, ${cy * (i + 1) * 7}px)`;
-        });
-      });
-    });
-  }
 
   /**
    * What is open, and what has focus.

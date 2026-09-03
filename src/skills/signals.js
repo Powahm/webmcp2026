@@ -15,13 +15,12 @@
 const URL_RE = /https?:\/\/\S+/i;
 
 export async function currentSignals() {
-  const [{ Scripts }, { Editor }, { Camera }, { Clips }, graphics, comp] = await Promise.all([
+  const [{ Scripts }, { Editor }, { Camera }, { Clips }, graphics] = await Promise.all([
     import("../legacy/scripts-app.js"),
     import("../legacy/editor.js"),
     import("../legacy/camera.js"),
     import("../legacy/store.js"),
     import("../graphics/store.js"),
-    import("../comp/store.js"),
   ]);
 
   const open = Scripts.openScriptState();
@@ -53,14 +52,6 @@ export async function currentSignals() {
       timeline_empty: Editor.timeline.length === 0,
       timeline_has_clips: Editor.timeline.length > 0,
       graphics_pending: graphics.pendingGraphics().length > 0,
-
-      // The composition. A skill about how graphics should look wants to fire
-      // when there are graphics, or when there is a blank clip waiting for
-      // some — not when somebody is halfway through a take.
-      composition_empty: comp.liveLayers().length === 0,
-      composition_has_layers: comp.liveLayers().length > 0,
-      making_graphics: comp.liveLayers().length > 0 || Editor.timeline.some((sg) => sg.blank),
-      vertical_format: comp.composition().format === "vertical",
     },
     // Free words in a trigger are looked for in what the person has actually
     // written, so a skill can be about a subject and not only a situation.
