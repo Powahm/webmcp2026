@@ -232,7 +232,7 @@ export const getTranscript = {
 export const getCompositionCode = {
   name: "get_composition_code",
   description:
-    "Return the composition as the TSX file it compiles to: one Sequence per graphic, with the exact frame it starts on and how many frames it runs for. This is the same code the editor sees in the Code tab. Read it when you need to reason about the composition as a whole rather than one layer at a time, or to quote a specific line back to the person you are helping.",
+    "Return the composition as the TSX file it compiles to: one Sequence per graphic, with the exact frame it starts on and how many frames it runs for. Read it when you need to reason about the composition as a whole rather than one layer at a time, or to quote a specific line back to the person you are helping.",
   inputSchema: NO_INPUT,
   annotations: READ_ONLY,
   execute: () =>
