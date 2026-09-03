@@ -837,18 +837,19 @@ const TextBlock = {
   name: "TextBlock",
   blurb: "Free text you control completely: typeface, size, colour, alignment, tracking, a plate behind it, an outline, and how it enters and leaves. Use this when none of the preset graphics fit, or when the styling is the point.",
   needs: ["text"],
-  uses: ["font", "size", "align", "tracking", "backdrop", "outline", "line_height", "point", "rotation", "animation"],
+  uses: ["font", "size", "align", "tracking", "backdrop", "outline", "line_height", "point", "rotation", "opacity", "animation"],
   defaults: { durationInFrames: 90, position: "center", palette_role: "plain" },
   fields: {
     text: { type: "string", max: 220, note: "The words. Newlines are kept, so you can set two lines deliberately." },
     font: { type: "string", note: 'One of: display, displayHeavy, body, bodyBold, mono. "displayHeavy" is the headline weight.' },
-    size: { type: "number", note: "Type size in points of a 1080-tall frame, 12 to 220. It scales with the format, so one number is right in every aspect ratio." },
+    size: { type: "number", default: 54, note: "Type size in points of a 1080-tall frame, 12 to 220. It scales with the format, so one number is right in every aspect ratio." },
     align: { type: "string", note: "left, center or right. Also decides which way the block grows from its anchor." },
-    tracking: { type: "number", note: "Letter spacing as a fraction of the size, -0.05 to 0.4. Small caps labels want about 0.07." },
-    line_height: { type: "number", note: "Multiple of the size, 0.8 to 2.4. Defaults to 1.18." },
+    tracking: { type: "number", default: 0, note: "Letter spacing as a fraction of the size, -0.05 to 0.4. Small caps labels want about 0.07." },
+    line_height: { type: "number", default: 1.18, note: "Multiple of the size, 0.8 to 2.4. Defaults to 1.18." },
     backdrop: { type: "string", note: "none, box, or scrim. A box is a plate behind the words; a scrim dims the whole frame so text over busy footage stays readable." },
-    outline: { type: "number", note: "Outline thickness in points of a 1080 frame, 0 to 12. Reads on any background, which a plate does not." },
-    rotation: { type: "number", note: "Degrees, -180 to 180." },
+    outline: { type: "number", default: 0, note: "Outline thickness in points of a 1080 frame, 0 to 12. Reads on any background, which a plate does not." },
+    rotation: { type: "number", default: 0, note: "Degrees, -180 to 180." },
+    opacity: { type: "number", default: 1, note: "0 to 1. Below 1 the words are see-through, for a watermark or a caption you do not want to fight the picture." },
     point: { type: "object", note: "Free placement as fractions of the frame: {x: 0.5, y: 0.5} is the middle. Leave it out to use `position` instead." },
     animation: { type: "string", note: `How it enters and leaves: ${MOTIONS.join(", ")}.` },
   },
@@ -874,10 +875,15 @@ const TextBlock = {
     const blockH = lines.length * lh;
     const at = placement(f);
 
-    if (props.backdrop === "scrim") scrim(ctx, W, H, pal.ink, m.alpha * 0.6);
+    // One alpha for the whole block, the entrance and the setting multiplied
+    // together, so fading in a half-transparent caption stays half
+    // transparent rather than snapping to solid.
+    const alpha = m.alpha * clampNum(props.opacity, 0, 1, 1);
+
+    if (props.backdrop === "scrim") scrim(ctx, W, H, pal.ink, alpha * 0.6);
 
     isolate(ctx, () => {
-      ctx.globalAlpha = m.alpha;
+      ctx.globalAlpha = alpha;
       ctx.translate(at.x + m.dx, at.y + m.dy);
       if (props.rotation) ctx.rotate((clampNum(props.rotation, -180, 180, 0) * Math.PI) / 180);
       if (m.k !== 1) ctx.scale(m.k, m.k);
@@ -939,15 +945,15 @@ const Shape = {
   defaults: { durationInFrames: 75, position: "center", palette_role: "accent" },
   fields: {
     shape: { type: "string", note: "rect, ellipse, pill, triangle, line, arrow, ring or star." },
-    width: { type: "number", note: "As a fraction of the frame width, 0.01 to 1.5." },
-    height: { type: "number", note: "As a fraction of the frame height, 0.01 to 1.5." },
+    width: { type: "number", default: 0.24, note: "As a fraction of the frame width, 0.01 to 1.5." },
+    height: { type: "number", default: 0.24, note: "As a fraction of the frame height, 0.01 to 1.5." },
     point: { type: "object", note: "Centre, as fractions of the frame: {x: 0.5, y: 0.5}. Leave it out to use `position`." },
     fill: { type: "string", note: 'A hex like "#F54E00", a palette role, or "none" for an outline only.' },
     stroke: { type: "string", note: 'Outline colour: a hex, a palette role, or "none".' },
-    stroke_width: { type: "number", note: "Outline thickness in points of a 1080 frame, 0 to 40." },
-    radius: { type: "number", note: "Corner rounding for a rect, in points of a 1080 frame." },
-    rotation: { type: "number", note: "Degrees, -180 to 180." },
-    opacity: { type: "number", note: "0 to 1." },
+    stroke_width: { type: "number", default: 0, note: "Outline thickness in points of a 1080 frame, 0 to 40." },
+    radius: { type: "number", default: 0, note: "Corner rounding for a rect, in points of a 1080 frame." },
+    rotation: { type: "number", default: 0, note: "Degrees, -180 to 180." },
+    opacity: { type: "number", default: 1, note: "0 to 1. Below 1 the shape is see-through, so it can sit over the picture without hiding it." },
     animation: { type: "string", note: `How it enters and leaves: ${MOTIONS.join(", ")}.` },
   },
   draw(ctx, f) {
@@ -1041,7 +1047,7 @@ const Effect = {
   defaults: { durationInFrames: 30, position: "center", palette_role: "plain" },
   fields: {
     effect: { type: "string", note: "dip, flash, vignette, grain, scanlines, glitch, letterbox or wash. `dip` fades to the colour and back out, which is the transition you put over a cut." },
-    strength: { type: "number", note: "0 to 1. Half is usually plenty; grain above 0.4 is a stylistic choice rather than an accident." },
+    strength: { type: "number", default: 0.5, note: "0 to 1. Half is usually plenty; grain above 0.4 is a stylistic choice rather than an accident." },
     animation: { type: "string", note: "fade or none. Effects hold rather than move." },
     tag: { type: "string", max: 60, note: "An internal label. The editor uses it to find the transition it put on a clip; leave it out." },
   },
@@ -1198,7 +1204,8 @@ export const COMPONENT_INFO = Object.fromEntries(
       needs: c.needs,
       uses: c.uses,
       fields: Object.fromEntries(
-        Object.entries(c.fields).map(([k, v]) => [k, { type: v.type, note: v.note, max: v.max }])
+        Object.entries(c.fields).map(([k, v]) =>
+          [k, { type: v.type, note: v.note, max: v.max, default: v.default }])
       ),
       default_duration_frames: c.defaults.durationInFrames,
     },

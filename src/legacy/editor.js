@@ -835,7 +835,7 @@ export const Editor = (() => {
         const el = overlayVideos.get(lane.id);
         if (!el || el.readyState < 2) continue;
         try {
-          const fit = fitVideo(el.videoWidth || w, el.videoHeight || h, w, h);
+          const fit = fitVideo(el.videoWidth || w, el.videoHeight || h, w, h, fitOf(item));
           // The item's own placement, through the same function the spine and
           // the export use, so a nudged overlay is nudged in the file too.
           const t = transformOf(item);
@@ -1396,7 +1396,9 @@ export const Editor = (() => {
                role="button" tabindex="0" aria-pressed="${seg.uid === selected}"
                aria-label="${Desk.esc(clip?.name || "audio")}, ${seg.muted ? "muted" : "sound on"}">
             <span class="tl-item-name">${Desk.esc(clip?.name || "audio")}</span>
-            <span class="tl-item-time mono">${seg.muted ? "muted" : "sound"}</span>
+            <span class="tl-item-time mono">${
+              detachedAudio(seg.uid) ? "unlinked" : seg.muted ? "muted" : "sound"
+            }</span>
           </div>`;
       }).join("");
     }
@@ -1700,6 +1702,18 @@ export const Editor = (() => {
      */
     const NO_TRANSFORM = { x: 0, y: 0, scale: 1, rotation: 0, flipH: false, flipV: false };
 
+    /**
+     * How a clip's picture meets the frame.
+     *
+     * "cover" fills the frame and loses whatever does not fit; "contain" keeps
+     * the whole picture and pads the rest. Reframing 16:9 footage to 9:16 on
+     * cover throws away about 70% of the width, which is right when you have
+     * chosen what to keep and wrong when you have not been asked. This is the
+     * choice, and it is per clip because a talking head and a screen recording
+     * want different answers in the same cut.
+     */
+    const fitOf = (thing) => (thing?.fit === "contain" ? "contain" : "cover");
+
     const transformOf = (seg) => ({ ...NO_TRANSFORM, ...(seg?.transform || {}) });
 
     /** The transform at a moment, with the clip's own keyframes applied. */
@@ -1741,6 +1755,9 @@ export const Editor = (() => {
       const t = at ? transformAt(at.seg) : NO_TRANSFORM;
       video.style.transform = cssTransform(t);
       video.style.transformOrigin = "center";
+      // object-fit in the preview, the same word fitVideo takes at export, so
+      // the two cannot mean different things.
+      video.style.objectFit = at ? fitOf(at.seg) : "cover";
     }
 
     /* ---------------- keyframes ----------------
@@ -1804,10 +1821,15 @@ export const Editor = (() => {
       if (e.button !== 0) return;
       const layer = selectedLayer();
       if (layer && MOVABLE.has(layer.component)) return;   // the graphic wants it
-      const at = segmentAt(playhead);
-      if (!at || !at.seg || at.seg.blank) return;
-      reframing = { seg: at.seg, x: e.clientX, y: e.clientY, rect: frameBox.getBoundingClientRect() };
-      selected = at.seg.uid;
+      // An overlay you have selected takes the drag, because that is the
+      // picture you are looking at on top. Otherwise it is the spine's.
+      const onLane = findItem(selected);
+      const target = onLane && playhead >= onLane.it.at && playhead < itemEnd(onLane.it)
+        ? onLane.it
+        : segmentAt(playhead)?.seg;
+      if (!target || target.blank) return;
+      reframing = { seg: target, x: e.clientX, y: e.clientY, rect: frameBox.getBoundingClientRect() };
+      selected = target.uid;
       frameBox.setPointerCapture?.(e.pointerId);
       frameBox.dataset.dragging = "true";
       e.preventDefault();
@@ -2308,7 +2330,18 @@ export const Editor = (() => {
         }
         if (spec.type === "number") {
           const [lo, hi, step] = RANGES[name] ?? [0, 1, 0.01];
-          const now = Number.isFinite(Number(value)) ? Number(value) : lo;
+          // The component's own default, not the bottom of the range. An
+          // unset opacity used to show a slider parked at 0 while the shape
+          // drew at full strength, so transparency looked broken before it
+          // had been touched.
+          const fallback = Number.isFinite(Number(spec.default)) ? Number(spec.default) : lo;
+          // `value == null` first, because the validator stores an unset
+          // numeric field as null and `Number(null)` is 0, which sails through
+          // Number.isFinite. That is what parked a fresh shape's opacity
+          // slider at 0 while the shape itself drew fully opaque.
+          const now = value == null || value === ""
+            ? fallback
+            : (Number.isFinite(Number(value)) ? Number(value) : fallback);
           return `<label class="field"><span>${name.replace(/_/g, " ")} <b class="mono">${now}</b></span>
             <input type="range" data-lprop="${name}" min="${lo}" max="${hi}" step="${step}" value="${now}"></label>`;
         }
@@ -2399,6 +2432,11 @@ export const Editor = (() => {
       return `
         <p class="insp-kind mono">Transform</p>
         <div class="insp-body insp-body--tight">
+          <p class="insp-hint">Drag the picture to choose what stays in frame.</p>
+          <div class="insp-row">
+            <button class="btn btn-mini" data-item-fit="cover" aria-pressed="${fitOf(it) === "cover"}">Fill frame</button>
+            <button class="btn btn-mini" data-item-fit="contain" aria-pressed="${fitOf(it) === "contain"}">Fit whole clip</button>
+          </div>
           <label class="field"><span>Across <b class="mono">${t.x.toFixed(2)}</b></span>
             <input type="range" data-item-tf="x" min="-1" max="1" step="0.01" value="${t.x}"></label>
           <label class="field"><span>Down <b class="mono">${t.y.toFixed(2)}</b></span>
@@ -2576,6 +2614,11 @@ export const Editor = (() => {
             <input type="range" data-set="gain" min="0" max="1" step="0.02" value="${seg.gain ?? 1}">
           </label>
           <button class="btn btn-ghost btn-wide" data-set="mute" aria-pressed="${seg.muted}">${seg.muted ? "Muted" : "Sound on"}</button>
+          ${detachedAudio(seg.uid)
+            ? `<button class="btn btn-ghost btn-wide" data-link="relink">Relink sound to picture</button>
+               <p class="insp-hint">Its sound is on an audio lane with its own position and trim.</p>`
+            : `<button class="btn btn-ghost btn-wide" data-link="unlink">Unlink sound from picture</button>
+               <p class="insp-hint">Puts this clip's audio on its own lane, so it can run past the cut or be replaced.</p>`}
 
           ${crossToTransitions()}
 
@@ -3156,7 +3199,8 @@ export const Editor = (() => {
               video.videoWidth || first?.width || canvas.width,
               video.videoHeight || first?.height || canvas.height,
               canvas.width,
-              canvas.height
+              canvas.height,
+              fitOf(at.seg)
             );
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             // The clip's own reframe, from the same numbers the preview uses.
@@ -4004,6 +4048,41 @@ export const Editor = (() => {
         return;
       }
 
+      const link = e.target.closest("[data-link]");
+      if (link) {
+        const lseg = timeline.find((x) => x.uid === selected);
+        if (lseg) (link.dataset.link === "unlink" ? unlinkAudio : relinkAudio)(lseg);
+        return;
+      }
+
+      const fitBtn = e.target.closest("[data-fit]");
+      if (fitBtn) {
+        const fseg = timeline.find((x) => x.uid === selected);
+        if (fseg) {
+          fseg.fit = fitBtn.dataset.fit;
+          // Filling the frame from a fit shot keeps whatever pan was chosen;
+          // fitting from a filled one re-centres, because a pan chosen to
+          // rescue a crop is meaningless once nothing is cropped.
+          if (fseg.fit === "contain") fseg.transform = { ...transformOf(fseg), x: 0, y: 0 };
+          renderInspector();
+          paintTransform();
+          paintFrame();
+        }
+        return;
+      }
+
+      const itemFit = e.target.closest("[data-item-fit]");
+      if (itemFit) {
+        const found = findItem(selected);
+        if (found) {
+          found.it.fit = itemFit.dataset.itemFit;
+          if (found.it.fit === "contain") found.it.transform = { ...transformOf(found.it), x: 0, y: 0 };
+          renderInspector();
+          paintFrame();
+        }
+        return;
+      }
+
       const itemFlip = e.target.closest("[data-item-flip]");
       if (itemFlip) {
         const found = findItem(selected);
@@ -4134,6 +4213,16 @@ export const Editor = (() => {
           e.preventDefault();
           addBlank({ seconds: 5 });
           return void rebuildTranscript().then(refresh);
+        case "[": case "]": {
+          // Shuffling a clip one place along, without aiming a drag at a seam.
+          e.preventDefault();
+          const i = timeline.findIndex((x) => x.uid === selected);
+          if (i < 0) return;
+          const to = i + (e.key === "[" ? -1 : 1);
+          if (to < 0 || to >= timeline.length) return;
+          [timeline[i], timeline[to]] = [timeline[to], timeline[i]];
+          return void rebuildTranscript().then(() => { refresh(); seekTo(playhead); });
+        }
         case "Backspace": case "Delete":
           e.preventDefault();
           return deleteSelected(e);
@@ -4426,7 +4515,17 @@ export const Editor = (() => {
         gesture = { type: "move-float", floatId: floatBar.dataset.float, from: timeAtPointer(e) };
       } else if (seg) {
         select(seg.dataset.seg);
-        return;
+        // Pressing a spine clip starts a reorder. It used to select and stop,
+        // so the only way to move a clip was the browser's own drag-and-drop
+        // with no feedback, or two arrow buttons in the inspector.
+        gesture = {
+          type: "reorder",
+          segUid: seg.dataset.seg,
+          from: timeAtPointer(e),
+          startX: e.clientX,
+          moved: false,
+        };
+        seg.classList.add("is-dragging");
       } else {
         gesture = { type: "scrub" };
       }
@@ -4460,6 +4559,15 @@ export const Editor = (() => {
         trimBy(gesture, delta, e);
         renderTrack();
         renderInspector();
+        return;
+      }
+
+      if (gesture.type === "reorder") {
+        // A few pixels of slop, so a click that wobbles stays a click.
+        if (!gesture.moved && Math.abs(e.clientX - gesture.startX) < 4) return;
+        gesture.moved = true;
+        gesture.seam = seamIndexAt(now);
+        markSeam(seamAt(gesture.seam));
         return;
       }
 
@@ -4508,9 +4616,135 @@ export const Editor = (() => {
       const was = gesture;
       gesture = null;
       settleGesture();
+
+      if (was.type === "reorder") {
+        clearDrop();
+        if (was.moved && was.seam != null && moveSegTo(was.segUid, was.seam)) {
+          // Reordering re-times every word after the clip that moved.
+          return void rebuildTranscript().then(() => { refresh(); seekTo(playhead); });
+        }
+        return void refresh();
+      }
+
       if (was.type === "scrub" && wasPlaying) { wasPlaying = false; play(); return; }
       if (was.type === "trim" && was.segUid) rebuildTranscript().then(refresh);
       else refresh();
+    }
+
+    /**
+     * The seams between spine clips, in cut seconds.
+     *
+     * A clip can only land in one of these, so a reorder snaps to them rather
+     * than to wherever the pointer happens to be. Seam `i` means "before clip
+     * i", which is exactly the index a splice wants.
+     */
+    function seams() {
+      const out = [0];
+      let acc = 0;
+      for (const seg of timeline) { acc += segDuration(seg); out.push(acc); }
+      return out;
+    }
+
+    const seamAt = (i) => seams()[Math.max(0, Math.min(i, timeline.length))] ?? 0;
+
+    function seamIndexAt(at) {
+      const all = seams();
+      let best = 0;
+      all.forEach((sm, i) => { if (Math.abs(sm - at) < Math.abs(all[best] - at)) best = i; });
+      return best;
+    }
+
+    /** Put the drop marker on a spine seam. */
+    function markSeam(seconds) {
+      const laneEl = laneBox.querySelector('[data-lane="spine"]');
+      const bodyEl = laneEl?.querySelector(".tl-lane-body");
+      if (!bodyEl) return;
+      if (!dropMark) {
+        dropMark = document.createElement("div");
+        dropMark.className = "tl-drop";
+      }
+      if (dropMark.parentElement !== bodyEl) bodyEl.appendChild(dropMark);
+      dropMark.style.left = `${pctOf(seconds)}%`;
+      laneEl.classList.add("is-drop-target");
+    }
+
+    /**
+     * Move a clip to a seam.
+     *
+     * Taking the clip out first shifts every seam after its old slot down by
+     * one, which is the off-by-one that makes a drag to the right land one
+     * place short. Returns whether anything actually moved.
+     */
+    function moveSegTo(uid, seamIndex) {
+      const from = timeline.findIndex((x) => x.uid === uid);
+      if (from < 0) return false;
+      const [held] = timeline.splice(from, 1);
+      const to = Math.max(0, Math.min(timeline.length, seamIndex > from ? seamIndex - 1 : seamIndex));
+      timeline.splice(to, 0, held);
+      return to !== from;
+    }
+
+    /* ---------------- unlinking sound from picture ----------------
+     *
+     * A1 is drawn from the spine, not stored separately, because a cut is a
+     * cut: trimming the picture trims the sound with it. That is the right
+     * default and the wrong law. Holding a line of dialogue over the next shot,
+     * or dropping the on-camera audio while keeping the picture, both need the
+     * two to come apart.
+     *
+     * Unlinking copies the segment's audio onto a real audio lane as an item of
+     * its own and mutes the segment, so from then on the sound has its own
+     * position, trim and volume. The item remembers where it came from, which
+     * is what lets it be put back.
+     */
+
+    /** The detached audio for a segment, if it has been unlinked. */
+    function detachedAudio(segUid) {
+      for (const lane of lanes) {
+        if (lane.kind !== "audio") continue;
+        const it = lane.items.find((x) => x.fromSeg === segUid);
+        if (it) return { lane, it };
+      }
+      return null;
+    }
+
+    function unlinkAudio(seg) {
+      if (!seg || seg.blank || detachedAudio(seg.uid)) return;
+      const b = boundsOf(seg);
+      const clip = byId.get(seg.clipId);
+      if (!b || !clip) return;
+
+      const lane = lanes.filter((l) => l.kind === "audio").at(-1) || addLane("audio");
+      lane.items.push({
+        uid: `it-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        clipId: seg.clipId,
+        name: `${clip.name} (sound)`,
+        // Where it sits in the cut, and the same window of the source, so the
+        // moment you unlink nothing has changed about what you hear.
+        at: b.start,
+        in: seg.in,
+        out: seg.out,
+        speed: seg.speed || 1,
+        gain: seg.gain ?? 1,
+        fromSeg: seg.uid,
+      });
+      seg.muted = true;
+      Desk.toast("Sound unlinked onto its own lane", "good");
+      refresh();
+      seekTo(playhead);
+    }
+
+    function relinkAudio(seg) {
+      const found = detachedAudio(seg?.uid);
+      if (!found) return;
+      found.lane.items = found.lane.items.filter((x) => x.uid !== found.it.uid);
+      // Take the volume back with it: it is the one thing that may have been
+      // deliberately changed while the two were apart.
+      seg.gain = found.it.gain ?? seg.gain ?? 1;
+      seg.muted = false;
+      Desk.toast("Sound relinked to the picture", "good");
+      refresh();
+      seekTo(playhead);
     }
 
     /** Move one edge of whatever is under the grip. */
@@ -4847,7 +5081,11 @@ export const Editor = (() => {
       return `
         <p class="insp-kind mono">Transform</p>
         <div class="insp-body insp-body--tight">
-          <p class="insp-hint">Drag the picture to move it in the frame. Handy after a reframe, when the shot is no longer centred on what matters.</p>
+          <p class="insp-hint">Drag the picture to choose what stays in frame. On <b>Fill</b> the shot is cropped to the frame; on <b>Fit</b> the whole shot is kept and the edges are padded.</p>
+          <div class="insp-row">
+            <button class="btn btn-mini" data-fit="cover" aria-pressed="${fitOf(seg) === "cover"}">Fill frame</button>
+            <button class="btn btn-mini" data-fit="contain" aria-pressed="${fitOf(seg) === "contain"}">Fit whole clip</button>
+          </div>
           <label class="field"><span>Across <b class="mono">${t.x.toFixed(2)}</b></span>
             <input type="range" data-tf="x" min="-1" max="1" step="0.01" value="${t.x}"></label>
           <label class="field"><span>Down <b class="mono">${t.y.toFixed(2)}</b></span>
