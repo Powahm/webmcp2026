@@ -2686,7 +2686,13 @@ export const Editor = (() => {
       if (audioCtx?.state === "suspended") await audioCtx.resume().catch(() => {});
       dest?.stream.getAudioTracks().forEach((t) => stream.addTrack(t));
 
-      const mime = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm"]
+      // MP4 first: it is what everything downstream of this app -- other
+      // editors, phones, whatever the export is actually for -- expects.
+      // A codec-qualified string ("avc1...") is refused on some builds that
+      // accept the bare type and pick the codec themselves, so it is left
+      // unqualified rather than pinned to one that only sometimes matches.
+      // WebM is still the fallback for a browser with no MP4 encoder.
+      const mime = ["video/mp4", "video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm"]
         .find((t) => MediaRecorder.isTypeSupported?.(t)) || "";
       const recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
       const chunks = [];
@@ -2987,7 +2993,10 @@ export const Editor = (() => {
     function offerDownload(clip) {
       const a = document.createElement("a");
       a.href = Clips.url(clip);
-      a.download = `${clip.name.replace(/\s+/g, "-").toLowerCase()}.webm`;
+      // The extension follows what the recorder actually produced, not a
+      // fixed guess -- an .mp4 that is secretly WebM opens nowhere useful.
+      const ext = clip.blob.type.includes("mp4") ? "mp4" : "webm";
+      a.download = `${clip.name.replace(/\s+/g, "-").toLowerCase()}.${ext}`;
       document.body.appendChild(a);
       a.click();
       a.remove();
