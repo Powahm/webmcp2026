@@ -17,7 +17,6 @@ import { Camera } from "./camera.js";
    The timeline, the trims and the six looks below are untouched by all of it —
    the composition sits on top of the cut and never owns the footage. */
 import { createMixer, createScheduler, speechRanges } from "../comp/audio.js";
-import { generate } from "../comp/codegen.js";
 import { COMPONENT_INFO, SFX_PRESETS, validateLayer } from "../comp/composition.js";
 import { formatOf, keyedAt, toSeconds } from "../comp/engine.js";
 import { isolate, PALETTE_ROLES as COMP_ROLES, palette, POSITIONS as COMP_POSITIONS } from "../comp/paint.js";
@@ -227,6 +226,7 @@ export const Editor = (() => {
           <button class="cmp-tab" role="tab" data-lib="clips" aria-selected="true" tabindex="0">Library</button>
           <button class="cmp-tab" role="tab" data-lib="text" aria-selected="false" tabindex="-1">Text</button>
           <button class="cmp-tab" role="tab" data-lib="trans" aria-selected="false" tabindex="-1">Transitions</button>
+          <button class="cmp-tab" role="tab" data-lib="words" aria-selected="false" tabindex="-1">Transcript</button>
         </div>
         <div class="lib-pane" data-libpane="clips">
           <div class="ed-lib-bar">
@@ -237,6 +237,7 @@ export const Editor = (() => {
         </div>
         <div class="lib-pane" data-libpane="text" hidden></div>
         <div class="lib-pane" data-libpane="trans" hidden></div>
+        <div class="lib-pane" data-libpane="words" hidden></div>
         <div class="lib-pane" data-libpane="motion" hidden></div>
       </aside>
 
@@ -303,21 +304,17 @@ export const Editor = (() => {
           <!-- The page you are on. Editing the cut and building a motion
                graphics clip are two different jobs with two different sets of
                panels, so they are two pages rather than one crowded one. -->
+          <!-- Only visible while scoped into a motion graphics clip's own
+               timeline: the way back out, kept beside the page it returns
+               you to rather than in a crumb bar of its own further down. -->
+          <button class="btn btn-mini ed-back" data-act="scope-out" hidden>← Timeline</button>
           <div class="ed-pages" role="group" aria-label="Page">
             <button class="btn btn-mini ed-page" data-page-to="edit" aria-pressed="true">Edit</button>
             <button class="btn btn-mini ed-page" data-page-to="motion" aria-pressed="false" hidden>Motion</button>
           </div>
-          <div class="cmp-tabs" role="tablist" aria-label="Timeline views">
-            <button class="cmp-tab" role="tab" id="tab-track" aria-controls="pane-track"
-                    data-tab="track" aria-selected="true" tabindex="0">Timeline</button>
-            <button class="cmp-tab" role="tab" id="tab-words" aria-controls="pane-words"
-                    data-tab="words" aria-selected="false" tabindex="-1">Transcript</button>
-            <button class="cmp-tab" role="tab" id="tab-code" aria-controls="pane-code"
-                    data-tab="code" aria-selected="false" tabindex="-1">Code</button>
-          </div>
           <button class="btn btn-mini" data-act="clear">Clear</button>
         </div>
-        <div class="cmp-pane" id="pane-track" role="tabpanel" aria-labelledby="tab-track" data-pane="track" tabindex="0">
+        <div class="cmp-pane" id="pane-track" data-pane="track" tabindex="0">
           <div class="tl-tools">
             <button class="btn btn-mini" data-act="split" title="Split the clip under the playhead (S)">Split</button>
             <button class="btn btn-mini" data-act="add-text" title="Add a text clip at the playhead (T)">Text</button>
@@ -358,8 +355,6 @@ export const Editor = (() => {
           </div>
           <div class="cut-strip"></div>
         </div>
-        <div class="cmp-pane" id="pane-words" role="tabpanel" aria-labelledby="tab-words" data-pane="words" tabindex="0" hidden></div>
-        <div class="cmp-pane" id="pane-code" role="tabpanel" aria-labelledby="tab-code" data-pane="code" tabindex="0" hidden></div>
       </div>
 
       <div class="ed-export" hidden>
@@ -383,6 +378,7 @@ export const Editor = (() => {
     const libTabs = body.querySelector(".lib-tabs");
     const libPane = (name) => body.querySelector(`[data-libpane="${name}"]`);
     let libTab = "clips";
+    const LIB_TAB_ORDER = ["clips", "text", "trans", "words"];
     const tl = body.querySelector(".tl");
     const tlScroll = body.querySelector(".tl-scroll");
     const ruler = body.querySelector(".tl-ruler");
@@ -400,17 +396,11 @@ export const Editor = (() => {
     const audioInput = body.querySelector('[data-act="audio-file"]');
     const exportPane = body.querySelector(".ed-export");
     const cutStrip = body.querySelector(".cut-strip");
-    const panes = {
-      track: body.querySelector('[data-pane="track"]'),
-      words: body.querySelector('[data-pane="words"]'),
-      code: body.querySelector('[data-pane="code"]'),
-    };
 
     let playing = false;
     let playhead = 0;
     let loaded = null;
     let raf = 0;
-    let tab = "track";
 
     /* The cut-level transcript, rebuilt whenever the timeline changes.
        It has to be: every trim and reorder moves every word after it, and a
@@ -668,8 +658,8 @@ export const Editor = (() => {
      *
      * A motion graphics clip is a span of the cut with elements inside it, and
      * that is the whole model. The composition still holds one flat list of
-     * layers positioned in cut frames, so the file the Code tab generates, the
-     * export and every tool the agent calls keep working exactly as they did.
+     * layers positioned in cut frames, so the export and every tool the agent
+     * calls keep working exactly as they did.
      * What changed is how the timeline groups them. Twenty bars fighting over
      * one lane became one clip you open, which is the same move a precomp
      * makes in any compositor and for the same reason: a lane can only show
@@ -855,12 +845,14 @@ export const Editor = (() => {
     function syncPageTabs() {
       const toEdit = body.querySelector('[data-page-to="edit"]');
       const toMotion = body.querySelector('[data-page-to="motion"]');
+      const back = body.querySelector(".ed-back");
       if (!toEdit || !toMotion) return;
       const here = scopeClip();
       toMotion.hidden = motionClips().length === 0;
       toMotion.textContent = here ? (here.title || "Motion").slice(0, 22) : "Motion";
       toEdit.setAttribute("aria-pressed", String(!here));
       toMotion.setAttribute("aria-pressed", String(Boolean(here)));
+      if (back) back.hidden = !here;
       body.dataset.page = here ? "motion" : "edit";
     }
 
@@ -1172,12 +1164,6 @@ export const Editor = (() => {
       const els = layersIn(c);
       const sounds = soundsIn(c);
       const rows = [];
-
-      rows.push(`<div class="tl-crumb">
-        <button class="btn btn-mini" data-act="scope-out">← Timeline</button>
-        <b>${Desk.esc(c.title)}</b>
-        <span class="tl-crumb-meta mono">${timecode(Math.max(0, c.end - c.start))} · ${els.length} element${els.length === 1 ? "" : "s"}</span>
-      </div>`);
 
       if (!els.length && !sounds.length) {
         rows.push(`<div class="tl-lane"><div class="tl-lane-body">
@@ -2375,30 +2361,31 @@ export const Editor = (() => {
     let nowEl = null;
     let wordEls = null;
     function highlightWord() {
-      if (tab !== "words" || !transcript?.words?.length) return;
+      if (libTab !== "words" || !transcript?.words?.length) return;
       const i = transcript.words.findIndex((w) => playhead >= w.start && playhead < w.end);
       if (i === nowWord) return;
       nowWord = i;
       // Two class writes, not one per word. A five-minute take is a thousand
       // buttons and this runs every time the spoken word advances.
-      if (!wordEls) wordEls = [...panes.words.querySelectorAll(".trx-word")];
+      if (!wordEls) wordEls = [...libPane("words").querySelectorAll(".trx-word")];
       nowEl?.classList.remove("now");
       nowEl = wordEls[i] ?? null;
       nowEl?.classList.add("now");
     }
 
     function renderWords() {
-      if (tab !== "words") return;
+      if (libTab !== "words") return;
+      const pane = libPane("words");
       // Anything half-typed into the key field survives a re-render. The pane
       // rebuilds on every transcript change and losing the key mid-paste is
       // the kind of thing that makes a feature feel broken.
-      const typed = panes.words.querySelector('[data-act="key"]')?.value ?? "";
+      const typed = pane.querySelector('[data-act="key"]')?.value ?? "";
       nowWord = -1;
       nowEl = null;
       wordEls = null;
 
       if (!transcript?.words?.length) {
-        panes.words.innerHTML = `
+        pane.innerHTML = `
           <div class="trx">
             <p class="cmp-empty">${
               !timeline.length
@@ -2420,7 +2407,7 @@ export const Editor = (() => {
           (gap >= 1.1 ? `<span class="trx-gap">⟨${gap.toFixed(1)}s⟩</span>` : "");
       }).join(" ");
 
-      panes.words.innerHTML = `
+      pane.innerHTML = `
         <div class="trx">
           <div class="trx-meta">
             <span class="trx-tag${transcript.approximate ? " approx" : ""}">${
@@ -2434,7 +2421,7 @@ export const Editor = (() => {
           ${whisperHtml()}
         </div>`;
       if (typed) {
-        const field = panes.words.querySelector('[data-act="key"]');
+        const field = pane.querySelector('[data-act="key"]');
         if (field) field.value = typed;
       }
     }
@@ -2456,36 +2443,14 @@ export const Editor = (() => {
         <p class="trx-note">Kept in this browser's localStorage and sent only to api.openai.com. The teleprompter transcript needs no key and works offline.</p>`;
     }
 
-    /** The composition, printed as the TSX it compiles to. */
-    function renderCode() {
-      if (tab !== "code") return;
-      const code = generate(composition(), { cutSeconds: total() });
-      panes.code.innerHTML = `
-        <div class="tsx-view">
-          <div class="tsx-bar">
-            <span>Cut.tsx · generated from the composition · ${composition().fps}fps</span>
-            <button class="btn btn-mini" data-act="copy-code">Copy</button>
-          </div>
-          <pre class="tsx-code"><code>${Desk.esc(code)}</code></pre>
-        </div>`;
-    }
-
-    const TAB_ORDER = ["track", "words", "code"];
-
-    function showTab(next, { focus = false } = {}) {
-      tab = next;
-      for (const [name, pane] of Object.entries(panes)) pane.hidden = name !== next;
-      // Roving tabindex: one stop in the tab order for the whole strip, and
-      // the arrow keys move between the tabs. A tablist that does not do this
-      // announces itself as one and then behaves like three buttons.
-      body.querySelectorAll(".cmp-tab").forEach((t) => {
-        const on = t.dataset.tab === next;
-        t.setAttribute("aria-selected", String(on));
-        t.setAttribute("tabindex", on ? "0" : "-1");
-        if (on && focus) t.focus();
-      });
-      renderWords();
-      renderCode();
+    /** Switch the left rail to one of its own tabs (Library, Text,
+     *  Transitions, Transcript) — the counterpart to clicking a `[data-lib]`
+     *  button, shared with the arrow-key cycling below. */
+    function selectLibTab(name, { focus = false } = {}) {
+      libTab = name;
+      renderLib();
+      if (name === "words") renderWords();
+      if (focus) libTabs.querySelector(`[data-lib="${name}"]`)?.focus({ preventScroll: true });
     }
 
     refresh = () => {
@@ -2494,7 +2459,6 @@ export const Editor = (() => {
       renderInspector();
       renderClock();
       renderCuts();
-      renderCode();
       // Not renderWords. The words pane is owned by rebuildTranscript's
       // callers and the onTranscripts subscription, because it is the
       // expensive one and the only one holding a text field.
@@ -2897,8 +2861,8 @@ export const Editor = (() => {
         const clip = byId.get(bedTrack.clipId) ?? (await Clips.all()).find((c) => c.id === bedTrack.clipId);
         if (!clip) continue;
 
-        // A bed has a window, and it is the window the inspector shows and the
-        // Code tab prints. Honour it: start when the playhead reaches it, stop
+        // A bed has a window, and it is the window the inspector shows.
+        // Honour it: start when the playhead reaches it, stop
         // when it ends, and enter partway through if the playhead is already
         // inside.
         const from = bedTrack.from / fps;
@@ -3051,7 +3015,7 @@ export const Editor = (() => {
       }
 
       const libTo = t.closest("[data-lib]")?.dataset.lib;
-      if (libTo) { libTab = libTo; return void renderLib(); }
+      if (libTo) return void selectLibTab(libTo);
 
       const addText = t.closest("[data-add-text]");
       if (addText) return void addElement(TEXT_KINDS[Number(addText.dataset.addText)], e);
@@ -3099,9 +3063,6 @@ export const Editor = (() => {
       }
 
       /* ---- the composition ---- */
-
-      const tabBtn = t.closest("[data-tab]");
-      if (tabBtn) return showTab(tabBtn.dataset.tab);
 
       const fmt = t.closest("[data-format]");
       if (fmt) return void setFormat(fmt.dataset.format, e);
@@ -3190,12 +3151,6 @@ export const Editor = (() => {
         return refresh();
       }
       if (act === "transcribe") return runTranscribe();
-      if (act === "copy-code") {
-        navigator.clipboard?.writeText(generate(composition(), { cutSeconds: total() }))
-          .then(() => Desk.toast("Composition copied as TSX.", "good"))
-          .catch(() => Desk.toast("Could not reach the clipboard.", "bad"));
-        return;
-      }
 
       const zoomBtn = t.closest("[data-zoom]");
       if (zoomBtn) {
@@ -3641,19 +3596,19 @@ export const Editor = (() => {
     document.addEventListener("keydown", onShortcut);
 
     body.addEventListener("keydown", (e) => {
-      // Scoped to this tablist. Both strips are built from `.cmp-tab`, so an
-      // unscoped match had the arrow keys on the inspector's tabs quietly
-      // switching the pane under the timeline instead.
+      // Scoped to this tablist. The inspector's tabs are built from the same
+      // `.cmp-tab` class, so an unscoped match had the arrow keys there
+      // quietly switching the left rail instead.
       const onTab = e.target.closest?.(".cmp-tabs:not(.insp-tabs) .cmp-tab");
       if (!onTab) return;
       const step = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
       if (step) {
         e.preventDefault();
-        const i = TAB_ORDER.indexOf(tab);
-        showTab(TAB_ORDER[(i + step + TAB_ORDER.length) % TAB_ORDER.length], { focus: true });
+        const i = LIB_TAB_ORDER.indexOf(libTab);
+        selectLibTab(LIB_TAB_ORDER[(i + step + LIB_TAB_ORDER.length) % LIB_TAB_ORDER.length], { focus: true });
       } else if (e.key === "Home" || e.key === "End") {
         e.preventDefault();
-        showTab(e.key === "Home" ? TAB_ORDER[0] : TAB_ORDER[TAB_ORDER.length - 1], { focus: true });
+        selectLibTab(e.key === "Home" ? LIB_TAB_ORDER[0] : LIB_TAB_ORDER[LIB_TAB_ORDER.length - 1], { focus: true });
       }
     });
 
@@ -4461,7 +4416,7 @@ export const Editor = (() => {
       const onMotion = Boolean(scopeClip());
       // The motion page has its own palette and no use for the footage list.
       const want = onMotion ? "motion" : libTab;
-      for (const name of ["clips", "text", "trans", "motion"]) {
+      for (const name of ["clips", "text", "trans", "words", "motion"]) {
         const el = libPane(name);
         if (el) el.hidden = name !== want;
       }
@@ -4734,7 +4689,6 @@ export const Editor = (() => {
         // has to reach the track too, not just the list.
         renderTrack();
         paintFrame();
-        renderCode();
       });
     });
     /**
