@@ -36,7 +36,7 @@ backend to receive anything.
 | **Scripts** | What you are going to say, one line per spoken beat with its shot direction. Two views of one document: a **Draft** you write in, and a **Shot list** for the pass before you shoot. A **Research** pane for links and notes you gathered while browsing. A teleprompter. |
 | **Skills** | Craft notes on cutting and pacing, plus **AI Skills**: markdown you drop in that the agent can load and follow. |
 | **Camera** | Camera or screen capture with your mic mixed in. The teleprompter runs over the preview and records which line you were on at which second. |
-| **Editor** | Lanes of clips, graphics and sound in one timebase. Trim, split, reorder by dragging, six looks, speed, per-clip volume, transform with keyframes, three frame shapes, and an export that replays the cut into a canvas. The bottom pane switches between **Timeline**, **Transcript** and **Code**. |
+| **Editor** | Lanes of clips, graphics and sound in one timebase. Trim, split, reorder by dragging, six looks, speed, per-clip volume, transform with keyframes, three frame shapes, undo over the cut, and an export that replays it into a canvas. The left rail holds the library, text, transitions and the transcript; the right rail holds the clip, the motion and the composition. |
 
 ## Twenty-eight site tools
 
@@ -252,9 +252,10 @@ readable on a picture that was never designed to have text on it.
 - **Drag** a window by its title bar, **resize** from the bottom-right, **double-click** to maximise.
 - **⌘K / Ctrl+K** searches documents, scripts and clips.
 - **Escape** closes the top window. **⌘Enter** runs a script, **⌘S** saves it.
-- In the Editor, the bottom pane switches between **Timeline**, **Transcript** and **Code**.
-  Clicking a word seeks to it; clicking a staged layer takes the playhead into it, past its
-  entrance, so what you judge is the graphic and not its first three frames.
+- In the Editor, **Transcript** is in the left rail. Clicking a word seeks to it; clicking a
+  staged layer takes the playhead into it, past its entrance, so what you judge is the graphic
+  and not its first three frames.
+- **Ctrl+Z / Ctrl+Shift+Z** undo and redo anything that changes the cut.
 - **Drag a clip along V1** to reorder it: it snaps to a seam and a marker shows which one.
   `[` and `]` do the same from the keyboard. **Drag the picture** to choose what a reframe
   keeps. **Backspace** removes whatever is selected, a suggestion included.
@@ -334,7 +335,7 @@ The composition engine, which owns everything layered over the cut:
 | `src/comp/store.js` | Staging and the trusted-gesture guard |
 | `src/comp/render.js` | Draws one frame. Called by the preview *and* the export |
 | `src/comp/audio.js` | Synthesised effects, and a bed that ducks itself under speech |
-| `src/comp/codegen.js` | Prints the composition as TSX |
+| `src/comp/codegen.js` | Prints the composition as TSX, for `get_composition_code` |
 | `src/transcript/transcript.js` | Word timing from prompter marks; search, fillers, dead air |
 | `src/transcript/store.js` | Caching, persistence onto the clip, the API key |
 | `src/transcript/whisper.js` | The optional measured-timing upgrade |

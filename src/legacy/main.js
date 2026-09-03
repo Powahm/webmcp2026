@@ -97,19 +97,21 @@ export const Readme = (() => {
 
         { t: "h", v: "The five regions" },
         { t: "ul", v: [
-          "**Left rail**: four tabs. **Library** is your footage and sound; **Text** adds words; **Transitions** holds how a clip arrives and leaves, and where it sits in the frame; **Words** is the transcript.",
+          "**Left rail**: four tabs. **Library** is your footage and sound; **Text** adds words; **Transitions** holds how a clip arrives and leaves, and where it sits in the frame; **Transcript** is what was said.",
           "**Viewer**, centre: plays the whole cut as one piece. The frame shape is the composition's, not the footage's, so a reframe is something you look at rather than discover at export.",
-          "**Right rail**: **Clip** for whatever is selected, **VFX** for graphics waiting on a decision, **Comp** for the composition as a whole.",
-          "**Timeline**, bottom: **Timeline**, **Transcript** and **Code** are three views of the same cut.",
+          "**Right rail**: **Clip** for whatever is selected, **Motion** for the graphics on the cut and anything waiting on a decision, **Comp** for the composition as a whole.",
+          "**Timeline**, bottom: the lanes, with **Split**, **Text**, **Motion graphics**, **Overlay** and the two lane buttons above them, and **Undo** and **Redo** beside the page switch.",
           "Every divider between them can be dragged, and the timeline has its own zoom."
         ] },
 
         { t: "h", v: "Lanes" },
+        { t: "p", v: "Video tracks count up from **V1** and audio tracks from **A1**, and graphics are numbered along with the video rather than given a letter of their own: to the frame a title card is one more thing drawn on top, and a second alphabet would be one more thing to learn." },
         { t: "ul", v: [
           "**V1** is the spine: clips end to end, and its length is the length of the cut.",
           "**A1** is the spine's own sound, drawn from the same segments rather than kept as a second list of them, because trimming the picture trims the sound with it.",
-          "**VFX** holds graphics; **SFX** holds effects.",
-          "**+ Video** and **+ Audio** add overlay lanes. Anything on one floats: it has its own position, trim, volume and placement in the frame."
+          "Graphics sit on the next video number above your overlays; sound effects on the next audio number below A1.",
+          "**+ Video** and **+ Audio** add more. Anything on one floats: it has its own position, trim, volume and placement in the frame.",
+          "A lane only appears once it has something in it, so an empty cut is not a wall of empty rows."
         ] },
 
         { t: "h", v: "Moving and cutting" },
@@ -141,17 +143,24 @@ export const Readme = (() => {
         { t: "h", v: "Looks, transitions and transform" },
         { t: "ul", v: [
           "Six grades: none, mono, warm, cool, punch, faded. They are CSS filter strings in the preview and the identical string on the canvas at export.",
-          "A transition is a real layer on the VFX lane, so you can drag it, retime it or delete it there rather than hunting for the menu that made it.",
+          "A transition is a real layer on the motion track, so you can drag it, retime it or delete it there rather than hunting for the menu that made it.",
           "Across, down, scale, rotate and flip live in **Transitions**. Put a key down, move the playhead, drag it again, and the two keys are an animation."
         ] },
 
-        { t: "h", v: "Transcript and Code" },
-        { t: "p", v: "The **Transcript** tab is the words, timed. Click one to move the playhead to it. Fillers are struck through and gaps are called out, and **Find fillers and gaps** stages a cut over each one for you to take or leave. The **Code** tab prints the composition as the TSX it compiles to, one `Sequence` per graphic, so the exact frame a thing starts on is readable rather than implied." },
+        { t: "h", v: "Two pages" },
+        { t: "p", v: "**Edit** is the cut. **Motion** appears when you open a motion graphics clip, and then the timeline becomes that clip: its own length, one element to a row, trimmed and moved in its own local time. Come back out and the cut is where you left it." },
+
+        { t: "h", v: "Undo" },
+        { t: "p", v: "**Ctrl+Z** and **Ctrl+Shift+Z**, or the two buttons, over everything that changes the cut: adding, trimming, moving, reordering, splitting, deleting, and accepting a cut. A snapshot carries the composition with it, because a timeline edit takes composition state with it. Accepting a suggestion is not an undo step; **Reject** is the button for that." },
+
+        { t: "h", v: "The transcript" },
+        { t: "p", v: "**Transcript** in the left rail is the words, timed. Click one to move the playhead to it. Fillers are struck through and gaps are called out, and **Find fillers and gaps** stages a cut over each one for you to take or leave." },
+        { t: "note", v: "The composition can also be read as code, one `Sequence` per graphic with the exact frame it starts on. There is no panel for it: it is a tool an agent calls, `get_composition_code`, so what it sees and what you see are the same composition described two ways." },
 
         { t: "h", v: "Keyboard" },
         { t: "ul", v: [
           "**Space** plays and pauses. **J K L** and the arrows move the playhead; hold Shift for a whole second.",
-          "**Home** and **End** jump to either end. **S** splits, **T** adds text, **B** adds a blank.",
+          "**Home** and **End** jump to either end. **S** splits, **T** adds text, **B** adds a motion graphics clip.",
           "**[** and **]** move the selected clip. **Backspace** deletes it."
         ] },
 
@@ -295,7 +304,7 @@ export const Readme = (() => {
 
         { t: "h", v: "The Editor from the keyboard" },
         { t: "ul", v: [
-          "**Space**, **J K L** and the arrows drive the playhead; **S** splits, **T** adds text, **B** adds a blank.",
+          "**Space**, **J K L** and the arrows drive the playhead; **S** splits, **T** adds text, **B** adds a motion graphics clip.",
           "**[** and **]** move the selected clip along the spine, so reordering no longer needs a pointer.",
           "**Backspace** removes whatever is selected, a suggestion included.",
           "The three panel dividers are focusable separators: reach one with Tab and the arrow keys resize it."
