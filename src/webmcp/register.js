@@ -11,7 +11,7 @@
  *   2. `inputSchema` is JSON Schema. Not TypeScript types, not a parameter
  *      list.
  *   3. **Tools registered inside an iframe are never discovered**, same-origin
- *      ones included. Desk Two is a windowed desktop, which is exactly the kind
+ *      ones included. Deskmate is a windowed desktop, which is exactly the kind
  *      of app someone builds out of iframes. Its windows are plain divs, and
  *      they must stay that way.
  *
@@ -50,7 +50,7 @@ export async function registerTools(tools = TOOLS) {
   if (!host) {
     setHost("none", [], []);
     console.info(
-      "[desk-two] No WebMCP host on this page, running as an ordinary web app. " +
+      "[deskmate] No WebMCP host on this page, running as an ordinary web app. " +
         "Open it in ChatGPT's browser, or in Chrome 149+ with " +
         "chrome://flags/#enable-webmcp-testing, to see the site tools."
     );
@@ -68,12 +68,12 @@ export async function registerTools(tools = TOOLS) {
     } catch (err) {
       // One bad schema must not take the rest of the surface down with it.
       webmcp.failed.push({ name: tool.name, error: String(err) });
-      console.error(`[desk-two] ${tool.name} was refused by the host`, err);
+      console.error(`[deskmate] ${tool.name} was refused by the host`, err);
     }
   }
 
   console.info(
-    `[desk-two] ${webmcp.registered.length} site tool(s) registered on ${host.where}` +
+    `[deskmate] ${webmcp.registered.length} site tool(s) registered on ${host.where}` +
       (webmcp.failed.length ? `, ${webmcp.failed.length} refused` : "")
   );
 

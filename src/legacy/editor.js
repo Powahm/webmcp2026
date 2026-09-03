@@ -2254,7 +2254,7 @@ export const Editor = (() => {
 
       if (!result.ok) {
         Desk.toast(result.error, "bad");
-        if (result.hint) console.info(`[desk-two] ${result.hint}`);
+        if (result.hint) console.info(`[deskmate] ${result.hint}`);
       } else {
         Desk.toast(`Transcribed ${result.transcript.words.length} words.`, "good");
       }

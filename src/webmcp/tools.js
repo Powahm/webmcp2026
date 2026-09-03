@@ -16,7 +16,7 @@ import { fail, json, NO_INPUT, READ_ONLY } from "./result.js";
  * The site tools.
  *
  * One rule decides what belongs here: a tool exists when it reads or changes
- * something only this page knows. Desk Two already had a scripting API for
+ * something only this page knows. Deskmate already had a scripting API for
  * people, in legacy/scripts-app.js, and most of what follows is that same API
  * described in JSON Schema and handed to an agent instead of to a text editor.
  * That is exactly what the site-tools guidance asks for, reuse your existing

@@ -1,4 +1,4 @@
-# Desk Two — overview
+# Deskmate — overview
 
 The single source of truth for what this is, what exists, and what is left.
 Submission for **The WebMCP Challenge**, deadline **3 September 2026, 1pm PDT / 10pm Berlin**.
