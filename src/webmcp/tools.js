@@ -8,7 +8,7 @@ import { Camera } from "../legacy/camera.js";
 import { Editor } from "../legacy/editor.js";
 import { Scripts } from "../legacy/scripts-app.js";
 import { Desk } from "../legacy/shell.js";
-import { Clips, Store, timecode } from "../legacy/store.js";
+import { Clips, Folders, Store, timecode } from "../legacy/store.js";
 import { COMP_TOOLS } from "./comp-tools.js";
 import { fail, json, NO_INPUT, READ_ONLY } from "./result.js";
 
@@ -259,14 +259,14 @@ export const getRecorderState = {
 export const listClips = {
   name: "list_clips",
   description:
-    "Return the clip library: everything recorded or imported on this desktop, oldest first. Clips are held in this browser and have never been uploaded anywhere, so this is the only place they can be listed.",
+    "Return the clip library: everything recorded or imported on this desktop, oldest first, including sound files, which have kind \"audio\". Each clip says which of the person's own library folders it is in, if any. Clips are held in this browser and have never been uploaded anywhere, so this is the only place they can be listed.",
   inputSchema: {
     type: "object",
     properties: {
       kind: {
         type: "string",
-        enum: ["recording", "import", "export", "screen"],
-        description: "Optional. Restrict to one kind of clip.",
+        enum: ["recording", "import", "export", "screen", "audio"],
+        description: "Optional. Restrict to one kind of clip. Sound files are \"audio\".",
       },
     },
     additionalProperties: false,
@@ -274,7 +274,11 @@ export const listClips = {
   annotations: READ_ONLY,
   execute: async (args) => {
     const kind = args.kind ? String(args.kind) : null;
-    const clips = await Clips.all();
+    const [clips, folders] = await Promise.all([Clips.all(), Folders.all()]);
+    // The folder's name rather than its id. The id means nothing to an agent
+    // and cannot be used for anything: there is no tool that files a clip,
+    // because filing is the person's own housekeeping.
+    const named = new Map(folders.map((f) => [f.id, f.name]));
     return json({
       clips: clips
         .filter((c) => !kind || c.kind === kind)
@@ -282,6 +286,7 @@ export const listClips = {
           id: c.id,
           name: c.name,
           kind: c.kind,
+          folder: named.get(c.folder) || null,
           duration_seconds: round(c.duration),
           duration: timecode(c.duration),
           width: c.width,
