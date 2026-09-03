@@ -16,6 +16,24 @@ import { startTour } from "./tour.js";
  */
 
 const win = (id, sel = "") => `[data-win="${id}"]${sel ? ` ${sel}` : ""}`;
+/**
+ * Something in the script window that is in front, and on screen.
+ *
+ * Two scripts can be open at once, so the window has to be the focused one, and
+ * a script window shows either the draft or the shot list with the other one
+ * hidden. A hidden element still answers a selector and still has a rectangle,
+ * it is just an empty one, which lights a hole the size of nothing. Take the
+ * first candidate that is actually drawn.
+ */
+const script = (sel) => () => {
+  const window_ = document.querySelector('.win[data-win^="script:"][data-focused="true"]');
+  if (!window_) return null;
+  for (const node of window_.querySelectorAll(sel)) {
+    const r = node.getBoundingClientRect();
+    if (r.width > 4 && r.height > 4) return node;
+  }
+  return null;
+};
 const open = (id) => () => Desk.launch(id);
 
 /** The editor, seen from the tour: opened, and out of any motion graphics clip. */
@@ -117,40 +135,43 @@ const TOURS = {
     start: open("scripts"),
     steps: [
       {
-        title: "Scripts",
-        text: "What you are going to say, before you say it. Open one to write it, or make a new one here.",
+        title: "What you are going to say",
+        text: "One file per video, written before you point a camera at yourself. Open one and it gets a window of its own, with its own tour in the title bar.",
         target: win("scripts", ".filegrid"),
       },
       {
-        title: "Inside a script",
-        text: "Each line has the spoken words and a shot direction. The direction is for you while filming and never appears in the teleprompter.",
-        target: win("scripts"),
-      },
-      {
-        title: "The teleprompter",
-        text: "It scrolls the script across roughly its estimated runtime, brightening the line you should be on. Minus and plus change the speed while it runs.",
-        target: win("scripts"),
+        title: "A new one",
+        text: "Starts empty, with a line waiting. Every line you write is costed at about 150 words a minute, so the script tells you how long the video is before you shoot it.",
+        target: win("scripts", "[data-new]"),
       },
     ],
   },
 
+  /* Scoped to the focused script window rather than to any of them: two
+     scripts can be open at once, and a highlight on the one behind is worse
+     than no highlight at all. */
   script: {
     name: "Writing a script",
     steps: [
       {
         title: "Draft and shot list",
-        text: "The same script, two ways. Draft is one document you can type into, Shot list breaks it into lines with a direction and a runtime each.",
-        target: ".scr-views",
+        text: "The same script, two ways. Draft is one document you type into, Shot list breaks it into lines with a shot direction and a runtime each.",
+        target: script(".scr-views"),
+      },
+      {
+        title: "The words and the shot",
+        text: "The spoken line, and underneath it what the camera is doing while you say it. The direction is for you during the shoot and never reaches the teleprompter.",
+        target: script(".scr-lines, .scr-text"),
       },
       {
         title: "Research",
-        text: "Notes and links you are working from. An agent reading this page can see them, and a skill exists for turning one into a script you can say out loud.",
-        target: ".scr-research",
+        text: "Notes and links you are working from. An agent reading this page can see them, and one of the AI Skills is about turning a link in here into something you can say out loud.",
+        target: script(".scr-research"),
       },
       {
-        title: "Runtime",
-        text: "Every line is costed at about 150 words a minute and totalled here. Treat it as an upper bound if you read fast.",
-        target: ".scr-foot",
+        title: "Runtime, and the teleprompter",
+        text: "The total sits along the bottom. Teleprompter scrolls the script over that runtime with the current line lit, and minus and plus change the speed while it runs.",
+        target: script(".scr-foot"),
       },
     ],
   },
@@ -183,8 +204,8 @@ const TOURS = {
       },
       {
         title: "When a skill fires",
-        text: "Triggers are either something the page can tell about itself, like an empty timeline, or a word to watch for in what you have written. A card says whether it is waiting, whether it fits what you are doing now, or whether the agent has already taken it.",
-        target: win("aiskills", ".ais-list"),
+        text: "Triggers are either something the page can tell about itself, like an empty timeline, or a word to watch for in what you have written. The line along the bottom of a card says whether it is waiting, whether it fits what you are doing now, or whether the agent has already taken it.",
+        target: win("aiskills", ".ais-card-foot"),
       },
     ],
   },
