@@ -1015,3 +1015,7 @@
 /* The graphics canvas only takes the pointer when there is a handle to grab;
    otherwise it would swallow every click meant for the picture behind it. */
 .ed-frame .ed-gfx { pointer-events: none; }
+
+.insp-hint { margin: 0 0 8px; font-size: 11px; line-height: 1.45; color: var(--text-muted); }
+.insp-colour { display: flex; align-items: center; gap: 6px; }
+.insp-colour input[type="color"] { flex: 1 1 auto; min-width: 0; }

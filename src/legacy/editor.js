@@ -952,41 +952,100 @@ export const Editor = (() => {
      * in through propose_layer. Which means a person and an agent are editing
      * the same object, and neither has a field the other cannot see.
      */
-    function textPanelHtml(layer) {
+    /* Fields whose values are a fixed list, so they get a menu rather than a
+       box you can type a typo into. */
+    const CHOICES = {
+      font: ["display", "displayHeavy", "body", "bodyBold", "mono"],
+      align: ["left", "center", "right"],
+      backdrop: ["none", "box", "scrim"],
+      animation: ["fade", "rise", "drop", "slide_left", "slide_right", "pop", "grow", "none"],
+      shape: ["rect", "ellipse", "pill", "triangle", "line", "arrow", "ring", "star"],
+      effect: ["dip", "flash", "vignette", "grain", "scanlines", "glitch", "letterbox", "wash"],
+    };
+
+    /* Sensible ranges for the numeric fields, so a slider is usable. */
+    const RANGES = {
+      size: [12, 220, 1], tracking: [-0.05, 0.4, 0.01], line_height: [0.8, 2.4, 0.05],
+      outline: [0, 12, 0.5], rotation: [-180, 180, 1], opacity: [0, 1, 0.05],
+      width: [0.02, 1.5, 0.01], height: [0.02, 1.5, 0.01],
+      stroke_width: [0, 40, 1], radius: [0, 400, 2], strength: [0, 1, 0.05],
+    };
+
+    const HIDDEN_FIELDS = new Set(["timings", "point", "tag", "items"]);
+
+    /**
+     * The panel for whatever kind of graphic is selected.
+     *
+     * Built from the component's own declared fields rather than typed out per
+     * component, which is the same rule the tool schema follows: the component
+     * library is the single description of what a graphic takes, so a person
+     * and an agent are offered exactly the same set and neither has a control
+     * the other cannot reach.
+     */
+    function layerPanelHtml(layer) {
       const fps = composition().fps || 30;
-      // The real lists, from the engine that has to draw them. Inventing a
-      // menu here is how you get a dropdown offering a value the renderer
-      // refuses — which is exactly what "bottom" was.
-      const POS = COMP_POSITIONS;
-      const ROLES = COMP_ROLES;
-      const COMPONENTS = TEXTY_COMPONENTS;
+      const info = COMPONENT_INFO[layer.component];
+      const fields = info?.fields ?? {};
+      const kind = (info?.name || layer.component).replace(/([a-z])([A-Z])/g, "$1 $2");
+
+      const control = (name, spec) => {
+        const value = layer.props?.[name];
+        if (CHOICES[name]) {
+          return `<label class="field"><span>${name.replace(/_/g, " ")}</span>
+            <select data-lprop="${name}">
+              ${CHOICES[name].map((c) => `<option value="${c}" ${c === value ? "selected" : ""}>${c.replace(/_/g, " ")}</option>`).join("")}
+            </select></label>`;
+        }
+        if (name === "fill" || name === "stroke") {
+          const hex = /^#/.test(String(value || "")) ? value : "#F54E00";
+          return `<label class="field"><span>${name}</span>
+            <span class="insp-colour">
+              <input type="color" data-lprop="${name}" value="${hex}">
+              <button class="btn btn-mini" data-lnone="${name}">none</button>
+            </span></label>`;
+        }
+        if (spec.type === "number") {
+          const [lo, hi, step] = RANGES[name] ?? [0, 1, 0.01];
+          const now = Number.isFinite(Number(value)) ? Number(value) : lo;
+          return `<label class="field"><span>${name.replace(/_/g, " ")} <b class="mono">${now}</b></span>
+            <input type="range" data-lprop="${name}" min="${lo}" max="${hi}" step="${step}" value="${now}"></label>`;
+        }
+        if (name === "text") {
+          return `<label class="field"><span>Words</span>
+            <textarea class="insp-text" data-lprop="text" rows="3">${Desk.esc(value || "")}</textarea></label>`;
+        }
+        return `<label class="field"><span>${name.replace(/_/g, " ")}</span>
+          <input type="text" data-lprop="${name}" value="${Desk.esc(value || "")}" placeholder="${Desk.esc((spec.note || "").slice(0, 40))}"></label>`;
+      };
+
+      const rows = Object.entries(fields)
+        .filter(([name]) => !HIDDEN_FIELDS.has(name))
+        .map(([name, spec]) => control(name, spec))
+        .join("");
+
       return `
-        <div class="ed-head"><span>Text</span></div>
+        <div class="ed-head"><span>${Desk.esc(kind)}</span></div>
         <div class="insp-body">
-          <label class="field">
-            <span>Words</span>
-            <textarea class="insp-text" data-text="${layer.id}" rows="3">${Desk.esc(layer.props?.text || "")}</textarea>
-          </label>
-          <label class="field">
-            <span>Second line</span>
-            <input type="text" data-sub="${layer.id}" value="${Desk.esc(layer.props?.subtext || "")}" placeholder="optional">
-          </label>
+          ${MOVABLE.has(layer.component)
+            ? `<p class="insp-hint">Drag it on the picture to move it, or a corner to size it.</p>` : ""}
+          ${rows}
           <label class="field">
             <span>Look</span>
             <select data-lset="component">
-              ${COMPONENTS.map((c) => `<option value="${c}" ${c === layer.component ? "selected" : ""}>${c.replace(/_/g, " ")}</option>`).join("")}
+              ${Object.keys(COMPONENT_INFO).map((c) => `<option value="${c}" ${c === layer.component ? "selected" : ""}>${c.replace(/_/g, " ")}</option>`).join("")}
             </select>
           </label>
           <label class="field">
             <span>Where</span>
             <select data-lset="position">
-              ${POS.map((c) => `<option value="${c}" ${c === layer.position ? "selected" : ""}>${c.replace(/_/g, " ")}</option>`).join("")}
+              ${COMP_POSITIONS.map((c) => `<option value="${c}" ${c === layer.position ? "selected" : ""}>${c.replace(/_/g, " ")}</option>`).join("")}
             </select>
           </label>
           <label class="field">
             <span>Colour</span>
             <select data-lset="palette_role">
-              ${ROLES.map((c) => `<option value="${c}" ${c === layer.palette_role ? "selected" : ""}>${c}</option>`).join("")}
+              ${COMP_ROLES.map((c) => `<option value="${c}" ${c === layer.palette_role ? "selected" : ""}>${c}</option>`).join("")}
+              ${/^#/.test(String(layer.palette_role)) ? `<option value="${layer.palette_role}" selected>${layer.palette_role}</option>` : ""}
             </select>
           </label>
           <label class="field">
@@ -997,14 +1056,14 @@ export const Editor = (() => {
             <span>On screen <b class="mono">${(layer.durationInFrames / fps).toFixed(1)}s</b></span>
             <input type="range" data-lmove="dur" min="0.3" max="20" step="0.1" value="${(layer.durationInFrames / fps).toFixed(1)}">
           </label>
-          <button class="btn btn-danger btn-wide" data-ldrop="${layer.id}">Delete text</button>
+          <button class="btn btn-danger btn-wide" data-ldrop="${layer.id}">Delete</button>
         </div>`;
     }
 
     function renderInspector() {
       const layer = liveLayers().find((l) => l.id === selected);
       if (layer) {
-        insp.innerHTML = textPanelHtml(layer) + graphicsHtml() + compositionHtml();
+        insp.innerHTML = layerPanelHtml(layer) + graphicsHtml() + compositionHtml();
         return;
       }
       const seg = timeline.find((s) => s.uid === selected);
@@ -1947,13 +2006,15 @@ export const Editor = (() => {
         const fps = composition().fps || 30;
         // Typing edits the layer in place. Rebuilding it per keystroke would
         // hand it a new id sixty times a sentence, and the caret with it.
-        if (e.target.dataset.text != null) {
-          editLayer(layer.id, { props: { text: e.target.value } }, e);
-          return void renderTrack();
-        }
-        if (e.target.dataset.sub != null) {
-          editLayer(layer.id, { props: { subtext: e.target.value || null } }, e);
-          return void renderTrack();
+        const lprop = e.target.dataset.lprop;
+        if (lprop) {
+          const raw = e.target.type === "range" ? Number(e.target.value) : e.target.value;
+          editLayer(layer.id, { props: { [lprop]: raw === "" ? null : raw } }, e);
+          renderTrack();
+          // Redraw the readout beside a slider without rebuilding the panel.
+          const label = e.target.closest(".field")?.querySelector("b");
+          if (label && e.target.type === "range") label.textContent = String(raw);
+          return;
         }
         const lset = e.target.dataset.lset;
         if (lset === "position") { editLayer(layer.id, { position: e.target.value }, e); return void renderTrack(); }
@@ -2004,6 +2065,13 @@ export const Editor = (() => {
     });
 
     insp.addEventListener("click", (e) => {
+      const lnone = e.target.closest("[data-lnone]");
+      if (lnone) {
+        const layer = liveLayers().find((l) => l.id === selected);
+        if (layer) { editLayer(layer.id, { props: { [lnone.dataset.lnone]: "none" } }, e); refresh(); }
+        return;
+      }
+
       const drop = e.target.closest("[data-ldrop]");
       if (drop) {
         removeLayer(drop.dataset.ldrop, e);
