@@ -273,7 +273,7 @@ export const Editor = (() => {
              selected. -->
         <div class="cmp-tabs insp-tabs" role="tablist" aria-label="Inspector">
           <button class="cmp-tab" role="tab" data-insp="clip" aria-selected="true" tabindex="0">Clip</button>
-          <button class="cmp-tab" role="tab" data-insp="gfx" aria-selected="false" tabindex="-1">Graphics</button>
+          <button class="cmp-tab" role="tab" data-insp="gfx" aria-selected="false" tabindex="-1">VFX</button>
           <button class="cmp-tab" role="tab" data-insp="comp" aria-selected="false" tabindex="-1">Comp</button>
         </div>
         <div class="insp-panes"></div>
@@ -1437,7 +1437,7 @@ export const Editor = (() => {
         .join("");
 
       return `
-        <div class="ed-head"><span>${Desk.esc(kind)}</span></div>
+        <p class="insp-kind mono">${Desk.esc(kind)}</p>
         <div class="insp-body">
           ${MOVABLE.has(layer.component)
             ? `<p class="insp-hint">Drag it on the picture to move it, or a corner to size it.</p>` : ""}
@@ -1470,7 +1470,7 @@ export const Editor = (() => {
             <input type="range" data-lmove="dur" min="0.3" max="20" step="0.1" value="${(layer.durationInFrames / fps).toFixed(1)}">
           </label>
           ${MOVABLE.has(layer.component) ? `
-          <div class="ed-head"><span>Motion</span></div>
+          <p class="insp-kind mono">Motion</p>
           <p class="insp-hint">${(layer.keys ?? []).length
             ? `${layer.keys.length} keyframe${layer.keys.length === 1 ? "" : "s"}. Move the playhead and drag it on the picture to add another.`
             : "Put a key where it starts, move the playhead, then drag it. Two keys is an animation."}</p>
@@ -1508,7 +1508,7 @@ export const Editor = (() => {
     function itemTransformFields(it) {
       const t = transformOf(it);
       return `
-        <div class="ed-head"><span>Transform</span></div>
+        <p class="insp-kind mono">Transform</p>
         <div class="insp-body insp-body--tight">
           <label class="field"><span>Across <b class="mono">${t.x.toFixed(2)}</b></span>
             <input type="range" data-item-tf="x" min="-1" max="1" step="0.01" value="${t.x}"></label>
@@ -1538,7 +1538,7 @@ export const Editor = (() => {
       const max = clip?.duration || it.out;
       const isAudio = lane.kind === "audio";
       return `
-        <div class="ed-head"><span>${isAudio ? "Sound" : "Overlay"}</span></div>
+        <p class="insp-kind mono">${isAudio ? "Sound" : "Overlay"}</p>
         <div class="insp-body">
           ${nameRowHtml(it.name || clip?.name || "Clip")}
           ${clip ? clipStatsHtml({ in: it.in, out: it.out, speed: it.speed || 1 }, clip) : ""}
@@ -1607,7 +1607,7 @@ export const Editor = (() => {
       const staged = pendingCuts().find((c) => c.id === selected);
       if (staged) {
         return `
-          <div class="ed-head"><span>Suggested cut</span></div>
+          <p class="insp-kind mono">Suggested cut</p>
           <div class="insp-body">
             <p class="insp-name">Remove ${(staged.end - staged.start).toFixed(2)}s</p>
             <dl class="insp-stats mono">
@@ -1631,7 +1631,7 @@ export const Editor = (() => {
       }
       if (seg.blank) {
         return `
-          <div class="ed-head"><span>Blank</span></div>
+          <p class="insp-kind mono">Blank</p>
           <div class="insp-body">
             <p class="insp-name">A ground to build on.</p>
             <label class="field">
@@ -1651,7 +1651,6 @@ export const Editor = (() => {
       const clip = byId.get(seg.clipId);
       const max = clip?.duration || seg.out;
       return `
-        <div class="ed-head"><span>Clip</span></div>
         <div class="insp-body">
           ${nameRowHtml(clip?.name || "Missing clip")}
           ${clipStatsHtml(seg, clip)}
@@ -3345,7 +3344,7 @@ export const Editor = (() => {
       const t = transformOf(seg);
       const keys = seg.tkeys ?? [];
       return `
-        <div class="ed-head"><span>Transform</span></div>
+        <p class="insp-kind mono">Transform</p>
         <div class="insp-body insp-body--tight">
           <p class="insp-hint">Drag the picture to move it in the frame. Handy after a reframe, when the shot is no longer centred on what matters.</p>
           <label class="field"><span>Across <b class="mono">${t.x.toFixed(2)}</b></span>
@@ -3398,7 +3397,7 @@ export const Editor = (() => {
     function soundPanelHtml(a) {
       const fps = composition().fps || 30;
       return `
-        <div class="ed-head"><span>Sound</span></div>
+        <p class="insp-kind mono">Sound</p>
         <div class="insp-body">
           <p class="insp-name">${Desk.esc(String(a.kind === "sfx" ? a.preset : a.name || "music bed"))}</p>
           <p class="insp-hint">${a.kind === "sfx" ? "A synthesised effect." : "A bed under the whole cut."}${a.duck ? " Ducks under speech." : ""}</p>

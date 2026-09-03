@@ -1177,8 +1177,8 @@
 .ed-formats-list { display: flex; align-items: center; gap: 6px; }
 
 /* ============================================================
-   Editor bug fixes: form controls, the inspector rail, drop
-   feedback and inline rename.
+   Editor bug fixes: form controls, drop feedback and inline
+   rename.
    ============================================================ */
 
 /*
@@ -1251,32 +1251,83 @@
   cursor: pointer;
 }
 
-/*
- * The inspector rail's three tabs have to fit 220px.
- *
- * With the shared `.cmp-tab` padding and 0.06em tracking, CLIP / GRAPHICS /
- * COMP overflowed the rail and the third one was clipped by `.ed-insp`'s
- * `overflow: hidden`. Tighter padding, no tracking, and an ellipsis as the
- * backstop so a narrow rail degrades instead of hiding a tab.
- */
+/* ---- the format buttons, beside the picture ----
+   Equal boxes with the glyph centred in a fixed area, so 16:9 and 9:16 do not
+   size themselves differently and the row reads as one control. */
+.ed-formats-list .cmp-format {
+  flex: 0 0 auto;
+  width: 42px;
+  padding: 5px 0 4px;
+  gap: 4px;
+  place-items: center;
+  justify-items: center;
+}
+.ed-formats-list .cmp-format-box {
+  /* A fixed box the glyph is centred inside, rather than the glyph itself
+     setting the button's width. */
+  width: 16px;
+  height: 16px;
+  border: 0;
+  display: grid;
+  place-items: center;
+}
+.ed-formats-list .cmp-format-box::before {
+  content: "";
+  width: var(--fw);
+  height: var(--fh);
+  border: 2px solid currentColor;
+  border-radius: 2px;
+}
+.ed-formats { align-items: center; gap: 5px; }
+
+/* ---- the inspector tabs ----
+   The same boxed shape the selected tab already had, applied to all three, so
+   the row is one small segmented control instead of one box and two words. */
 .insp-tabs {
-  display: flex;
-  gap: 3px;
-  padding: 5px 5px 0;
+  /* .cmp-tabs carries margin-right:auto so it hugs its content in the timeline
+     header. In a column that stops it stretching, which is why the labels were
+     being clipped in a rail wide enough for them. */
+  margin-right: 0;
+  width: 100%;
   min-width: 0;
+  gap: 3px;
+  padding: 6px;
+  border-bottom: var(--bw) solid var(--line);
+  background: var(--surface-2);
 }
 .insp-tabs .cmp-tab {
   flex: 1 1 0;
   min-width: 0;
-  padding: 5px 4px;
-  letter-spacing: 0;
+  padding: 4px 2px;
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
   text-align: center;
+  border: var(--bw) solid var(--line);
+  border-radius: var(--radius-s);
+  background: var(--surface);
+  box-shadow: none;
   overflow: hidden;
   text-overflow: ellipsis;
+  /* text-overflow does nothing without this, and `.cmp-tab` does not set it. */
   white-space: nowrap;
 }
-/* The count badge must not push the label out of its own tab. */
-.insp-tabs .cmp-tab.has-waiting::after { margin-left: 4px; }
+.insp-tabs .cmp-tab[aria-selected="true"] {
+  background: var(--accent);
+  border-color: var(--line);
+  color: #fff;
+  box-shadow: 1px 1px 0 var(--shadow);
+}
+.insp-tabs .cmp-tab.has-waiting::after { background: var(--surface); color: var(--accent); }
+.insp-tabs .cmp-tab[aria-selected="true"].has-waiting::after { background: var(--surface); color: var(--accent); }
+
+/* The specific thing selected, named without spending a whole header bar. */
+.insp-kind {
+  margin: 0 0 -4px;
+  font-size: 9.5px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
 
 /* ---- where a dragged clip will land ---- */
 
