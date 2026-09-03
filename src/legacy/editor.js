@@ -44,6 +44,9 @@ import {
   removeLayer,
   setFormat,
   shiftAfter,
+  adoptInside,
+  reseat,
+  disown,
 } from "../comp/store.js";
 import { applyCut, onCuts, pendingCuts, proposeCut, rejectCut, retime, settle } from "../cuts/store.js";
 import { FILLERS, findDeadWeight, toCutTime } from "../transcript/transcript.js";
@@ -784,21 +787,72 @@ export const Editor = (() => {
         || null;
     }
 
-    const holds = (c, seconds) =>
-      c.kind === "loose" ? withinClip(c, seconds) : ownerOf(seconds)?.id === c.id;
+    /**
+     * Whether a clip holds an element.
+     *
+     * A clip on the spine answers by name: the element carries the uid of the
+     * clip it was put in, so shortening that clip cannot hand its contents to
+     * the clip beside it, and trimming its head takes frames off the head
+     * rather than off the far end. Everything else -- an overlay clip, and the
+     * run of loose elements the agent left sitting over footage -- is still
+     * decided by the clock, and skips anything that already has a home.
+     */
+    const holds = (c, item) => {
+      if (c.kind === "spine") return item.owner === c.id;
+      if (item.owner) return false;
+      const seconds = item.from / (composition().fps || 30);
+      return c.kind === "loose" ? withinClip(c, seconds) : ownerOf(seconds)?.id === c.id;
+    };
 
     function layersIn(c) {
-      const fps = composition().fps || 30;
       return liveLayers()
-        .filter((l) => holds(c, l.from / fps))
+        .filter((l) => holds(c, l))
         .sort((a, b) => a.from - b.from || a.id.localeCompare(b.id));
     }
 
     function soundsIn(c) {
-      const fps = composition().fps || 30;
       return liveAudio()
-        .filter((a) => holds(c, a.from / fps))
+        .filter((a) => holds(c, a))
         .sort((a, b) => a.from - b.from);
+    }
+
+    /**
+     * Keep every motion graphics clip's contents inside that clip.
+     *
+     * Runs before the track is drawn, which is after every edit that can move
+     * a clip: a trim, a reorder, a delete, an accepted cut. For each clip on
+     * the spine it compares where the clip is now against where it was when
+     * its contents were last seated, and moves them by the difference --
+     * `start` for the clip sliding along the spine, `in` for its head being
+     * trimmed, which scrolls the animation rather than moving it.
+     *
+     * `anchor` lives on the segment because the clips themselves are derived
+     * on every read; holding one across an edit would be holding a stale copy.
+     */
+    function anchorMotion() {
+      const fps = composition().fps || 30;
+      let at = 0;
+      for (const seg of timeline) {
+        const dur = segDuration(seg);
+        const start = at;
+        at += dur;
+        if (!seg.blank) continue;
+
+        const startFrame = Math.round(start * fps);
+        const endFrame = Math.max(startFrame + 1, Math.round((start + dur) * fps));
+        const was = seg.anchor;
+        const shiftFrames = was
+          ? Math.round(((start - was.start) - (seg.in - was.in)) * fps)
+          : 0;
+        const settled = !!was
+          && shiftFrames === 0
+          && was.startFrame === startFrame
+          && was.endFrame === endFrame;
+        seg.anchor = { start, in: seg.in, startFrame, endFrame };
+
+        adoptInside(seg.uid, startFrame, endFrame);
+        reseat(seg.uid, { shiftFrames, startFrame, endFrame, settled });
+      }
     }
 
     /**
@@ -1225,7 +1279,7 @@ export const Editor = (() => {
       // clip. Drawing it here as well would be the same thing in two places,
       // which is the state where a person deletes one copy and is surprised.
       const clips = motionClips();
-      const held = (a) => clips.some((c) => holds(c, a.from / fps));
+      const held = (a) => clips.some((c) => holds(c, a));
       const packed = pack(liveAudio().filter((a) => !held(a)).map((a) => ({
         a, start: a.from / fps, length: Math.max(0.15, (a.durationInFrames || fps) / fps),
       })));
@@ -1588,6 +1642,7 @@ export const Editor = (() => {
     }
 
     function renderTrack() {
+      anchorMotion();
       empty.hidden = timeline.length > 0 || lanes.some((l) => l.items.length)
         || liveLayers().length > 0 || liveAudio().length > 0;
 
@@ -4323,11 +4378,12 @@ export const Editor = (() => {
         // at the same cut seconds is how they used to come back as a stray
         // clip of their own the moment the timeline reflowed around the gap.
         if (seg.blank) {
-          const mine = explicitClips().find((c) => c.id === seg.uid);
-          if (mine) {
-            layersIn(mine).forEach((l) => removeLayer(l.id, e));
-            soundsIn(mine).forEach((a) => removeAudio(a.id, e));
-          }
+          // By owner, not by clock: an element scrolled out of the clip's
+          // window is still the clip's, and leaving it behind is how a
+          // deleted clip used to come back as a stray.
+          const doc = composition();
+          doc.layers.filter((l) => l.owner === seg.uid).forEach((l) => removeLayer(l.id, e));
+          doc.audio.filter((a) => a.owner === seg.uid).forEach((a) => removeAudio(a.id, e));
         }
         timeline = timeline.filter((x) => x.uid !== seg.uid);
         selected = null;
@@ -4352,6 +4408,13 @@ export const Editor = (() => {
         return Desk.toast("Too close to the edge of the clip to split.", "bad");
       }
       const tail = { ...seg, uid: `seg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, in: source };
+      // Two clips now, so who owns what has to be asked again. Releasing the
+      // contents lets each half adopt the elements that land in it on the next
+      // pass; without this everything past the cut stays owned by the head and
+      // is parked out of sight the moment the halves are trimmed apart.
+      if (seg.blank) disown(seg.uid);
+      delete tail.anchor;
+      delete seg.anchor;
       seg.out = source;
       timeline.splice(timeline.indexOf(seg) + 1, 0, tail);
       selected = tail.uid;

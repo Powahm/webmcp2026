@@ -219,24 +219,42 @@ export function resolve(layers, { from = 0, until = Infinity, depth = 0 } = {}) 
       : until;
     if (end <= start) continue;
 
+    /**
+     * A window, for a layer that lives inside a container shorter than it is.
+     *
+     * `start` stays the layer's own origin whatever the window says, because
+     * that is what its animation is measured from: a title that has been
+     * scrolled half out of its clip has to come in half-animated, not restart
+     * at the clip's edge. The window only decides which frames are allowed to
+     * draw. Without the split, clamping the origin was the only way to keep a
+     * layer inside its clip, and it replayed the entrance every trim.
+     */
+    const win = node.window;
+    const showFrom = Number.isFinite(win?.from) ? Math.max(start, win.from) : start;
+    const showTo = Number.isFinite(win?.to) ? Math.min(end, win.to) : end;
+    if (showTo <= showFrom) continue;
+
     if (node.children?.length) {
       out.push(...resolve(node.children, { from: start, until: end, depth: depth + 1 }));
     }
     if (node.component) {
-      out.push({ node, from: start, to: end, durationInFrames: end - start });
+      out.push({ node, from: start, to: end, showFrom, showTo, durationInFrames: end - start });
     }
   }
   return out;
 }
 
-/** The resolved entries covering a frame, in draw order. */
+/** The resolved entries covering a frame, in draw order. Measured against the
+ *  window a layer is allowed to draw in, which is its own span unless a clip
+ *  is holding it to something shorter. */
 export const activeAt = (resolved, frame) =>
-  resolved.filter((r) => frame >= r.from && frame < r.to);
+  resolved.filter((r) => frame >= (r.showFrom ?? r.from) && frame < (r.showTo ?? r.to));
 
 /** How long a resolved composition runs. Zero layers is zero frames, and the
- *  caller decides whether that means "empty" or "just the video". */
+ *  caller decides whether that means "empty" or "just the video". A layer that
+ *  stops drawing at its clip's edge does not extend the composition past it. */
 export const durationOf = (resolved) =>
-  resolved.reduce((max, r) => Math.max(max, r.to), 0);
+  resolved.reduce((max, r) => Math.max(max, r.showTo ?? r.to), 0);
 
 /**
  * Lay nodes end to end, each starting where the last finished.
