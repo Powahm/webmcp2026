@@ -1726,8 +1726,64 @@ body.agent-working::after { opacity: 1; animation: agent-edge 1.9s ease-in-out i
 .lib-tabs[hidden] { display: none; }
 .lib-pane { flex: 1 1 auto; min-height: 0; overflow: auto; display: flex; flex-direction: column; }
 .lib-pane[hidden] { display: none; }
-.ed-lib-bar { flex: none; display: flex; padding: 7px 8px; border-bottom: var(--bw) solid var(--line); }
-.ed-lib-bar .btn { width: 100%; }
+.ed-lib-bar { flex: none; display: flex; gap: 6px; padding: 7px 8px; border-bottom: var(--bw) solid var(--line); }
+.ed-lib-bar .btn { flex: 1 1 0; min-width: 0; }
+
+/* ---- library folders ----
+ *
+ * A wrapping row rather than a sideways scroller: the rail is 96px at its
+ * narrowest and a chip you have to scroll to reach in a 96px strip is a chip
+ * nobody finds. The count is what makes the row worth reading, so it keeps its
+ * own plate rather than being folded into the name.
+ */
+
+.lib-folders {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding: 7px 8px;
+  border-bottom: var(--bw) solid var(--line);
+}
+.lib-folders:empty { display: none; }
+.lib-fold {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 3px 6px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-s);
+  box-shadow: 2px 2px 0 var(--shadow);
+  cursor: pointer;
+  transition: background .12s, transform .12s var(--ease-out), box-shadow .12s;
+}
+.lib-fold:hover { background: var(--accent-soft); }
+.lib-fold:active { transform: translate(2px, 2px); box-shadow: none; }
+.lib-fold[aria-pressed="true"] { background: var(--accent); border-color: var(--line); color: #fff; }
+.lib-fold[aria-pressed="true"] .lib-fold-n { color: #fff; border-color: currentColor; }
+.lib-fold-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lib-fold-n { font-size: 9.5px; color: var(--text-muted); }
+.lib-fold--new { font-size: 13px; line-height: 1; padding: 3px 7px; }
+.lib-fold.is-drop-target { background: var(--accent-soft); border-color: var(--accent); transform: translateY(-2px); }
+.lib-fold-rename {
+  min-width: 0;
+  max-width: 100%;
+  padding: 3px 6px;
+  font: inherit;
+  font-size: 11px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1.5px solid var(--accent);
+  border-radius: var(--radius-s);
+}
+.lib-fold-tools { display: flex; gap: 5px; flex-basis: 100%; }
+.lib-fold-tools .btn { flex: 1 1 0; font-size: 10.5px; padding: 3px 4px; }
 
 /* ---- the palette: what you can put on a frame ---- */
 
@@ -1827,6 +1883,63 @@ body.agent-working::after { opacity: 1; animation: agent-edge 1.9s ease-in-out i
   transition: opacity .12s;
 }
 .lib-item:hover .lib-ren, .lib-ren:focus-visible { opacity: 1; }
+
+/* ---- filing a clip, and what a sound looks like without a frame ---- */
+
+.lib-file {
+  position: absolute;
+  top: 4px; right: 27px;
+  width: 20px; height: 20px;
+  display: grid; place-items: center;
+  color: var(--text);
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity .12s;
+}
+.lib-file svg { width: 13px; height: 13px; }
+.lib-item:hover .lib-file, .lib-file:focus-visible, .lib-file[aria-expanded="true"] { opacity: 1; }
+.lib-filing {
+  position: absolute;
+  left: 4px; right: 4px; bottom: 4px;
+  z-index: 3;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 5px;
+  background: var(--surface);
+  border: var(--bw) solid var(--line);
+  border-radius: var(--radius-s);
+  box-shadow: 3px 3px 0 var(--shadow);
+}
+.lib-file-opt {
+  padding: 3px 6px;
+  font: inherit;
+  font-size: 10.5px;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1.5px solid var(--line);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.lib-file-opt:hover { background: var(--accent-soft); }
+.lib-file-opt[aria-pressed="true"] { background: var(--accent); color: #fff; }
+.lib-file-opt--new { border-style: dashed; }
+
+/* A sound has no frame to show, and a blank grey strip where a picture goes
+   reads as a clip that failed to load. Draw the one thing it does have. */
+.lib-wave {
+  display: grid;
+  place-items: center;
+  height: 62px;
+  color: var(--purple);
+  background: var(--ground-2);
+  border-bottom: var(--bw) solid var(--line);
+}
+.lib-wave svg { width: 72%; max-width: 96px; }
+.lib-item--sound .lib-add:hover { background: color-mix(in srgb, var(--purple) 12%, var(--surface-2)); }
 .lib-rename {
   position: absolute;
   left: 4px; right: 4px; bottom: 4px;

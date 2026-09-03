@@ -1,4 +1,4 @@
-import { Store, Clips, timecode } from "./store.js";
+import { Clips, Folders, Store, timecode } from "./store.js";
 import { drawGraphics } from "../graphics/render.js";
 import {
   accept as acceptGraphic,
@@ -252,9 +252,16 @@ export const Editor = (() => {
         </div>
         <div class="lib-pane" data-libpane="clips">
           <div class="ed-lib-bar">
-            <button class="btn btn-mini" data-act="import">Import</button>
+            <button class="btn btn-mini" data-act="import" title="Import video files into the library">Video</button>
+            <button class="btn btn-mini" data-act="import-audio" title="Import music or sound effects into the library">Audio</button>
             <input type="file" accept="video/*" multiple hidden data-act="file">
+            <input type="file" accept="audio/*" multiple hidden data-act="lib-audio-file">
           </div>
+          <!-- Folders are a filter, not a tree. One row of chips with one open
+               at a time: a library of forty takes and a music bed is a library
+               you scroll rather than read, and nesting would only move the
+               scrolling somewhere else. -->
+          <div class="lib-folders" role="group" aria-label="Library folders"></div>
           <div class="ed-lib-list"></div>
         </div>
         <div class="lib-pane" data-libpane="text" hidden></div>
@@ -421,6 +428,8 @@ export const Editor = (() => {
     const playBtn = body.querySelector('[data-act="play"]');
     const fileInput = body.querySelector('[data-act="file"]');
     const audioInput = body.querySelector('[data-act="audio-file"]');
+    const libAudioInput = body.querySelector('[data-act="lib-audio-file"]');
+    const libFolderBar = body.querySelector(".lib-folders");
     const exportPane = body.querySelector(".ed-export");
     const cutStrip = body.querySelector(".cut-strip");
 
@@ -460,27 +469,134 @@ export const Editor = (() => {
 
     /** Which library card is having its name typed into, if any. */
     let libRenaming = null;
+    /** The folder the library is showing: a folder id, "all", or "loose". */
+    let libFolder = "all";
+    /** The folders, as of the last render, so the chips and the move row agree. */
+    let libFolders = [];
+    /** Which card has its "put this somewhere" row open, if any. */
+    let libFiling = null;
+    /** Which folder chip is having its name typed into, if any. */
+    let folderRenaming = null;
+
+    const SOUND_MARK = `<span class="lib-wave" aria-hidden="true">
+        <svg viewBox="0 0 64 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M4 12h3M11 7v10M18 4v16M25 9v6M32 3v18M39 8v8M46 5v14M53 10v4M60 12h0"/>
+        </svg>
+      </span>`;
+
+    /** A real folder, rather than one of the two views that are not folders. */
+    const isFolder = (id) => id !== "all" && id !== "loose";
+
+    /**
+     * The row of folders above the library.
+     *
+     * Every chip carries its own count, because the question a person asks a
+     * folder row is "where did I put it", and a count is the cheapest answer
+     * that is ever right. Rename and Delete belong to whichever folder is
+     * open rather than sitting on every chip: two more buttons on each of
+     * eight chips is a row nobody can read.
+     */
+    function renderFolders(folders, total, count) {
+      const chip = (id, label, n, extra = "") => `
+        <button class="lib-fold" data-folder="${id}" aria-pressed="${libFolder === id}" ${extra}>
+          <span class="lib-fold-name">${Desk.esc(label)}</span>
+          <span class="lib-fold-n mono">${n}</span>
+        </button>`;
+
+      const loose = count("loose");
+      const named = folders
+        .map((f) =>
+          folderRenaming === f.id
+            ? `<input class="lib-fold-rename" type="text" spellcheck="false"
+                      data-folder-rename-input="${f.id}" value="${Desk.esc(f.name)}"
+                      aria-label="New name for ${Desk.esc(f.name)}">`
+            : chip(f.id, f.name, count(f.id), `data-folder-drop="${f.id}"`)
+        )
+        .join("");
+
+      libFolderBar.innerHTML =
+        chip("all", "All", total) +
+        // No point offering the loose pile when nothing is loose, unless that
+        // is the view you are standing in and it has just been emptied.
+        (loose || libFolder === "loose" ? chip("loose", "Unfiled", loose, `data-folder-drop=""`) : "") +
+        named +
+        `<button class="lib-fold lib-fold--new" data-act="new-folder" title="Make a folder" aria-label="Make a folder">+</button>` +
+        (isFolder(libFolder)
+          ? `<span class="lib-fold-tools">
+               <button class="btn btn-mini" data-folder-rename="${libFolder}">Rename</button>
+               <button class="btn btn-mini" data-folder-del="${libFolder}">Delete</button>
+             </span>`
+          : "");
+    }
+
+    /** The folders a clip can be put in, shown on the card itself. */
+    function filingHtml(clip) {
+      const here = clip.folder || "";
+      const opt = (id, label) => `
+        <button class="lib-file-opt" data-file-to="${id}" data-file-clip="${clip.id}"
+                aria-pressed="${here === id}">${Desk.esc(label)}</button>`;
+      return `
+        <div class="lib-filing" role="group" aria-label="Put ${Desk.esc(clip.name)} in a folder">
+          ${opt("", "Unfiled")}
+          ${libFolders.map((f) => opt(f.id, f.name)).join("")}
+          <button class="lib-file-opt lib-file-opt--new" data-file-new="${clip.id}">+ New folder</button>
+        </div>`;
+    }
 
     async function renderLibrary() {
-      const clips = await Clips.all();
+      const [clips, folders] = await Promise.all([Clips.all(), Folders.all()]);
+      libFolders = folders;
       clips.forEach((c) => byId.set(c.id, c));
-      libList.innerHTML = clips.length
-        ? clips.map((c) => `
-            <div class="lib-item">
-              <button class="lib-add" draggable="true" data-add="${c.id}" title="Add to the timeline, or drag onto a lane">
-                ${c.thumb ? `<img src="${c.thumb}" alt="">` : `<span class="strip-blank"></span>`}
+
+      // A clip pointing at a folder that has since gone is loose, not lost.
+      // Deleting a folder must never take the footage in it out of the library.
+      const live = new Set(folders.map((f) => f.id));
+      const folderOf = (c) => (c.folder && live.has(c.folder) ? c.folder : null);
+      if (isFolder(libFolder) && !live.has(libFolder)) libFolder = "all";
+
+      const count = (id) =>
+        clips.filter((c) => (id === "loose" ? !folderOf(c) : folderOf(c) === id)).length;
+      const shown = clips.filter((c) =>
+        libFolder === "all" ? true : libFolder === "loose" ? !folderOf(c) : folderOf(c) === libFolder
+      );
+
+      renderFolders(folders, clips.length, count);
+
+      libList.innerHTML = shown.length
+        ? shown.map((c) => {
+            const sound = c.kind === "audio";
+            return `
+            <div class="lib-item${sound ? " lib-item--sound" : ""}">
+              <button class="lib-add" draggable="true" data-add="${c.id}"
+                      title="${sound
+                        ? "Put it on an audio lane at the playhead, or drag it onto one"
+                        : "Add to the timeline, or drag onto a lane"}">
+                ${sound
+                  ? SOUND_MARK
+                  : c.thumb ? `<img src="${c.thumb}" alt="">` : `<span class="strip-blank"></span>`}
                 <span class="lib-name">${Desk.esc(c.name)}</span>
-                <span class="lib-time mono">${timecode(c.duration)}</span>
+                <span class="lib-time mono">${sound ? "sound &middot; " : ""}${timecode(c.duration)}</span>
               </button>
               <button class="lib-ren" data-lib-rename="${c.id}" aria-label="Rename ${Desk.esc(c.name)}" title="Rename">✎</button>
+              <button class="lib-file" data-lib-file="${c.id}" aria-expanded="${libFiling === c.id}"
+                      aria-label="Put ${Desk.esc(c.name)} in a folder" title="Put in a folder">
+                <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor"
+                     stroke-width="2.2" stroke-linejoin="round"><path d="M3 6h6l2 2h10v11H3z"/></svg>
+              </button>
               <button class="lib-del" data-del="${c.id}" aria-label="Delete ${Desk.esc(c.name)}">×</button>
               ${libRenaming === c.id
                 ? `<input class="lib-rename" type="text" spellcheck="false"
                           data-lib-rename-input="${c.id}" value="${Desk.esc(c.name)}"
                           aria-label="New name for ${Desk.esc(c.name)}">`
                 : ""}
-            </div>`).join("")
-        : `<p class="lib-empty">No clips yet. Record one in Camera, or import a file.</p>`;
+              ${libFiling === c.id ? filingHtml(c) : ""}
+            </div>`;
+          }).join("")
+        : `<p class="lib-empty">${
+            clips.length
+              ? "Nothing in this folder yet. Drag a clip onto the folder, or use the folder button on a card."
+              : "No clips yet. Record one in Camera, or import a file."
+          }</p>`;
 
       // Focus after the list is in the document, not before it exists.
       if (libRenaming) {
@@ -488,6 +604,41 @@ export const Editor = (() => {
         if (field) { field.focus(); field.select(); }
         else libRenaming = null;
       }
+      if (folderRenaming) {
+        const field = libFolderBar.querySelector("[data-folder-rename-input]");
+        if (field) { field.focus(); field.select(); }
+        else folderRenaming = null;
+      }
+    }
+
+    /**
+     * Sound onto an audio lane, from wherever it was asked for.
+     *
+     * Clicking a sound in the library and dropping a file on the timeline are
+     * the same act with two doorways, so they run the same code: the last
+     * audio lane if there is one, a new one if there is not.
+     */
+    function addSoundAt(clip, seconds) {
+      const lane = lanes.filter((l) => l.kind === "audio").at(-1) || addLane("audio");
+      lane.items.push({
+        uid: `au-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        clipId: clip.id,
+        name: clip.name,
+        at: Math.max(0, seconds),
+        in: 0,
+        out: clip.duration || 10,
+        speed: 1,
+        gain: 1,
+      });
+      return lane;
+    }
+
+    /** Rename a folder, or leave it alone if the field was emptied. */
+    async function commitFolderRename(id, value) {
+      folderRenaming = null;
+      const name = String(value ?? "").trim().slice(0, 40);
+      if (!name) return void renderLibrary();
+      await Folders.rename(id, name);   // emits, so the row redraws
     }
 
     /**
@@ -3409,6 +3560,15 @@ export const Editor = (() => {
 
       if (act === "play") return playing ? stop() : play();
       if (act === "import") return fileInput.click();
+      if (act === "import-audio") return libAudioInput.click();
+      if (act === "new-folder") {
+        const made = await Folders.add(`Folder ${libFolders.length + 1}`);
+        // Straight into the name field. A folder called "Folder 3" is a folder
+        // nobody uses, and the moment to name it is the moment it appears.
+        libFolder = made.id;
+        folderRenaming = made.id;
+        return void renderLibrary();
+      }
       if (act === "split") return splitAtPlayhead();
       if (act === "add-text") return addTextClip(e);
       if (act === "add-blank") {
@@ -3459,8 +3619,69 @@ export const Editor = (() => {
         return refresh();
       }
 
+      const chip = t.closest("[data-folder]");
+      if (chip) {
+        libFolder = chip.dataset.folder;
+        libFiling = null;
+        return void renderLibrary();
+      }
+
+      const filing = t.closest("[data-lib-file]");
+      if (filing) {
+        libFiling = libFiling === filing.dataset.libFile ? null : filing.dataset.libFile;
+        return void renderLibrary();
+      }
+
+      const fileTo = t.closest("[data-file-to]");
+      if (fileTo) {
+        libFiling = null;
+        await Folders.move(fileTo.dataset.fileClip, fileTo.dataset.fileTo);   // emits
+        return;
+      }
+
+      const fileNew = t.closest("[data-file-new]");
+      if (fileNew) {
+        const made = await Folders.add(`Folder ${libFolders.length + 1}`);
+        await Folders.move(fileNew.dataset.fileNew, made.id);
+        libFiling = null;
+        libFolder = made.id;
+        folderRenaming = made.id;
+        return void renderLibrary();
+      }
+
+      const foldRen = t.closest("[data-folder-rename]");
+      if (foldRen) {
+        folderRenaming = foldRen.dataset.folderRename;
+        return void renderLibrary();
+      }
+
+      const foldDel = t.closest("[data-folder-del]");
+      if (foldDel) {
+        // The clips come back out rather than going with it, so this needs no
+        // confirming: nothing here is lost, and the toast says as much.
+        const inside = (await Clips.all()).filter((c) => c.folder === foldDel.dataset.folderDel).length;
+        await Folders.remove(foldDel.dataset.folderDel);
+        libFolder = "all";
+        Desk.toast(
+          inside ? `Folder deleted. ${inside} clip${inside === 1 ? "" : "s"} back in the library.` : "Folder deleted.",
+          "good"
+        );
+        return void renderLibrary();
+      }
+
       const add = t.closest("[data-add]");
       if (add) {
+        const picked = byId.get(add.dataset.add);
+        // Sound has nowhere to be on the spine: put there it would be a
+        // segment with no picture and a duration nobody asked for. It lands on
+        // an audio lane at the playhead, which is where dragging it would have
+        // put it.
+        if (picked?.kind === "audio") {
+          mark();
+          const lane = addSoundAt(picked, playhead);
+          Desk.toast(`${picked.name} on ${lane.name}.`, "good");
+          return void refresh();
+        }
         await addClip(add.dataset.add);
         // The transcript is a property of the cut, not of the library, so
         // adding a clip changes it.
@@ -3907,6 +4128,39 @@ export const Editor = (() => {
     libList.addEventListener("dragstart", (e) => {
       dragClipId = e.target.closest("[data-add]")?.dataset.add || null;
       if (dragClipId) e.dataTransfer.setData("text/plain", dragClipId);
+    });
+
+    /**
+     * Filing by dragging.
+     *
+     * The card is already draggable, for the timeline. A folder is the other
+     * place it makes sense to let go of one, and the chip lights up while the
+     * pointer is over it so the drop is not a guess. The row on the card does
+     * the same job from the keyboard, so this is a shortcut rather than the
+     * only way in.
+     */
+    libFolderBar.addEventListener("dragover", (e) => {
+      const target = e.target.closest?.("[data-folder-drop]");
+      if (!dragClipId || !target) return;
+      e.preventDefault();
+      libFolderBar.querySelectorAll(".is-drop-target").forEach((el) => el.classList.remove("is-drop-target"));
+      target.classList.add("is-drop-target");
+    });
+    libFolderBar.addEventListener("dragleave", (e) => {
+      if (!libFolderBar.contains(e.relatedTarget)) {
+        libFolderBar.querySelectorAll(".is-drop-target").forEach((el) => el.classList.remove("is-drop-target"));
+      }
+    });
+    libFolderBar.addEventListener("drop", async (e) => {
+      const target = e.target.closest?.("[data-folder-drop]");
+      if (!target) return;
+      e.preventDefault();
+      libFolderBar.querySelectorAll(".is-drop-target").forEach((el) => el.classList.remove("is-drop-target"));
+      const id = dragClipId || e.dataTransfer.getData("text/plain");
+      dragClipId = null;
+      if (!id) return;
+      const moved = await Folders.move(id, target.dataset.folderDrop);   // emits
+      if (moved) Desk.toast(target.dataset.folderDrop ? `Filed in ${target.querySelector(".lib-fold-name")?.textContent || "the folder"}.` : "Unfiled.", "good");
     });
     /**
      * Where the thing you are dragging will land.
@@ -4853,28 +5107,51 @@ export const Editor = (() => {
      * an audio item is the lane it lands on, not a different kind of record.
      */
     audioInput.addEventListener("change", async () => {
-      const lane = lanes.filter((l) => l.kind === "audio").at(-1) || addLane("audio");
       for (const file of audioInput.files) {
-        const clip = await Clips.save(file, { name: file.name.replace(/\.[^.]+$/, ""), kind: "audio" });
-        byId.set(clip.id, clip);
-        lane.items.push({
-          uid: `au-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-          clipId: clip.id,
-          name: clip.name,
-          at: playhead,
-          in: 0,
-          out: clip.duration || 10,
-          speed: 1,
-          gain: 1,
+        const clip = await Clips.save(file, {
+          name: file.name.replace(/\.[^.]+$/, ""),
+          kind: "audio",
+          folder: isFolder(libFolder) ? libFolder : null,
         });
+        byId.set(clip.id, clip);
+        addSoundAt(clip, playhead);
       }
       audioInput.value = "";
       refresh();
     });
 
+    /**
+     * Sound into the library, rather than onto a lane.
+     *
+     * The only way in used to be the timeline's own "+ Audio", which makes a
+     * lane, opens the picker and drops whatever you chose at the playhead. That
+     * is one thing to want. The other is a shelf of sound effects you keep
+     * around and reach for later, which is what a library is for, so the
+     * importer beside the clips leaves the timeline alone.
+     */
+    libAudioInput.addEventListener("change", async () => {
+      const files = [...libAudioInput.files];
+      for (const file of files) {
+        await Clips.save(file, {
+          name: file.name.replace(/\.[^.]+$/, ""),
+          kind: "audio",
+          folder: isFolder(libFolder) ? libFolder : null,
+        });
+      }
+      libAudioInput.value = "";
+      if (files.length) Desk.toast(`${files.length} sound${files.length === 1 ? "" : "s"} in the library.`, "good");
+    });
+
     fileInput.addEventListener("change", async () => {
-      for (const file of fileInput.files) {
-        await Clips.save(file, { name: file.name.replace(/\.[^.]+$/, ""), kind: "import" });
+      const files = [...fileInput.files];
+      for (const file of files) {
+        await Clips.save(file, {
+          name: file.name.replace(/\.[^.]+$/, ""),
+          kind: "import",
+          // Imported into whichever folder is open, because filing it
+          // afterwards is the step that never happens.
+          folder: isFolder(libFolder) ? libFolder : null,
+        });
       }
       fileInput.value = "";
       Desk.toast("Imported.", "good");
@@ -5040,12 +5317,29 @@ export const Editor = (() => {
     }
 
     body.addEventListener("change", (e) => {
+      if (e.target.matches?.("[data-folder-rename-input]")) {
+        return void commitFolderRename(e.target.dataset.folderRenameInput, e.target.value);
+      }
       if (e.target.matches?.("[data-lib-rename-input]")) {
         return void commitLibRename(e.target.dataset.libRenameInput, e.target.value);
       }
       if (e.target.matches?.("[data-rename-input]")) commitRename(e.target.value);
     });
     body.addEventListener("keydown", (e) => {
+      if (e.target.matches?.("[data-folder-rename-input]")) {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          commitFolderRename(e.target.dataset.folderRenameInput, e.target.value);
+        }
+        if (e.key === "Escape") {
+          // The desktop closes the top window on Escape. Naming a folder is
+          // not a reason to lose the editor, so this one stops here.
+          e.stopPropagation();
+          folderRenaming = null;
+          renderLibrary();
+        }
+        return;
+      }
       if (e.target.matches?.("[data-lib-rename-input]")) {
         if (e.key === "Enter") {
           e.preventDefault();
@@ -5067,6 +5361,7 @@ export const Editor = (() => {
     const offCuts = onCuts(() => renderCuts());
     const offTranscripts = onTranscripts(() => renderWords());
     const off = Store.on("clips", renderLibrary);
+    const offFolders = Store.on("libfolders", renderLibrary);
 
     /**
      * Redraw what was measured, when the measurement changes.
@@ -5096,6 +5391,7 @@ export const Editor = (() => {
       sizeWatch?.disconnect();
       cancelAnimationFrame(resizeFrame);
       off();
+      offFolders();
       offGraphics();
       offComposition();
       offCuts();
