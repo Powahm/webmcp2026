@@ -1200,7 +1200,10 @@ body {
   /* The three panels are grid tracks driven by custom properties, so the
      resize grips are one property write each and the layout does the rest. */
   grid-template-columns: var(--ed-lib, 152px) minmax(0, 1fr) var(--ed-insp, 220px);
-  grid-template-rows: minmax(0, 1fr) var(--ed-tl, auto);
+  /* The second track is minmax'd so shrinking the window takes height off
+     the timeline instead of collapsing the viewer to nothing against a
+     pinned pixel height from a previous drag. */
+  grid-template-rows: minmax(0, 1fr) minmax(0, var(--ed-tl, auto));
   grid-template-areas: "lib stage insp" "tl tl tl";
   overflow: hidden;
 }

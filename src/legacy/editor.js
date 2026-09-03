@@ -448,7 +448,9 @@ export const Editor = (() => {
      */
     const PANES = {
       lib:  { prop: "--ed-lib",  axis: "x", min: 96,  max: 420, from: (r, e) => e.clientX - r.left },
-      insp: { prop: "--ed-insp", axis: "x", min: 150, max: 480, from: (r, e) => r.right - e.clientX },
+      // 176 rather than 150: below that the rail cannot fit its own three
+      // tabs, and a tab you cannot read is a panel you cannot reach.
+      insp: { prop: "--ed-insp", axis: "x", min: 176, max: 480, from: (r, e) => r.right - e.clientX },
       tl:   { prop: "--ed-tl",   axis: "y", min: 120, max: 620, from: (r, e) => r.bottom - e.clientY },
     };
 
@@ -3794,8 +3796,33 @@ export const Editor = (() => {
     const offTranscripts = onTranscripts(() => renderWords());
     const off = Store.on("clips", renderLibrary);
 
+    /**
+     * Redraw what was measured, when the measurement changes.
+     *
+     * Tick spacing, the playhead and the viewer's fit are all computed from a
+     * width read at render time, and nothing was watching that width. Resizing
+     * the window or dragging a pane grip therefore left the ruler labelled for
+     * the old size — ticks bunched up or spread out, and the playhead sitting
+     * off the second it claimed — until something else happened to re-render.
+     * Coalesced into one animation frame, because a drag fires this per pixel.
+     */
+    let resizeFrame = 0;
+    const onResized = () => {
+      cancelAnimationFrame(resizeFrame);
+      resizeFrame = requestAnimationFrame(() => {
+        ruler.innerHTML = rulerHtml();
+        paintPlayhead();
+        paintFrame();
+      });
+    };
+    const sizeWatch = typeof ResizeObserver === "function" ? new ResizeObserver(onResized) : null;
+    sizeWatch?.observe(field);
+    sizeWatch?.observe(screen);
+
     win.onCleanup(() => {
       document.removeEventListener("keydown", onShortcut);
+      sizeWatch?.disconnect();
+      cancelAnimationFrame(resizeFrame);
       off();
       offGraphics();
       offComposition();
