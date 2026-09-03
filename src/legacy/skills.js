@@ -204,6 +204,7 @@ export const Skills = (() => {
     Desk.openWindow({
       id: "skills",
       title: "Skills",
+      help: "skills",
       meta: `${SKILLS.length} skills`,
       tint: TINT,
       size: { w: 700, h: 480 },

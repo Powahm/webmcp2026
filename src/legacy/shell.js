@@ -96,7 +96,7 @@ export const Desk = (() => {
     };
   }
 
-  function openWindow({ id, title, meta = "", tint, size = { w: 560, h: 440 }, centered = false, origin, build, onClose }) {
+  function openWindow({ id, title, meta = "", tint, size = { w: 560, h: 440 }, centered = false, origin, help = "", build, onClose }) {
     const existing = windows.get(id);
     if (existing) {
       setWindowState(existing, "open");
@@ -136,6 +136,10 @@ export const Desk = (() => {
         </span>
         <h2 class="win-title">${esc(title)}</h2>
         <span class="win-meta mono">${esc(meta)}</span>
+        ${help
+          ? `<button class="win-help" data-act="help" aria-label="How ${esc(title)} works"
+                     title="How this works">?</button>`
+          : ""}
       </header>
       <div class="win-body"></div>
       <span class="win-resize" aria-hidden="true"></span>
@@ -149,7 +153,7 @@ export const Desk = (() => {
 
     desktop.appendChild(el);
 
-    const rec = { el, id, title, tint, restore: null, onClose, cleanups: [], visibility: [] };
+    const rec = { el, id, title, tint, help, restore: null, onClose, cleanups: [], visibility: [] };
     windows.set(id, rec);
 
     const body = $(".win-body", el);
@@ -265,6 +269,12 @@ export const Desk = (() => {
           ?.focus({ preventScroll: true });
       }
       if (act === "max") toggleMax(rec);
+      // Loaded when it is asked for. The tour knows about every window in the
+      // app, so importing it from the window manager at module scope would
+      // pull the whole desktop into the file that draws the desktop.
+      if (act === "help") {
+        import("../help/tours.js").then((m) => m.startHelp(rec.help));
+      }
     });
 
     bar.addEventListener("dblclick", (e) => {
@@ -536,6 +546,9 @@ export const Desk = (() => {
   }
 
   $("#spotlight-open").addEventListener("click", openSpotlight);
+  $("#help-open")?.addEventListener("click", () => {
+    import("../help/tours.js").then((m) => m.startHelp("system"));
+  });
   spotInput.addEventListener("input", (e) => renderSpotlight(e.target.value));
   spotResults.addEventListener("click", (e) => {
     const li = e.target.closest(".sp-item");

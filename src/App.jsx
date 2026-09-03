@@ -66,6 +66,12 @@ export default function App() {
             <span>Search</span>
             <kbd className="mono">⌘K</kbd>
           </button>
+          {/* The way in for someone who has just arrived. It runs the same
+              tour as the question mark in a window's title bar, but for the
+              machine as a whole rather than for one window. */}
+          <button className="chip help-chip" id="help-open" title="How this works" aria-label="How this works">
+            ?
+          </button>
           <button
             className="chip icon-chip"
             id="theme-toggle"

@@ -227,6 +227,7 @@ export const Readme = (() => {
     Desk.openWindow({
       id: "readme",
       title: "Readme",
+      help: "readme",
       meta: `${DOCS.length} documents`,
       tint: TINT,
       size: { w: 660, h: 460 },
@@ -323,6 +324,14 @@ export function boot() {
   Desk.renderIcons();
 
   /* launcher sources: docs, scripts, clips */
+
+  Desk.addSearchSource(() => [
+    {
+      name: "How this works", where: "Guided tour", tint: "#F54E00",
+      text: "help tour tutorial guide walkthrough what is this getting started",
+      run: () => import("../help/tours.js").then((m) => m.startHelp("system")),
+    },
+  ]);
 
   Desk.addSearchSource(() =>
     Readme.DOCS.map((d) => ({

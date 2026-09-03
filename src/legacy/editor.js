@@ -5423,6 +5423,7 @@ export const Editor = (() => {
     return Desk.openWindow({
       id: "editor",
       title: "Editor",
+      help: "editor",
       meta: "timeline",
       tint: TINT,
       size: "large",

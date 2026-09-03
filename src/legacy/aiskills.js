@@ -48,6 +48,17 @@ export const markLoaded = (id) => {
 export const loadedAt = (id) => loaded.get(id) || null;
 
 /**
+ * Put the open window back on its list.
+ *
+ * The guided tour points at a card and at the list around it, and a window
+ * left on one skill's page has neither. Rather than the tour reaching into the
+ * window's markup, or pressing its Back button on its behalf, the window lends
+ * out the one function that does it and takes it back when it closes.
+ */
+let backToList = () => {};
+export const showSkillsList = () => backToList();
+
+/**
  * Read YAML frontmatter, shallowly.
  *
  * Deliberately not a YAML parser. A skill's frontmatter is a handful of
@@ -451,6 +462,7 @@ export function open(origin) {
   Desk.openWindow({
     id: "aiskills",
     title: "AI Skills",
+    help: "aiskills",
     meta: "for the agent",
     tint: TINT,
     size: { w: 760, h: 620 },
@@ -492,9 +504,16 @@ export function open(origin) {
         render();
       };
       const showList = () => {
+        const from = view.id;
         view = { mode: "list", id: null, editing: false, draft: null, caret: null };
-        render();
+        // Focus follows the way you came. Without this, leaving a skill drops
+        // focus on the document and the next Tab starts at the menubar again.
+        render().then(() => {
+          const back = list.querySelector(`[data-open-skill="${from}"]`) || body.querySelector('[data-act="add"]');
+          back?.focus({ preventScroll: true });
+        });
       };
+      backToList = showList;
       const cancelEdit = () => {
         view.editing = false;
         view.draft = null;
@@ -751,7 +770,7 @@ export function open(origin) {
 
       const off = onAiSkills(render);
       const offStore = Store.on("aiskills", render);
-      win.onCleanup(() => { off(); offStore(); });
+      win.onCleanup(() => { off(); offStore(); backToList = () => {}; });
 
       render();
     }

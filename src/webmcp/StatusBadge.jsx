@@ -68,6 +68,7 @@ export default function StatusBadge() {
     <div className="relative">
       <button
         className="chip"
+        id="webmcp-status"
         aria-expanded={open}
         aria-label={`WebMCP status: ${label}`}
         title="Whether an agent can see this page, and whether one has used it"

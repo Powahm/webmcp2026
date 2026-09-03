@@ -285,6 +285,7 @@ export const Scripts = (() => {
     Desk.openWindow({
       id: `script:${script.id}`,
       title: script.name,
+      help: "script",
       meta: timecode(runtime(script)),
       tint: TINT,
       size: "large",
@@ -686,6 +687,7 @@ export const Scripts = (() => {
     Desk.openWindow({
       id: "scripts",
       title: "Scripts",
+      help: "scripts",
       meta: "",
       tint: TINT,
       size: "large",

@@ -550,6 +550,7 @@ export const Camera = (() => {
     Desk.openWindow({
       id: "camera",
       title: "Camera",
+      help: "camera",
       meta: "live",
       tint: TINT,
       size: { w: 760, h: 700 },

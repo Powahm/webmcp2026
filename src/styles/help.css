@@ -1,0 +1,118 @@
+/* ============================================================
+   The guided tour: the dim, the hole in it, and the card.
+   ============================================================ */
+
+/*
+ * The dimming is a box shadow rather than four panels or an SVG mask.
+ * A shadow is painted and never laid out, so the whole screen darkens for the
+ * cost of one rectangle, the edge stays hard the way every other edge in this
+ * app is hard, and moving the highlight is four property writes.
+ */
+
+.tour { position: fixed; inset: 0; z-index: 800; }
+
+/* Transparent, because the shadow above it is already the dim. It exists to
+   swallow clicks: a tour that lets you press the button it is describing ends
+   somewhere it did not plan to go. */
+.tour-block { position: absolute; inset: 0; cursor: pointer; }
+
+/* Except on a step with nothing to point at, where there is no shadow and this
+   has to be the dim itself. */
+.tour[data-hole="false"] .tour-block {
+  background: color-mix(in srgb, var(--ink) 55%, transparent);
+}
+
+.tour-hole {
+  position: fixed;
+  pointer-events: none;
+  border: var(--bw) solid var(--accent);
+  border-radius: var(--radius-s);
+  box-shadow: 0 0 0 9999px color-mix(in srgb, var(--ink) 55%, transparent);
+  transition: left .24s var(--ease-out), top .24s var(--ease-out),
+              width .24s var(--ease-out), height .24s var(--ease-out);
+}
+.tour-hole[hidden] { display: none; }
+
+.tour-card {
+  position: fixed;
+  width: min(340px, calc(100vw - 24px));
+  padding: 13px 14px 11px;
+  background: var(--surface);
+  border: var(--bw) solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 6px 6px 0 var(--shadow);
+}
+.tour-card:focus-visible { outline: 3px solid var(--blue); outline-offset: 2px; }
+
+.tour-count {
+  margin: 0 0 5px;
+  font-size: 9.5px;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.tour-title {
+  margin: 0 0 6px;
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -.015em;
+  text-wrap: balance;
+  color: var(--text);
+}
+.tour-text { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--text); }
+
+.tour-acts { display: flex; align-items: center; gap: 6px; margin-top: 12px; }
+.tour-gap { flex: 1; }
+.tour-acts .btn[disabled] { opacity: .45; cursor: default; }
+
+/* A small beak, so the card reads as belonging to the thing above or below it
+   rather than floating near it by accident. */
+.tour-card::before {
+  content: "";
+  position: absolute;
+  left: calc(50% - 7px);
+  width: 12px; height: 12px;
+  background: var(--surface);
+  border: var(--bw) solid var(--line);
+  transform: rotate(45deg);
+}
+.tour-card[data-place="below"]::before { top: -7px; border-width: var(--bw) 0 0 var(--bw); }
+.tour-card[data-place="above"]::before { bottom: -7px; border-width: 0 var(--bw) var(--bw) 0; }
+.tour-card[data-place="middle"] {
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+.tour-card[data-place="middle"]::before { display: none; }
+
+/* The question mark that starts it: one in every window's title bar, one in
+   the menubar for the machine as a whole. */
+.win-help {
+  flex: none;
+  width: 20px; height: 20px;
+  margin-left: 8px;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text-muted);
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.win-help:hover { color: var(--text); background: var(--accent-soft); }
+.win-help:active { transform: translate(1px, 1px); }
+
+.help-chip {
+  padding: 0 9px;
+  font-family: var(--font-display);
+  font-weight: 700;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tour-hole { transition: none; }
+}
