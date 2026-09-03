@@ -489,6 +489,26 @@ export function reseat(owner, { shiftFrames = 0, startFrame = 0, endFrame = 0, s
   emit();
 }
 
+/**
+ * Put the whole composition back to a state the person was in before.
+ *
+ * The Editor's undo has to restore what a timeline edit took with it -- the
+ * elements that went when their motion graphics clip was deleted, the frames a
+ * cut shifted -- and that state lives here, not there. It takes the same
+ * trusted gesture every other decision in this file takes, so undo is a
+ * person's click like accepting is, and there is still no route from a tool to
+ * a state the person did not click their way into.
+ */
+export function restoreComposition(next, gesture) {
+  if (!trusted(gesture)) return denied("undo an edit");
+  if (!next || !Array.isArray(next.layers) || !Array.isArray(next.audio)) {
+    return { ok: false, error: "That is not a composition." };
+  }
+  doc = { ...emptyComposition(), ...next, layers: next.layers.slice(), audio: next.audio.slice() };
+  emit();
+  return { ok: true };
+}
+
 /** The clip is gone. Anything it still owns goes back to standing on its own. */
 export function disown(owner) {
   let touched = false;

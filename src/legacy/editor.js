@@ -47,6 +47,7 @@ import {
   adoptInside,
   reseat,
   disown,
+  restoreComposition,
 } from "../comp/store.js";
 import { applyCut, onCuts, pendingCuts, proposeCut, rejectCut, retime, settle } from "../cuts/store.js";
 import { FILLERS, findDeadWeight, toCutTime } from "../transcript/transcript.js";
@@ -76,6 +77,10 @@ export const Editor = (() => {
   let timeline = [];
   let selected = null;
   let refresh = () => {};
+  /** Remember the cut before changing it. Assigned by the open window, the
+   *  same way `refresh` is, because the undo stack lives with the window and
+   *  `addClip` and `addBlank` out here have to be able to push onto it. */
+  let mark = () => {};
 
   /**
    * Lanes above and below the spine.
@@ -170,6 +175,7 @@ export const Editor = (() => {
   async function addClip(clipId, { select = true } = {}) {
     const clip = (await Clips.all()).find((c) => c.id === clipId);
     if (!clip) return null;
+    mark();
     byId.set(clip.id, clip);
     const seg = {
       uid: `seg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -199,6 +205,7 @@ export const Editor = (() => {
    * case beyond "there is no picture to draw".
    */
   function addBlank({ seconds = 5, colour = null, select = true } = {}) {
+    mark();
     const seg = {
       uid: `seg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       clipId: null,
@@ -315,6 +322,8 @@ export const Editor = (() => {
             <button class="btn btn-mini ed-page" data-page-to="edit" aria-pressed="true">Edit</button>
             <button class="btn btn-mini ed-page" data-page-to="motion" aria-pressed="false" hidden>Motion</button>
           </div>
+          <button class="btn btn-mini" data-act="undo" title="Undo the last timeline edit (Ctrl+Z)" disabled>Undo</button>
+          <button class="btn btn-mini" data-act="redo" title="Redo the last undone edit (Ctrl+Shift+Z)" disabled>Redo</button>
           <button class="btn btn-mini" data-act="clear">Clear</button>
         </div>
         <div class="cmp-pane" id="pane-track" data-pane="track" tabindex="0">
@@ -696,6 +705,7 @@ export const Editor = (() => {
     let floatNo = 0;
 
     function addFloatingClip({ at = 0, seconds = 5, title = "Overlay" } = {}) {
+      mark();
       const clip = {
         id: `mcf-${Date.now().toString(36)}-${(floatNo++).toString(36)}`,
         title,
@@ -863,6 +873,109 @@ export const Editor = (() => {
      */
     let scope = null;
     const scopeClip = () => (scope ? motionClips().find((c) => c.id === scope) || null : null);
+
+    /* ------------------------------------------------------------- history */
+
+    /**
+     * Undo and redo, over the cut.
+     *
+     * What it covers is the timeline: adding, trimming, moving, splitting,
+     * reordering and deleting clips, and the cuts accepted off the transcript.
+     * A snapshot carries the composition along with it, because a timeline
+     * edit takes composition state with it -- deleting a motion graphics clip
+     * deletes the elements inside it, and an accepted cut re-times every layer
+     * after it. Putting the spine back without them would put a clip back
+     * empty, which is not the state anyone asked to return to.
+     *
+     * What it deliberately does not cover is the composition on its own.
+     * Accepting a proposal is not an undo step: there is a Reject beside every
+     * one of them, and a stack that could quietly un-accept something a person
+     * chose is a worse answer than the button already sitting there.
+     *
+     * Deep copies, not references. `timeline` is mutated in place all over
+     * this file, so a snapshot holding the same objects would rewrite itself
+     * as the edit it exists to remember goes past.
+     */
+    const HISTORY_DEPTH = 50;
+    const history = { past: [], future: [] };
+
+    const clone = (value) =>
+      (typeof structuredClone === "function"
+        ? structuredClone(value)
+        : JSON.parse(JSON.stringify(value)));
+
+    const snapshot = () => ({
+      timeline: clone(timeline),
+      lanes: clone(lanes),
+      floats: clone(floats),
+      comp: clone(composition()),
+      selected,
+    });
+
+    /** Whether two snapshots are the same edit. Cheap, and it keeps a press
+     *  that moved nothing off the stack -- selecting a clip is not an edit. */
+    const same = (a, b) =>
+      JSON.stringify([a.timeline, a.lanes, a.floats, a.comp])
+      === JSON.stringify([b.timeline, b.lanes, b.floats, b.comp]);
+
+    function push(snap) {
+      history.past.push(snap);
+      if (history.past.length > HISTORY_DEPTH) history.past.shift();
+      history.future.length = 0;
+      renderHistory();
+    }
+
+    mark = () => push(snapshot());
+
+    /* A drag decides whether it was an edit at the end of it rather than the
+       start: a pointerdown that only selected a clip must not cost a step. */
+    let gestureSnap = null;
+    const markGesture = () => { gestureSnap = snapshot(); };
+    function settleGesture() {
+      const before = gestureSnap;
+      gestureSnap = null;
+      if (before && !same(before, snapshot())) push(before);
+    }
+
+    function restoreSnapshot(snap, e) {
+      timeline = clone(snap.timeline);
+      lanes = clone(snap.lanes);
+      floats = clone(snap.floats);
+      selected = snap.selected;
+      scope = null;
+      loaded = null;
+      restoreComposition(clone(snap.comp), e);
+      renderHistory();
+      return rebuildTranscript().then(() => {
+        refresh();
+        seekTo(Math.min(playhead, total()));
+      });
+    }
+
+    function undo(e) {
+      if (!history.past.length) return void Desk.toast("Nothing to undo.", "bad");
+      history.future.push(snapshot());
+      const snap = history.past.pop();
+      renderHistory();
+      Desk.toast("Undone", "good");
+      restoreSnapshot(snap, e);
+    }
+
+    function redo(e) {
+      if (!history.future.length) return void Desk.toast("Nothing to redo.", "bad");
+      history.past.push(snapshot());
+      const snap = history.future.pop();
+      renderHistory();
+      Desk.toast("Redone", "good");
+      restoreSnapshot(snap, e);
+    }
+
+    function renderHistory() {
+      const u = body.querySelector('[data-act="undo"]');
+      const r = body.querySelector('[data-act="redo"]');
+      if (u) u.disabled = history.past.length === 0;
+      if (r) r.disabled = history.future.length === 0;
+    }
 
     /**
      * Double click, counted by hand.
@@ -2980,6 +3093,7 @@ export const Editor = (() => {
       if (!cut) return;
       if (!(gesture?.isTrusted || gesture?.nativeEvent?.isTrusted)) return;
 
+      mark();
       const result = applyCut(timeline, cut);
       timeline = result.timeline;
       if (!timeline.some((s) => s.uid === selected)) selected = null;
@@ -3263,11 +3377,14 @@ export const Editor = (() => {
       if (act === "scope-out") return void leaveScope();
       if (act === "scope-text") return void addInScope("text", e);
       if (act === "scope-shape") return void addInScope("shape", e);
-      if (act === "add-lane") { addLane("video"); Desk.toast("Video lane added. Drag a clip onto it.", "good"); return refresh(); }
-      if (act === "add-audio") { addLane("audio"); audioInput.click(); return refresh(); }
+      if (act === "add-lane") { mark(); addLane("video"); Desk.toast("Video lane added. Drag a clip onto it.", "good"); return refresh(); }
+      if (act === "add-audio") { mark(); addLane("audio"); audioInput.click(); return refresh(); }
       if (act === "export") return runExport();
       if (act === "cancel-export") { cancelled = true; return; }
+      if (act === "undo") return void undo(e);
+      if (act === "redo") return void redo(e);
       if (act === "clear") {
+        mark();
         timeline = [];
         lanes = [];
         floats = [];
@@ -3625,6 +3742,22 @@ export const Editor = (() => {
     function onShortcut(e) {
       if (!editorFocused()) return;
       if (e.target.closest?.("input, textarea, select")) return;
+
+      /**
+       * Undo and redo, before the modifier guard below.
+       *
+       * Everything else here is a bare key, so the guard exists to keep the
+       * browser's own chords working. These two are chords by definition and
+       * have to be read first. Shift+Z and Ctrl+Y are both spelled, because
+       * half the editors in the world use one and half the other.
+       */
+      const chord = e.metaKey || e.ctrlKey;
+      if (chord && !e.altKey && (e.key === "z" || e.key === "Z" || e.key === "y" || e.key === "Y")) {
+        e.preventDefault();
+        const forward = e.key === "y" || e.key === "Y" || e.shiftKey;
+        return void (forward ? redo(e) : undo(e));
+      }
+
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const frame = 1 / (composition().fps || 30);
       const step = e.shiftKey ? 1 : frame;
@@ -3824,6 +3957,8 @@ export const Editor = (() => {
 
     function beginGesture(e) {
       if (e.button !== 0) return;
+      // Taken before anything moves; discarded at the end if nothing did.
+      markGesture();
       // A real control inside the timeline is still a control. Swallowing its
       // pointerdown here — which the scrub branch does, to stop the drag
       // selecting text — also swallows its click.
@@ -3976,9 +4111,10 @@ export const Editor = (() => {
     }
 
     function endGesture() {
-      if (!gesture) return;
+      if (!gesture) { gestureSnap = null; return; }
       const was = gesture;
       gesture = null;
+      settleGesture();
       if (was.type === "scrub" && wasPlaying) { wasPlaying = false; play(); return; }
       if (was.type === "trim" && was.segUid) rebuildTranscript().then(refresh);
       else refresh();
@@ -4327,6 +4463,7 @@ export const Editor = (() => {
      * composition are satisfied by it exactly as a button press would be.
      */
     function deleteSelected(e) {
+      mark();
       if (!selected) return;
 
       // A staged cut is a suggestion like any other, and it was the one kind
@@ -4407,6 +4544,7 @@ export const Editor = (() => {
       if (source <= seg.in + 0.08 || source >= seg.out - 0.08) {
         return Desk.toast("Too close to the edge of the clip to split.", "bad");
       }
+      mark();
       const tail = { ...seg, uid: `seg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, in: source };
       // Two clips now, so who owns what has to be asked again. Releasing the
       // contents lets each half adopt the elements that land in it on the next
