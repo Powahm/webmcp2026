@@ -871,7 +871,7 @@
 }
 .tl-zoomwrap { margin-left: auto; display: flex; align-items: center; gap: 7px; }
 .tl-zoom-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .07em; }
-.tl-zoom { width: 108px; }
+.tl-zoom { width: 108px; accent-color: var(--accent); }
 
 /* Both axes scroll. Vertical was hidden, which meant a track with more lanes
    than fitted simply lost the ones at the bottom with nothing to say so. */
@@ -918,6 +918,11 @@
   background: var(--surface);
   border-bottom: var(--bw) solid var(--line);
   cursor: pointer;
+  /* The last tick's label is set from its own left edge, same as every other
+     tick, so right at the end of the timeline it has nowhere to grow but past
+     100% -- which was enough on its own to give an otherwise unzoomed
+     timeline a horizontal scrollbar it did not need. */
+  overflow: hidden;
 }
 .tl-tick { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--line); opacity: .55; }
 .tl-tick i { position: absolute; left: 4px; top: 2px; font-size: 9.5px; font-style: normal; color: var(--text-muted); white-space: nowrap; }
@@ -954,7 +959,13 @@
   cursor: pointer;
 }
 .tl-lane-x:hover { color: #fff; background: var(--red, #D9432A); }
-.tl-lane-body { position: relative; height: 100%; min-height: inherit; }
+/* A clip's minimum width keeps a razor-thin segment (a proposed edit is
+   often the shortest thing on the spine) grabbable and its label legible,
+   even when its true percentage width would round to a sliver. Off the
+   right edge of a lane that floor has nowhere to go but past 100%, and
+   with nothing clipping it, that fraction of a clip was enough to give the
+   whole timeline a horizontal scrollbar it did not otherwise need. */
+.tl-lane-body { position: relative; height: 100%; min-height: inherit; overflow: hidden; }
 .tl-lane--spine .tl-lane-body { min-height: 56px; }
 .tl-lane:not(.tl-lane--spine) .tl-lane-body { min-height: 46px; }
 
@@ -1587,6 +1598,36 @@ body.agent-working::after { opacity: 1; animation: agent-edge 1.9s ease-in-out i
   border-radius: 2px 2px 5px 5px;
 }
 .tl-item.is-dragging { opacity: .4; }
+
+/* ---- right-click menu ---- */
+
+.tl-ctx-menu {
+  position: fixed;
+  z-index: 900;
+  display: flex;
+  flex-direction: column;
+  min-width: 160px;
+  padding: 4px;
+  background: var(--surface);
+  border: var(--bw) solid var(--line);
+  border-radius: var(--radius-s);
+  box-shadow: 3px 3px 0 var(--shadow);
+}
+.tl-ctx-item {
+  all: unset;
+  box-sizing: border-box;
+  cursor: pointer;
+  padding: 7px 10px;
+  border-radius: 4px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--text);
+}
+.tl-ctx-item:hover, .tl-ctx-item:focus-visible {
+  background: var(--accent-soft);
+  outline: none;
+}
+.tl-ctx-item[data-danger="true"] { color: var(--accent); }
 
 /* ---- renaming, in place ---- */
 

@@ -40,6 +40,11 @@
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-spring: cubic-bezier(0.34, 1.4, 0.5, 1);
   --menubar-h: 48px;
+
+  /* Without this, a browser-drawn control that isn't styled by hand -- a
+     native scrollbar track, a form control's chrome -- renders for
+     whatever the OS prefers rather than the theme actually on screen. */
+  color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -66,10 +71,12 @@
     --green-dk:    #2A7A3A;
 
     --wp-scrim:    #171922;
+    color-scheme: dark;
   }
 }
 
 :root[data-theme="dark"] {
+  color-scheme: dark;
   --ground:      #171922;
   --ground-2:    #12141B;
   --surface:     #2B2F3D;
@@ -110,6 +117,20 @@ body {
 }
 
 .mono { font-family: var(--font-mono); }
+
+/*
+ * Nothing is selectable by default. A desktop is not a document: dragging
+ * across a folder's subtitle or a clip's label should not paint it blue, and
+ * a stray double-click should not highlight a button's own text. The one
+ * exception is anywhere a person is actually writing — the script draft, the
+ * research notes, every text field — which stays fully selectable, because
+ * that is prose, not chrome.
+ */
+* { -webkit-user-select: none; user-select: none; }
+:where(input, textarea, [contenteditable]) {
+  -webkit-user-select: text;
+  user-select: text;
+}
 
 /* ---------------- focus work ---------------- */
 
@@ -1099,7 +1120,9 @@ body {
   overflow: hidden;
 }
 
-.cam-video { width: 100%; height: 100%; object-fit: cover; display: block; transform: scaleX(-1); }
+/* contain, not cover: resizing the window should letterbox the picture,
+   never crop it out of view. */
+.cam-video { width: 100%; height: 100%; object-fit: contain; display: block; transform: scaleX(-1); }
 
 .cam-blocked {
   position: absolute;
@@ -1543,7 +1566,7 @@ body {
 .file-art--new::after { display: none; }
 
 /* an author display rule outranks the UA [hidden] rule, so these need saying */
-.cam-blocked[hidden], .cam-rec[hidden], .prompter[hidden], .cam-hint[hidden] { display: none; }
+.cam-blocked[hidden], .cam-rec[hidden], .cam-hint[hidden] { display: none; }
 
 /* ============================================================
    Script editor: spoken lines, not code
@@ -1641,55 +1664,35 @@ body {
 
 /* ============================================================
    Teleprompter
+   A real window, like Camera or the Editor — so it can sit open
+   beside Camera instead of one blocking modal swallowing the desktop.
    ============================================================ */
 
-.prompter { position: fixed; inset: 0; z-index: 700; }
-
-.prompter-scrim { position: absolute; inset: 0; background: rgba(10, 12, 17, .82); backdrop-filter: blur(3px); }
-
-.prompter-panel {
-  position: relative;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  width: min(860px, 92vw);
-  height: min(76vh, 640px);
-  margin: 8vh auto 0;
-  background: var(--surface);
-  border: var(--bw) solid var(--line);
-  border-radius: var(--radius);
-  box-shadow: 8px 8px 0 var(--shadow);
+.win[data-win="prompter"] .win-body {
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
-  animation: pop .26s var(--ease-spring) both;
+  padding: 0;
 }
 
-.prompter-head, .prompter-foot {
+.prompter-foot {
   flex: none;
   display: flex;
   align-items: center;
   gap: 9px;
   padding: 10px 14px;
   background: var(--surface-2);
+  border-top: var(--bw) solid var(--line);
+  justify-content: center;
 }
-.prompter-head { border-bottom: var(--bw) solid var(--line); }
-.prompter-foot { border-top: var(--bw) solid var(--line); justify-content: center; }
 
-.prompter-title {
-  margin-right: auto;
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 15px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .prompter-speed { min-width: 44px; text-align: center; font-size: 12.5px; color: var(--text-muted); }
 
 .prompter-scroll {
-  position: relative;
-  height: 100%;
+  flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 20vh 8% 28vh;
+  padding: 18% 8% 22%;
   scroll-behavior: auto;
 }
 
@@ -1697,7 +1700,7 @@ body {
   margin: 0 0 30px;
   font-family: var(--font-display);
   font-weight: 600;
-  font-size: clamp(24px, 3.4vw, 38px);
+  font-size: clamp(20px, 3vw, 32px);
   line-height: 1.34;
   text-wrap: balance;
   color: var(--text-muted);
@@ -1707,6 +1710,5 @@ body {
 .prompter-line[data-now="true"] { color: var(--text); opacity: 1; }
 
 @media (max-width: 760px) {
-  .prompter-panel { width: 100%; height: 100%; margin: 0; border-radius: 0; border: none; }
   .line { grid-template-columns: 40px minmax(0, 1fr) 24px; }
 }

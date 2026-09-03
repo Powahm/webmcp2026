@@ -184,7 +184,7 @@ export const Editor = (() => {
     return last ? { seg: last, offset: segDuration(last), start: acc - segDuration(last) } : null;
   }
 
-  async function addClip(clipId, { select = true } = {}) {
+  async function addClip(clipId, { select = true, at = timeline.length } = {}) {
     const clip = (await Clips.all()).find((c) => c.id === clipId);
     if (!clip) return null;
     mark();
@@ -198,7 +198,8 @@ export const Editor = (() => {
       speed: 1,
       muted: false
     };
-    timeline.push(seg);
+    const i = Math.max(0, Math.min(at, timeline.length));
+    timeline.splice(i, 0, seg);
     if (select) selected = seg.uid;
     await retimeTranscript();
     refresh();
@@ -1679,26 +1680,59 @@ export const Editor = (() => {
     /* Dragging on the picture. */
     let onFrame = null;
 
-    /** Only intercept clicks when there is something on the picture to grab. */
+    /** Every movable graphic actually on screen at the playhead, in the order
+     *  they draw -- last is topmost, so a click hits whichever one is really
+     *  on top rather than whichever was clicked last. */
+    function movableLayersAtPlayhead() {
+      const frame = Math.round(playhead * (composition().fps || 30));
+      return liveLayers().filter((l) =>
+        MOVABLE.has(l.component) && frame >= l.from && frame < l.from + Math.max(1, l.durationInFrames)
+      );
+    }
+
+    /** Only intercept clicks when there is something on the picture to grab.
+     *  A graphic sitting in frame is a target to click even before it is
+     *  selected -- the background reframe drag yields to it either way. */
     function armFrameGrabs() {
       const layer = selectedLayer();
-      gfx.style.pointerEvents = layer && MOVABLE.has(layer.component) ? "auto" : "none";
+      const clickable = movableLayersAtPlayhead().length > 0 || (layer && MOVABLE.has(layer.component));
+      gfx.style.pointerEvents = clickable ? "auto" : "none";
       gfx.style.cursor = layer && MOVABLE.has(layer.component) ? "move" : "";
     }
 
+    function hitLayer(x, y, r) {
+      const inBox = (l) => {
+        const b = layerBox(l, r.width, r.height);
+        const nearCorner = Math.abs(x - (b.x + b.w)) < 12 && Math.abs(y - (b.y + b.h)) < 12;
+        const inside = x >= b.x - 6 && x <= b.x + b.w + 6 && y >= b.y - 6 && y <= b.y + b.h + 6;
+        return (inside || nearCorner) ? { nearCorner } : null;
+      };
+
+      // The already-selected layer gets first refusal, so grabbing its resize
+      // corner still works even when another graphic overlaps it nearby.
+      const current = selectedLayer();
+      if (current && MOVABLE.has(current.component)) {
+        const hit = inBox(current);
+        if (hit) return { layer: current, ...hit };
+      }
+      const layers = movableLayersAtPlayhead();
+      for (let i = layers.length - 1; i >= 0; i--) {
+        const hit = inBox(layers[i]);
+        if (hit) return { layer: layers[i], ...hit };
+      }
+      return null;
+    }
+
     gfx.addEventListener("pointerdown", (e) => {
-      const layer = selectedLayer();
-      if (!layer || !MOVABLE.has(layer.component)) return;
       const r = gfx.getBoundingClientRect();
-      const b = layerBox(layer, r.width, r.height);
       const x = e.clientX - r.left;
       const y = e.clientY - r.top;
 
-      const nearCorner = Math.abs(x - (b.x + b.w)) < 12 && Math.abs(y - (b.y + b.h)) < 12;
-      const inside = x >= b.x - 6 && x <= b.x + b.w + 6 && y >= b.y - 6 && y <= b.y + b.h + 6;
-      if (!inside && !nearCorner) return;
+      const hit = hitLayer(x, y, r);
+      if (!hit) return;
+      if (hit.layer.id !== selected) select(hit.layer.id);
 
-      onFrame = { id: layer.id, mode: nearCorner ? "size" : "move", x, y, rect: r };
+      onFrame = { id: hit.layer.id, mode: hit.nearCorner ? "size" : "move", x, y, rect: r };
       gfx.setPointerCapture?.(e.pointerId);
       e.preventDefault();
     });
@@ -3928,10 +3962,27 @@ export const Editor = (() => {
 
     /** The nearest cut between two clips, for a spine drop. */
     function nearestSeam(at) {
-      const seams = [0];
+      return seams(at).time;
+    }
+
+    /** Same search, but as a splice index into `timeline` rather than a time —
+     *  seam 0 is the very start, so dropping there inserts at index 0 instead
+     *  of always landing after the last clip. */
+    function nearestSeamIndex(at) {
+      return seams(at).index;
+    }
+
+    function seams(at) {
+      const marks = [0];
       let acc = 0;
-      for (const seg of timeline) { acc += segDuration(seg); seams.push(acc); }
-      return seams.reduce((best, sm) => (Math.abs(sm - at) < Math.abs(best - at) ? sm : best), 0);
+      for (const seg of timeline) { acc += segDuration(seg); marks.push(acc); }
+      let index = 0;
+      let best = Math.abs(marks[0] - at);
+      for (let i = 1; i < marks.length; i++) {
+        const d = Math.abs(marks[i] - at);
+        if (d < best) { best = d; index = i; }
+      }
+      return { time: marks[index], index };
     }
 
     function showDrop(e) {
@@ -3990,8 +4041,10 @@ export const Editor = (() => {
         }
       }
       if (dragClipId && (laneId === "spine" || !laneId)) {
+        const clipId = e.dataTransfer.getData("text/plain") || "";
+        const at = laneId === "spine" ? nearestSeamIndex(timeAtPointer(e)) : timeline.length;
         dragClipId = null;
-        await addClip(e.dataTransfer.getData("text/plain") || "");
+        await addClip(clipId, { at });
         await rebuildTranscript();
         return refresh();
       }
@@ -4287,6 +4340,112 @@ export const Editor = (() => {
     tl.addEventListener("pointerup", endGesture);
     tl.addEventListener("pointercancel", endGesture);
 
+    /* ---------------- right-click menu ---------------- */
+
+    let ctxMenuEl = null;
+
+    function closeCtxMenu() {
+      if (!ctxMenuEl) return;
+      ctxMenuEl.remove();
+      ctxMenuEl = null;
+      document.removeEventListener("pointerdown", onCtxOutside, true);
+      document.removeEventListener("keydown", onCtxEscape, true);
+    }
+    function onCtxOutside(e) {
+      if (ctxMenuEl && !ctxMenuEl.contains(e.target)) closeCtxMenu();
+    }
+    function onCtxEscape(e) {
+      if (e.key === "Escape") closeCtxMenu();
+    }
+
+    /** A small menu of actions for whatever was right-clicked, so split,
+     *  duplicate and delete do not require hunting down a keyboard shortcut
+     *  or scrolling the inspector to find the right button. */
+    function openCtxMenu(x, y, actions) {
+      closeCtxMenu();
+      const menu = document.createElement("div");
+      menu.className = "tl-ctx-menu";
+      menu.setAttribute("role", "menu");
+      menu.innerHTML = actions
+        .map((a, i) => `<button class="tl-ctx-item" role="menuitem" data-ctx="${i}" data-danger="${!!a.danger}">${Desk.esc(a.label)}</button>`)
+        .join("");
+      menu.style.left = `${x}px`;
+      menu.style.top = `${y}px`;
+      document.body.appendChild(menu);
+      ctxMenuEl = menu;
+
+      // Kept on screen: a menu opened near the right or bottom edge should
+      // open leftward/upward instead of spilling off, same as a native one.
+      const r = menu.getBoundingClientRect();
+      if (r.right > window.innerWidth) menu.style.left = `${Math.max(4, x - r.width)}px`;
+      if (r.bottom > window.innerHeight) menu.style.top = `${Math.max(4, y - r.height)}px`;
+
+      menu.addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-ctx]");
+        if (!btn) return;
+        const action = actions[Number(btn.dataset.ctx)];
+        closeCtxMenu();
+        action?.run(e);
+      });
+      menu.querySelector(".tl-ctx-item")?.focus({ preventScroll: true });
+      // Registered after this event finishes, or the contextmenu event
+      // itself -- still bubbling -- would close the menu it just opened.
+      setTimeout(() => {
+        document.addEventListener("pointerdown", onCtxOutside, true);
+        document.addEventListener("keydown", onCtxEscape, true);
+      }, 0);
+    }
+
+    tl.addEventListener("contextmenu", (e) => {
+      if (e.target.closest("[data-grip], button, input, select")) return;
+
+      const segEl = e.target.closest("[data-seg]");
+      const itemEl = !segEl && e.target.closest("[data-item]");
+      const layerEl = !segEl && !itemEl && e.target.closest("[data-layer]");
+      const soundEl = !segEl && !itemEl && !layerEl && e.target.closest("[data-sound]");
+
+      let actions = null;
+
+      if (segEl) {
+        const seg = timeline.find((s) => s.uid === segEl.dataset.seg);
+        if (seg) {
+          select(seg.uid);
+          const at = timeAtPointer(e);
+          actions = [
+            { label: "Split here", run: () => splitSegAt(seg, at) },
+            { label: "Duplicate", run: () => duplicateSeg(seg) },
+            { label: "Delete", danger: true, run: (ev) => deleteSelected(ev) },
+          ];
+        }
+      } else if (itemEl) {
+        const lane = laneById(itemEl.dataset.lane);
+        const it = lane?.items.find((x) => x.uid === itemEl.dataset.item);
+        if (lane && it) {
+          select(it.uid);
+          actions = [
+            { label: "Duplicate", run: () => duplicateItem(lane, it) },
+            { label: "Delete", danger: true, run: (ev) => deleteSelected(ev) },
+          ];
+        }
+      } else if (layerEl) {
+        const layer = liveLayers().find((l) => l.id === layerEl.dataset.layer);
+        if (layer) {
+          select(layer.id);
+          actions = [{ label: "Delete", danger: true, run: (ev) => deleteSelected(ev) }];
+        }
+      } else if (soundEl) {
+        const a = liveAudio().find((x) => x.id === soundEl.dataset.sound);
+        if (a) {
+          select(a.id);
+          actions = [{ label: "Delete", danger: true, run: (ev) => deleteSelected(ev) }];
+        }
+      }
+
+      if (!actions) return;
+      e.preventDefault();
+      openCtxMenu(e.clientX, e.clientY, actions);
+    });
+
     const layerById = (id) => liveLayers().find((l) => l.id === id) || null;
 
     /**
@@ -4302,7 +4461,15 @@ export const Editor = (() => {
      */
     function clampToScope(from) {
       const c = scopeClip();
-      if (!c) return Math.max(0, from);
+      // A "loose" scope is a synthetic grouping drawn around whatever elements
+      // happen to sit near each other, not a real container: its bounds are
+      // read straight off the elements inside it, the one being dragged
+      // included. Clamping to that self-derived span pins the drag to
+      // wherever it already is, and dragging left -- which shrinks the
+      // bound at the same instant it is checked against it -- never moves at
+      // all. A loose element has no clip to escape, so it gets the same free
+      // range an unscoped drag does.
+      if (!c || c.kind === "loose") return Math.max(0, from);
       const fps = composition().fps || 30;
       const lo = Math.round(c.start * fps);
       const hi = Math.max(lo, Math.round(c.end * fps) - 1);
@@ -4602,8 +4769,16 @@ export const Editor = (() => {
     function splitAtPlayhead() {
       const at = segmentAt(playhead);
       if (!at || !at.seg) return Desk.toast("Nothing under the playhead.", "bad");
-      const seg = at.seg;
-      const source = seg.in + at.offset * (seg.speed || 1);
+      splitSegAt(at.seg, playhead);
+    }
+
+    /** Split a spine segment at a given second, rather than only ever at the
+     *  playhead -- what the right-click menu needs, since the clip a person
+     *  right-clicked is not always the one already playing. */
+    function splitSegAt(seg, seconds) {
+      const bounds = boundsOf(seg);
+      if (!bounds) return;
+      const source = seg.in + (seconds - bounds.start) * (seg.speed || 1);
       if (source <= seg.in + 0.08 || source >= seg.out - 0.08) {
         return Desk.toast("Too close to the edge of the clip to split.", "bad");
       }
@@ -4619,8 +4794,33 @@ export const Editor = (() => {
       seg.out = source;
       timeline.splice(timeline.indexOf(seg) + 1, 0, tail);
       selected = tail.uid;
-      Desk.toast(`Split at ${timecode(playhead)}`, "good");
+      Desk.toast(`Split at ${timecode(seconds)}`, "good");
       rebuildTranscript().then(refresh);
+    }
+
+    /** A copy of a spine clip, right after the original. Its own contents --
+     *  the layers and sounds a motion graphics clip owns -- start empty
+     *  rather than half-copied; duplicating those exactly is a bigger claim
+     *  than "put another one of these here" ought to make. */
+    function duplicateSeg(seg) {
+      mark();
+      const copy = { ...seg, uid: `seg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}` };
+      delete copy.anchor;
+      timeline.splice(timeline.indexOf(seg) + 1, 0, copy);
+      selected = copy.uid;
+      Desk.toast("Clip duplicated", "good");
+      rebuildTranscript().then(refresh);
+    }
+
+    /** A copy of a lane item, placed right after the original so the two
+     *  never start out stacked on top of each other. */
+    function duplicateItem(lane, it) {
+      mark();
+      const copy = { ...it, uid: `it-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, at: itemEnd(it) };
+      lane.items.push(copy);
+      selected = copy.uid;
+      Desk.toast("Item duplicated", "good");
+      refresh();
     }
 
     /**
@@ -4965,6 +5165,10 @@ export const Editor = (() => {
       // On top of everything, so the box you are dragging is never behind the
       // thing it is selecting.
       paintHandles(gfxCtx, w, h);
+
+      // Which graphics are on screen changes as the playhead moves, and so
+      // does whether the canvas should be catching clicks for them.
+      armFrameGrabs();
 
       gfxFrame = requestAnimationFrame(paintGraphics);
     }
