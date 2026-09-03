@@ -1142,6 +1142,12 @@ const Effect = {
 
 /** A number, kept inside its range, with a default for anything unusable. */
 function clampNum(v, lo, hi, fallback) {
+  // `Number(null)` is `0`, a perfectly finite number, so a field the caller
+  // left unset used to clamp to its floor (0 width, 0 opacity, ...) instead
+  // of falling back to the component's default. An element added with only
+  // its required fields -- the common case, from the palette buttons -- came
+  // out a fully transparent sliver: technically drawn, invisible either way.
+  if (v == null) return fallback;
   const n = Number(v);
   if (!Number.isFinite(n)) return fallback;
   return Math.max(lo, Math.min(hi, n));
