@@ -138,7 +138,14 @@ export const Desk = (() => {
         <span class="win-meta mono">${esc(meta)}</span>
       </header>
       <div class="win-body"></div>
-      <span class="win-resize" aria-hidden="true"></span>`;
+      <span class="win-resize" aria-hidden="true"></span>
+      <span class="win-edge" data-edge="n" aria-hidden="true"></span>
+      <span class="win-edge" data-edge="s" aria-hidden="true"></span>
+      <span class="win-edge" data-edge="e" aria-hidden="true"></span>
+      <span class="win-edge" data-edge="w" aria-hidden="true"></span>
+      <span class="win-edge" data-edge="ne" aria-hidden="true"></span>
+      <span class="win-edge" data-edge="nw" aria-hidden="true"></span>
+      <span class="win-edge" data-edge="sw" aria-hidden="true"></span>`;
 
     desktop.appendChild(el);
 
@@ -274,6 +281,29 @@ export const Desk = (() => {
       el.style.width = Math.max(320, start.w + dx) + "px";
       el.style.height = Math.max(220, start.h + dy) + "px";
     });
+
+    // Every edge and corner resizes, not only the bottom-right grip. Pulling
+    // the top or left edge moves the window by as much as it shrinks, so the
+    // opposite edge stays put, which is what makes it read as resizing rather
+    // than dragging. The minimum sizes are the ones the corner grip uses.
+    const MIN_W = 320, MIN_H = 220;
+    for (const grip of el.querySelectorAll(".win-edge")) {
+      const edge = grip.dataset.edge;
+      drag(grip, el, (dx, dy, start) => {
+        if (edge.includes("e")) el.style.width = Math.max(MIN_W, start.w + dx) + "px";
+        if (edge.includes("s")) el.style.height = Math.max(MIN_H, start.h + dy) + "px";
+        if (edge.includes("w")) {
+          const w = Math.max(MIN_W, start.w - dx);
+          el.style.width = w + "px";
+          el.style.left = start.x + (start.w - w) + "px";
+        }
+        if (edge.includes("n")) {
+          const h = Math.max(MIN_H, start.h - dy);
+          el.style.height = h + "px";
+          el.style.top = Math.max(0, start.y + (start.h - h)) + "px";
+        }
+      });
+    }
   }
 
   function toggleMax(rec) {

@@ -611,6 +611,20 @@ body {
   opacity: .55;
 }
 
+/* The resize edges. Invisible strips along every side and corner of the
+   window, wide enough to hit. The window clips its overflow, so they sit just
+   inside the 2px border: the border itself plus four pixels of the inside,
+   which is under the bar at the top and a margin everywhere else. The corner
+   grip at the bottom right keeps its drawn hatching. */
+.win-edge { position: absolute; touch-action: none; z-index: 3; }
+.win-edge[data-edge="n"] { top: 0; left: 14px; right: 14px; height: 6px; cursor: ns-resize; }
+.win-edge[data-edge="s"] { bottom: 0; left: 14px; right: 22px; height: 6px; cursor: ns-resize; }
+.win-edge[data-edge="e"] { right: 0; top: 14px; bottom: 22px; width: 6px; cursor: ew-resize; }
+.win-edge[data-edge="w"] { left: 0; top: 14px; bottom: 14px; width: 6px; cursor: ew-resize; }
+.win-edge[data-edge="ne"] { top: 0; right: 0; width: 14px; height: 14px; cursor: nesw-resize; }
+.win-edge[data-edge="nw"] { top: 0; left: 0; width: 14px; height: 14px; cursor: nwse-resize; }
+.win-edge[data-edge="sw"] { bottom: 0; left: 0; width: 14px; height: 14px; cursor: nesw-resize; }
+
 /* ---- file grid ---- */
 
 .filegrid {
@@ -941,7 +955,7 @@ body {
     z-index: 350;
   }
   .win-bar { cursor: default; height: 52px; }
-  .win-resize { display: none; }
+  .win-resize, .win-edge { display: none; }
   .doc { padding: 22px 20px 40px; }
 }
 
