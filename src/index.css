@@ -762,7 +762,17 @@
 
 /* --- the transcript --- */
 
-.trx { padding: 9px; display: grid; gap: 8px; }
+.trx { padding: 9px; display: grid; gap: 8px; min-width: 0; }
+/* The pane is a 150px rail. Anything in here that refuses to wrap (a button
+   label, the key row) widens the whole grid past the rail and the words look
+   unwrapped because the pane is scrolling sideways. Everything wraps. */
+.trx > * { min-width: 0; }
+.trx .btn { white-space: normal; text-align: left; line-height: 1.3; }
+.trx-words { overflow-wrap: anywhere; white-space: normal; }
+.trx-word { white-space: normal; }
+.trx-key { flex-wrap: wrap; }
+.trx-key input { flex: 1 1 100%; }
+.lib-pane[data-libpane="words"] { overflow-x: hidden; }
 
 .trx-meta {
   display: flex;
