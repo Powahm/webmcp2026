@@ -38,11 +38,6 @@
   inset: 0;
   margin: auto;
   pointer-events: none;
-  /* The clip's look is set on .ed-screen, and this canvas is a child of it.
-     Without this reset the preview grades the graphics and the export does
-     not, so a mono clip previews a grey title card and exports an orange one.
-     The whole point of one renderer is that the two cannot disagree. */
-  filter: none;
 }
 
 .gfx-list { margin: 0; padding: 8px; list-style: none; display: grid; gap: 8px; }
@@ -128,27 +123,34 @@
    suggestion is the thing your eye lands on. */
 .scr-doc[data-suggesting="true"] { background: color-mix(in srgb, var(--accent) 3%, var(--surface)); }
 
-/* ---- a line the agent wrote, sitting in the gap the draft opened ---- */
+/* ---- a line the agent wrote, floating over the draft it targets ---- */
 /*
- * No card. The document holds a blank row open at the insertion point and the
- * suggestion is drawn into it, on one line, at the draft's own line height —
- * so it reads as part of the page rather than as a panel over it, and two
- * suggestions can never overlap because each has a row of its own.
+ * A real card, not text laid straight over the page.
+ *
+ * This used to be one printed row at the draft's own line height, on the
+ * theory that the document held a blank line open for it — it never did, and
+ * a suggestion carries a note and a reason as well as the line itself, none
+ * of which fit in 22px. Squeezed into that box with no backing of its own,
+ * the card's text and the document's text underneath it blended into one
+ * illegible smear. It is opaque now and sized to what it actually holds, so
+ * it reads as a card sitting on the draft rather than a stain on it.
  */
 
-.scr-suggests { position: absolute; inset: 0; pointer-events: none; }
+.scr-suggests { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
 
 .scr-sugg {
   position: absolute;
-  left: 0;
+  left: 6px;
   right: 12px;
-  height: 22px;
+  max-width: 420px;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
-  padding-left: 12px;
-  font: 500 13px/22px var(--font-mono);
-  color: var(--accent);
+  padding: 8px 10px;
+  background: var(--surface);
+  border: var(--bw) dashed var(--accent);
+  border-radius: var(--radius-s);
+  box-shadow: 3px 3px 0 var(--shadow);
   pointer-events: auto;
   animation: sugg-in 240ms cubic-bezier(0.22, 1.2, 0.36, 1) both;
 }
@@ -158,40 +160,39 @@
   to   { opacity: 1; transform: none; }
 }
 
-/* Points up and left, at the line number this goes in under. */
-.scr-sugg-arrow {
+/* The mode glyph — insert or replace — as a small badge, not bare text lost
+   against the card. */
+.scr-sugg-rail {
   flex: none;
-  font-size: 15px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  font-size: 12px;
   line-height: 1;
-  opacity: 0.85;
-  transform: translateY(-1px);
+  color: #fff;
+  background: var(--accent);
+  border-radius: 999px;
 }
+
+.scr-sugg-main { flex: 1 1 auto; min-width: 0; display: grid; gap: 3px; }
 
 .scr-sugg-text {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  margin: 0;
+  font: 500 13px/1.4 var(--font-body);
+  color: var(--text);
+  overflow-wrap: anywhere;
 }
 
-.scr-sugg-acts { flex: none; display: flex; align-items: center; gap: 10px; opacity: 0; transition: opacity .12s; }
-.scr-sugg:hover .scr-sugg-acts,
-.scr-sugg:focus-within .scr-sugg-acts { opacity: 1; }
-
-.scr-sugg-btn {
-  border: 0;
-  background: transparent;
-  padding: 0;
-  font: 500 11px/1 var(--font-mono);
-  color: var(--accent);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  cursor: pointer;
+.scr-sugg-note, .scr-sugg-why {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
 }
-.scr-sugg-btn--no { font-size: 15px; text-decoration: none; color: var(--text-muted); }
-.scr-sugg-btn:hover { color: var(--text); }
-.scr-sugg-btn--no:hover { color: var(--red, #D9432A); }
+
+.scr-sugg-acts { flex: none; display: flex; align-items: center; gap: 8px; margin-top: 4px; }
 
 /* The gap row gets no number: it is not a line yet. */
 .scr-gap-no { visibility: hidden; }
@@ -734,7 +735,9 @@
   overflow-wrap: anywhere;
 }
 .cmp-item-why { margin: 0; font-size: 11px; color: var(--text-muted); line-height: 1.35; }
-.cmp-item-acts { display: flex; gap: 5px; margin-top: 2px; }
+/* A proposed sound carries three buttons — hear it, accept, reject — one more
+   than a layer ever does, so this wraps rather than overflowing a narrow rail. */
+.cmp-item-acts { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 2px; }
 
 .cmp-empty { margin: 0; padding: 10px 9px; font-size: 11.5px; color: var(--text-muted); line-height: 1.45; }
 

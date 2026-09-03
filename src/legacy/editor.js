@@ -1823,11 +1823,11 @@ export const Editor = (() => {
             <p class="cmp-item-text">${Desk.esc(what)}</p>
             ${a.reason ? `<p class="cmp-item-why">${Desk.esc(a.reason)}</p>` : ""}
             <div class="cmp-item-acts">
+              <button class="btn btn-mini" data-sound-play="${a.id}">${a.status === "proposed" ? "Hear it" : "Play"}</button>
               ${a.status === "proposed"
                 ? `<button class="btn btn-mini btn-accent" data-sound-accept="${a.id}">Accept</button>
                    <button class="btn btn-mini btn-danger" data-sound-reject="${a.id}">Reject</button>`
-                : `<button class="btn btn-mini" data-sound-play="${a.id}">Play</button>
-                   <button class="btn btn-mini btn-danger" data-sound-remove="${a.id}">Remove</button>`}
+                : `<button class="btn btn-mini btn-danger" data-sound-remove="${a.id}">Remove</button>`}
             </div>
           </li>`;
       };
@@ -2245,10 +2245,20 @@ export const Editor = (() => {
         ${transformFields(seg)}`;
     }
 
+    /** A field worth protecting from a mid-keystroke repaint: text you could
+     *  still be typing into, inside the rail. Anything else focused there —
+     *  a button included — is not something a repaint could lose. */
+    function isEditingField(el) {
+      if (!el || !insp.contains(el)) return false;
+      return el.matches?.("input, textarea") || el.isContentEditable === true;
+    }
+
     function renderInspector() {
+      // "trans" no longer names a tab of this rail's own — transitions moved
+      // to the left panel — so it is not a case here. clipPaneHtml() is left
+      // to answer for it, same as any other id it does not recognise.
       insp.innerHTML =
-        inspTab === "trans" ? transitionsPaneHtml()
-        : inspTab === "gfx" ? graphicsHtml()
+        inspTab === "gfx" ? graphicsHtml()
         : inspTab === "comp" ? compositionHtml()
         : clipPaneHtml();
       // A count on the tab, because a proposal behind a closed tab is a
@@ -2502,7 +2512,7 @@ export const Editor = (() => {
       if (at.seg.blank) {
         video.pause();
         loaded = null;
-        screen.style.filter = "";
+        video.style.filter = "";
         syncOverlays(playhead, { play });
         syncLaneAudio(playhead, { play });
         scheduler?.seek(playhead);
@@ -2526,7 +2536,12 @@ export const Editor = (() => {
 
       video.playbackRate = at.seg.speed;
       video.muted = at.seg.muted;
-      screen.style.filter = FILTERS[at.seg.filter] || "";
+      // On the video element, not `.ed-screen`. A CSS filter on an ancestor
+      // rasterises and grades its whole subtree — the graphics canvas
+      // included, and no `filter: none` on the canvas can opt back out of
+      // that, because it is the ancestor's composite being filtered, not
+      // the canvas's own paint. The clip's look belongs on the clip.
+      video.style.filter = FILTERS[at.seg.filter] || "";
       const target = at.seg.in + at.offset * at.seg.speed;
       if (Math.abs(video.currentTime - target) > 0.12) video.currentTime = target;
       if (play) await video.play().catch(() => {});
@@ -3138,7 +3153,19 @@ export const Editor = (() => {
       const yesCut = t.closest("[data-cut-accept]");
       if (yesCut) return void takeCut(yesCut.dataset.cutAccept, e);
       const noCut = t.closest("[data-cut-reject]");
-      if (noCut) return void rejectCut(noCut.dataset.cutReject, e);
+      if (noCut) {
+        const id = noCut.dataset.cutReject;
+        const result = rejectCut(id, e);
+        // Reject only reaches `onCuts`, which redraws the strip. If the same
+        // cut was open in the Clip tab — reachable from that panel's own
+        // "Keep it", not only the chip's — the rail never heard about it and
+        // sat there showing a decision that had already been made.
+        if (result.ok) {
+          if (selected === id) selected = null;
+          renderInspector();
+        }
+        return;
+      }
 
       const cutChip = t.closest("[data-cut]");
       if (cutChip) {
@@ -3433,13 +3460,14 @@ export const Editor = (() => {
     });
 
     body.addEventListener("click", (e) => {
-      // The cross-reference at the bottom of a panel. Switching tab from
-      // inside a pane is the same act as clicking the tab itself.
+      // The cross-reference at the bottom of a Clip panel. Transitions live
+      // in the left panel now, beside Library and Text — this used to point
+      // at a tab of its own on the right, which moved out from under it.
       const go = e.target.closest("[data-insp-go]");
       if (go) {
-        inspTab = go.dataset.inspGo;
-        renderInspector();
-        inspTabs.querySelector(`[data-insp="${inspTab}"]`)?.focus({ preventScroll: true });
+        libTab = "trans";
+        renderLib();
+        libTabs.querySelector('[data-lib="trans"]')?.focus({ preventScroll: true });
         return;
       }
 
@@ -4335,13 +4363,18 @@ export const Editor = (() => {
      * frame. Only where it lands differs.
      */
     const TEXT_KINDS = [
-      { component: "title_card", label: "Title card", props: { text: "Your title", subtext: "" }, position: "center" },
-      { component: "lower_third", label: "Lower third", props: { text: "Their name", subtext: "What they do" }, position: "lower_left" },
-      { component: "caption_pop", label: "Caption", props: { text: "Something said" }, position: "bottom_bar" },
-      { component: "quote_card", label: "Quote", props: { text: "A line worth pulling out" }, position: "center" },
-      { component: "bullet_list", label: "Bullet list", props: { items: ["First", "Second", "Third"] }, position: "center" },
-      { component: "stat_badge", label: "Stat", props: { text: "42%" }, position: "upper_right" },
-      { component: "text", label: "Plain text", props: { text: "Text" }, position: "center" },
+      // `font` is seeded to each component's own default rather than left
+      // unset. The draw functions fall back to the same value either way, but
+      // a font menu with nothing selected shows its first entry regardless of
+      // what is actually on screen — seeding it is what keeps the menu
+      // telling the truth from the moment the element lands.
+      { component: "title_card", label: "Title card", props: { text: "Your title", subtext: "", font: "displayHeavy" }, position: "center" },
+      { component: "lower_third", label: "Lower third", props: { text: "Their name", subtext: "What they do", font: "display" }, position: "lower_left" },
+      { component: "caption_pop", label: "Caption", props: { text: "Something said", font: "display" }, position: "bottom_bar" },
+      { component: "quote_card", label: "Quote", props: { text: "A line worth pulling out", font: "display" }, position: "center" },
+      { component: "bullet_list", label: "Bullet list", props: { items: ["First", "Second", "Third"], font: "body" }, position: "center" },
+      { component: "stat_badge", label: "Stat", props: { text: "42%", font: "displayHeavy" }, position: "upper_right" },
+      { component: "text", label: "Plain text", props: { text: "Text", font: "display" }, position: "center" },
     ];
 
     const SHAPE_KINDS = ["rect", "ellipse", "pill", "triangle", "line", "arrow", "ring", "star"];
@@ -4520,12 +4553,14 @@ export const Editor = (() => {
 
     function select(uid) {
       selected = uid;
-      // Selecting a thing means you want to look at it, so the rail follows —
-      // but Clip and Transitions are both views of the selection, so picking
-      // the next clip while setting transitions must not throw you back.
-      if (inspTab !== "clip" && inspTab !== "trans") inspTab = "clip";
+      // Selecting a thing means you want to look at it, so the rail follows.
+      if (inspTab !== "clip") inspTab = "clip";
       renderTrack();
       renderInspector();
+      // Transitions reads the same `selected`, but it lives in the left panel
+      // now and only `renderLib()` redraws it — without this, picking a
+      // different clip while that tab is open left it showing the last one.
+      if (libTab === "trans") renderLib();
       armFrameGrabs();
     }
 
@@ -4671,9 +4706,18 @@ export const Editor = (() => {
       repaint = requestAnimationFrame(() => {
         repaint = 0;
         // Typing in the text panel changes the composition, which fires this.
-        // Rebuilding the panel mid-sentence takes the caret with it, so the
-        // panel holding focus is left alone and repaints when focus leaves.
-        if (!insp.contains(document.activeElement)) renderInspector();
+        // Rebuilding the panel mid-sentence takes the caret with it, so a
+        // field being typed into is left alone and repaints once it is not.
+        //
+        // Narrowly: only an actual text field earns that protection. The
+        // first version checked `insp.contains(document.activeElement)`,
+        // which also matched a Reject button sitting there focused after its
+        // own click — nothing else ever nudges focus off a button, so the
+        // card it belonged to stayed on screen, fully stale, until something
+        // unrelated happened to move focus out of the rail. Rejecting a
+        // proposal is not typing, and its card is gone from the store the
+        // instant the click lands; the rail should agree just as fast.
+        if (!isEditingField(document.activeElement)) renderInspector();
         followProposals();
         // The lanes are drawn from the composition, so a staged layer or sound
         // has to reach the track too, not just the list.

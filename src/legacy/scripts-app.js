@@ -20,6 +20,24 @@ export const Scripts = (() => {
 
   const EXAMPLES = [
     {
+      id: "example-webmcp",
+      name: "WebMCP Challenge demo",
+      lines: [
+        { text: "This is Deskmate. A whole editing workstation, living in one browser tab.", note: "Straight to camera. Desktop visible behind you." },
+        { text: "You write the script here, read it off the teleprompter while you record, and cut what you shot.", note: "Screen: Scripts, then Camera, then Editor. Keep it moving — three seconds each." },
+        { text: "The interesting part is what the agent sitting next to me can see.", note: "Back to camera. Beat before the next line." },
+        { text: "Which line of the prompter I am on, mid-take. Whether the camera is rolling. What I have selected on the timeline.", note: "Screen: the ghost reading the page. Let the tool names show." },
+        { text: "None of that is on a server. It is a Blob in IndexedDB and an array in a closure.", note: "Hold on the Editor. Slow down here." },
+        { text: "So a server-side MCP cannot reach it, and an agent driving the DOM would be guessing from pixels.", note: "Land this one. It is the whole argument." },
+        { text: "Twenty-eight tools, registered straight onto the page.", note: "Screen: the badge in the menu bar, then the tool list." },
+        { text: "Watch. I ask for a title card over the bit where I stumbled.", note: "Type the ask on camera. Do not cut away." },
+        { text: "It composes the graphic, times it against the transcript, and puts it on the timeline dashed.", note: "Hold on the dashed proposal previewing live." },
+        { text: "Dashed means proposed. There is no tool that accepts one — that click is mine.", note: "Accept it on camera. Beat after." },
+        { text: "Nothing uploaded. No backend. Everything you just watched happened in this tab.", note: "Back to camera." },
+        { text: "Link is below. Go and break it.", note: "Point down. Hold two seconds for the outro." }
+      ]
+    },
+    {
       id: "example-intro",
       name: "Channel intro",
       lines: [
@@ -73,9 +91,40 @@ export const Scripts = (() => {
       });
     }
 
-    if (existing.length) return;
+    /*
+     * Seed per example, not all-or-nothing.
+     *
+     * The old check was `if (existing.length) return`, which meant an example
+     * added later never reached anybody who had already opened the app once —
+     * and the people who have opened it are exactly the ones a new example is
+     * written for. Offered ids are remembered instead, so a fresh one arrives
+     * and one you deleted stays deleted.
+     */
+    const offered = new Set(readOffered());
+    const byId = new Set(existing.map((s2) => s2.id));
+
     for (const [i, ex] of EXAMPLES.entries()) {
+      if (offered.has(ex.id) || byId.has(ex.id)) continue;
       await Store.put("scripts", { ...ex, created: Date.now() + i, updated: Date.now() + i });
+      offered.add(ex.id);
+    }
+    writeOffered([...offered]);
+  }
+
+  /** Which examples this browser has already been given. */
+  function readOffered() {
+    try {
+      return JSON.parse(localStorage.getItem("desk-examples") || "[]");
+    } catch {
+      return [];
+    }
+  }
+
+  function writeOffered(ids) {
+    try {
+      localStorage.setItem("desk-examples", JSON.stringify(ids));
+    } catch {
+      /* private mode: the worst case is an example offered twice */
     }
   }
 
