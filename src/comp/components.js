@@ -84,16 +84,18 @@ const TitleCard = {
     text: { type: "string", max: 90, note: "The headline. Six words is a headline; twenty is a paragraph." },
     subtext: { type: "string", max: 120, note: "One line under the headline." },
     eyebrow: { type: "string", max: 32, note: "A small tracked label above it: a chapter number, a section name." },
+    font: { type: "string", note: 'The headline\'s typeface. One of: display, displayHeavy, body, bodyBold, mono. Defaults to displayHeavy; the eyebrow and subtext keep their own weight.' },
   },
   draw(ctx, f) {
     const { width: W, height: H, scale: s, props, colour, pal, frame, durationInFrames: D } = f;
     const { enter, exit } = phase(frame, D, { enter: 14, exit: 12, easing: f.easing });
     const alpha = Math.min(enter, exit);
     const rise = (1 - enter) * 40 * s;
+    const family = FONTS[props.font] ? props.font : "displayHeavy";
 
     scrim(ctx, W, H, pal.ink, alpha * 0.82);
 
-    const lines = wrap(ctx, props.text, W * 0.78, { family: "displayHeavy", size: 76, scale: s });
+    const lines = wrap(ctx, props.text, W * 0.78, { family, size: 76, scale: s });
     const lh = 88 * s;
     let y = H / 2 - ((lines.length - 1) * lh) / 2 + rise;
 
@@ -105,7 +107,7 @@ const TitleCard = {
 
     for (const line of lines) {
       label(ctx, line, W / 2, y, {
-        family: "displayHeavy", size: 76, colour: pal.surface, align: "center", baseline: "middle", alpha, scale: s,
+        family, size: 76, colour: pal.surface, align: "center", baseline: "middle", alpha, scale: s,
       });
       y += lh;
     }
@@ -138,13 +140,15 @@ const LowerThird = {
   fields: {
     text: { type: "string", max: 60, note: "The name. The big line." },
     subtext: { type: "string", max: 80, note: "The role, the title, the one-line description." },
+    font: { type: "string", note: "The name's typeface. One of: display, displayHeavy, body, bodyBold, mono. Defaults to display; the role line stays body." },
   },
   draw(ctx, f) {
     const { width: W, height: H, scale: s, props, colour, pal, frame, durationInFrames: D, fps, safe } = f;
     const { enter, exit } = phase(frame, D, { enter: 16, exit: 10, easing: f.easing });
     const slide = spring({ frame, fps, from: -0.35, to: 0, config: { damping: 14, stiffness: 150 } });
+    const family = FONTS[props.font] ? props.font : "display";
 
-    const nameW = measure(ctx, props.text, { family: "display", size: 46, scale: s });
+    const nameW = measure(ctx, props.text, { family, size: 46, scale: s });
     const roleW = props.subtext ? measure(ctx, props.subtext, { family: "body", size: 28, scale: s }) : 0;
     const padX = 34 * s;
     const w = Math.max(nameW, roleW) + padX * 2 + 14 * s;
@@ -169,7 +173,7 @@ const LowerThird = {
 
       const alpha = Math.min(enter, exit);
       label(ctx, props.text, x + padX, y + (props.subtext ? 52 : 48) * s, {
-        family: "display", size: 46, colour: pal.text, baseline: "middle", alpha, scale: s,
+        family, size: 46, colour: pal.text, baseline: "middle", alpha, scale: s,
       });
       if (props.subtext) {
         label(ctx, props.subtext, x + padX, y + 92 * s, {
@@ -200,10 +204,12 @@ const CaptionPop = {
       type: "number[]",
       note: "Optional. One frame number per word, from get_transcript, relative to this layer's start. Without it the words are spread evenly, which is close but never exact.",
     },
+    font: { type: "string", note: "One of: display, displayHeavy, body, bodyBold, mono. Defaults to display." },
   },
   draw(ctx, f) {
     const { width: W, height: H, scale: s, props, colour, pal, frame, durationInFrames: D, safe } = f;
     const { exit } = phase(frame, D, { enter: 4, exit: 8, easing: f.easing });
+    const family = FONTS[props.font] ? props.font : "display";
 
     const words = String(props.text ?? "").split(/\s+/).filter(Boolean);
     if (!words.length) return;
@@ -223,7 +229,7 @@ const CaptionPop = {
     const laid = [];
     let rowW = 0, row = 0;
     for (let i = 0; i < words.length; i++) {
-      const wWidth = measure(ctx, words[i], { family: "display", size, scale: s }) + padX * 2;
+      const wWidth = measure(ctx, words[i], { family, size, scale: s }) + padX * 2;
       if (rowW + wWidth > maxW && rowW > 0) { row++; rowW = 0; }
       laid.push({ word: words[i], row, x: rowW, w: wWidth, at: timings[i] });
       rowW += wWidth + gap;
@@ -255,7 +261,7 @@ const CaptionPop = {
           radius: 8, elevation: 4, scale: s, alpha: k * exit,
         });
         label(ctx, item.word, item.w / 2, chipH / 2, {
-          family: "display", size, align: "center", baseline: "middle",
+          family, size, align: "center", baseline: "middle",
           colour: current ? f.ink : pal.text,
           alpha: k * exit, scale: s,
         });
@@ -275,6 +281,7 @@ const BulletList = {
   fields: {
     text: { type: "string", max: 60, note: "Optional heading above the list." },
     items: { type: "string[]", max: 6, note: "The rows. Up to six, each short enough to read at a glance." },
+    font: { type: "string", note: "The rows' typeface. One of: display, displayHeavy, body, bodyBold, mono. Defaults to body; the optional heading stays display." },
   },
   draw(ctx, f) {
     const { width: W, height: H, scale: s, props, colour, pal, frame, durationInFrames: D, safe } = f;
@@ -287,9 +294,10 @@ const BulletList = {
     const padX = 44 * s;
     const padY = 40 * s;
     const headH = props.text ? 74 * s : 0;
+    const family = FONTS[props.font] ? props.font : "body";
 
     const widest = list.reduce(
-      (max, r) => Math.max(max, measure(ctx, r, { family: "body", size, scale: s })),
+      (max, r) => Math.max(max, measure(ctx, r, { family, size, scale: s })),
       props.text ? measure(ctx, props.text, { family: "display", size: 46, scale: s }) : 0
     );
     const w = Math.min(W * (1 - safe * 2), widest + padX * 2 + 54 * s);
@@ -322,7 +330,7 @@ const BulletList = {
       ctx.globalAlpha = 1;
 
       label(ctx, text, x + padX + 38 * s - slide, rowY, {
-        family: "body", size, colour: pal.text, baseline: "middle", alpha: k, scale: s,
+        family, size, colour: pal.text, baseline: "middle", alpha: k, scale: s,
       });
     });
   },
@@ -495,15 +503,17 @@ const StatBadge = {
   fields: {
     text: { type: "string", max: 24, note: "The figure, with its furniture: '40%', '$1.2M', '3×'. The number inside is what counts up." },
     subtext: { type: "string", max: 60, note: "What the number is of." },
+    font: { type: "string", note: "The figure's typeface. One of: display, displayHeavy, body, bodyBold, mono. Defaults to displayHeavy; the label under it stays body." },
   },
   draw(ctx, f) {
     const { width: W, height: H, scale: s, props, colour, pal, frame, durationInFrames: D, safe } = f;
     const { enter, exit } = phase(frame, D, { enter: 10, exit: 10, easing: f.easing });
     const k = clamp01(interpolate(frame, [0, D * 0.5], [0, 1], { easing: "out" }));
     const shown = countUp(props.text, k);
+    const family = FONTS[props.font] ? props.font : "displayHeavy";
 
     const size = 132;
-    const numW = measure(ctx, shown, { family: "displayHeavy", size, scale: s });
+    const numW = measure(ctx, shown, { family, size, scale: s });
     const subW = props.subtext ? measure(ctx, props.subtext, { family: "body", size: 30, scale: s }) : 0;
     const padX = 52 * s;
     const w = Math.max(numW, subW) + padX * 2;
@@ -519,7 +529,7 @@ const StatBadge = {
     });
 
     label(ctx, shown, x + w / 2, y + (props.subtext ? 118 : 100) * s, {
-      family: "displayHeavy", size, colour, align: "center", baseline: "middle", alpha, scale: s,
+      family, size, colour, align: "center", baseline: "middle", alpha, scale: s,
     });
 
     if (props.subtext) {
@@ -724,15 +734,17 @@ const QuoteCard = {
   fields: {
     text: { type: "string", max: 180, note: "The quote. No surrounding quote marks: the graphic draws one." },
     subtext: { type: "string", max: 60, note: "Who said it." },
+    font: { type: "string", note: "The quote's typeface. One of: display, displayHeavy, body, bodyBold, mono. Defaults to display; the mark and attribution keep their own weight." },
   },
   draw(ctx, f) {
     const { width: W, height: H, scale: s, props, colour, pal, frame, durationInFrames: D } = f;
     const { enter, exit } = phase(frame, D, { enter: 14, exit: 12, easing: f.easing });
     const alpha = Math.min(enter, exit);
+    const family = FONTS[props.font] ? props.font : "display";
 
     scrim(ctx, W, H, pal.ink, alpha * 0.72);
 
-    const lines = wrap(ctx, props.text, W * 0.7, { family: "display", size: 52, scale: s });
+    const lines = wrap(ctx, props.text, W * 0.7, { family, size: 52, scale: s });
     const lh = 66 * s;
     const top = H / 2 - (lines.length * lh) / 2;
 
@@ -744,7 +756,7 @@ const QuoteCard = {
     lines.forEach((line, i) => {
       const k = stagger(frame, i, { every: 4, over: 12 }) * exit;
       label(ctx, line, W / 2, top + i * lh + lh / 2, {
-        family: "display", size: 52, colour: pal.surface, align: "center", baseline: "middle",
+        family, size: 52, colour: pal.surface, align: "center", baseline: "middle",
         alpha: k, scale: s,
       });
     });
