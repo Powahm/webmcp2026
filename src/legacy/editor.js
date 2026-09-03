@@ -3881,7 +3881,7 @@ export const Editor = (() => {
         if (frames === 0) return;
         gesture.from = now;
         const a = liveAudio().find((x) => x.id === gesture.soundId);
-        if (a) editAudio(a.id, { from: a.from + frames }, e);
+        if (a) editAudio(a.id, { from: clampToScope(a.from + frames) }, e);
         renderTrack();
         return;
       }
@@ -4020,9 +4020,29 @@ export const Editor = (() => {
 
     const layerById = (id) => liveLayers().find((l) => l.id === id) || null;
 
+    /**
+     * Where an element's start is allowed to land.
+     *
+     * Ownership of an element is decided by nothing but its start second
+     * (`holds()`, above): drag one far enough that its start crosses the clip
+     * boundary and it stops belonging to the clip it was dragged out of,
+     * mid-gesture, with no clip catching it on the other side. It used to
+     * reappear on the main timeline as a clip of its own. Scoped into a clip,
+     * a drag's start is clamped to stay inside it -- the sub-timeline that
+     * opened is the only place the gesture is allowed to end up.
+     */
+    function clampToScope(from) {
+      const c = scopeClip();
+      if (!c) return Math.max(0, from);
+      const fps = composition().fps || 30;
+      const lo = Math.round(c.start * fps);
+      const hi = Math.max(lo, Math.round(c.end * fps) - 1);
+      return Math.max(lo, Math.min(hi, from));
+    }
+
     function nudgeLayer(id, frames, e) {
       const l = layerById(id);
-      if (l) editLayer(id, { from: l.from + frames }, e);
+      if (l) editLayer(id, { from: clampToScope(l.from + frames) }, e);
     }
 
     function stretchLayer(id, edge, frames, e) {
@@ -4030,7 +4050,7 @@ export const Editor = (() => {
       if (!l) return;
       if (edge === "in") {
         // Dragging the head moves the start and keeps the tail where it is.
-        const from = Math.max(0, l.from + frames);
+        const from = clampToScope(l.from + frames);
         editLayer(id, { from, durationInFrames: l.durationInFrames - (from - l.from) }, e);
       } else {
         editLayer(id, { durationInFrames: l.durationInFrames + frames }, e);
