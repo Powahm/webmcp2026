@@ -38,6 +38,8 @@ export const Readme = (() => {
           "Drag the Start and End sliders to trim, pick a look, press Export."
         ] },
         { t: "note", v: "No camera? Every app has an Import video button. The editor works the same on a file you already have." },
+        { t: "h", v: "Being shown around" },
+        { t: "p", v: "The **?** in the menubar walks the whole machine: it dims the screen, lights up each thing in turn and says what it is for. Every window's title bar has its own **?** for that window alone, in more detail. Arrow keys move through a tour, Escape leaves it." },
         { t: "h", v: "Keyboard" },
         { t: "ul", v: [
           "⌘K / Ctrl+K: search docs, skills, scripts and clips.",
@@ -78,10 +80,18 @@ export const Readme = (() => {
         { t: "lede", v: "A timeline of trimmed clips, each with its own look and speed." },
         { t: "h", v: "Layout" },
         { t: "ul", v: [
-          "**Library**, left: every clip you have recorded or imported.",
+          "**Library**, left: every clip you have recorded or imported, and every sound.",
           "**Preview**, centre: plays the timeline as one piece, not clip by clip.",
           "**Clip inspector**, right: trim, look, speed and sound for whatever is selected.",
           "**Timeline**, bottom: click to select, drag to reorder."
+        ] },
+        { t: "h", v: "The library" },
+        { t: "ul", v: [
+          "**Video** and **Audio** at the top bring files in. Sound lands in the library like anything else rather than going straight onto the timeline, so a shelf of effects can sit there until you want one.",
+          "**Folders** are the row of chips underneath. Press **+** to make one and name it on the spot; click one to show only what is in it.",
+          "Put a clip in a folder by dragging its card onto the chip, or with the folder button on the card itself.",
+          "Deleting a folder does not delete what was in it. The clips come back out into the library unfiled.",
+          "Clicking a video adds it to the end of the cut. Clicking a sound puts it on an audio lane at the playhead, because sound on the spine would be a clip with no picture."
         ] },
         { t: "h", v: "Looks" },
         { t: "p", v: "Six grades: none, mono, warm, cool, punch, faded. They are CSS filter strings in preview and the identical string on the canvas at export, so what you see is what is written." },
