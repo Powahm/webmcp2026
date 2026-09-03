@@ -19,7 +19,7 @@ import { Camera } from "./camera.js";
 import { createMixer, createScheduler, speechRanges } from "../comp/audio.js";
 import { generate } from "../comp/codegen.js";
 import { COMPONENT_INFO, SFX_PRESETS, validateLayer } from "../comp/composition.js";
-import { formatOf, toSeconds } from "../comp/engine.js";
+import { formatOf, keyedAt, toSeconds } from "../comp/engine.js";
 import { isolate, PALETTE_ROLES as COMP_ROLES, palette, POSITIONS as COMP_POSITIONS } from "../comp/paint.js";
 import { fitVideo, renderComposition } from "../comp/render.js";
 import {
@@ -596,6 +596,10 @@ export const Editor = (() => {
               <span class="tl-grip tl-grip--in" data-grip="in" data-layer="${l.id}"></span>
               <span class="tl-item-name">${Desk.esc(words.slice(0, 40))}</span>
               <span class="tl-item-time mono">${l.component}</span>
+              ${(l.keys ?? []).map((k) => {
+                const at = Math.max(0, Math.min(1, k.f / Math.max(1, l.durationInFrames)));
+                return `<span class="tl-key" style="left:${(at * 100).toFixed(2)}%"></span>`;
+              }).join("")}
               <span class="tl-grip tl-grip--out" data-grip="out" data-layer="${l.id}"></span>
             </div>`;
         }).join(""),
@@ -647,12 +651,24 @@ export const Editor = (() => {
 
     /** The layer's box on the preview, in canvas pixels. */
     function layerBox(layer, w, h) {
-      const p = layer.props?.point;
-      const cx = (p && Number.isFinite(p.x) ? p.x : 0.5) * w;
-      const cy = (p && Number.isFinite(p.y) ? p.y : 0.5) * h;
-      const bw = (Number(layer.props?.width) || 0.24) * w;
-      const bh = (Number(layer.props?.height) || 0.18) * h;
+      const p = layer.props?.point ?? {};
+      const cx = num(p.x, 0.5) * w;
+      const cy = num(p.y, 0.5) * h;
+      const bw = num(layer.props?.width, 0.24) * w;
+      const bh = num(layer.props?.height, 0.18) * h;
       return { cx, cy, w: bw, h: bh, x: cx - bw / 2, y: cy - bh / 2 };
+    }
+
+    /** The layer's props at the playhead, with its keyframes applied. */
+    function keyedNow(layer) {
+      const now = keyedAt(layer.keys, localFrame(layer), layer.easing);
+      if (!now) return layer.props ?? {};
+      return {
+        ...(layer.props ?? {}),
+        width: now.width,
+        height: now.height,
+        point: { x: now.x, y: now.y },
+      };
     }
 
     /** Draw the selection box and its corner. */
@@ -663,7 +679,8 @@ export const Editor = (() => {
       const f = Math.round(playhead * fps);
       if (f < layer.from || f > layer.from + layer.durationInFrames) return;
 
-      const b = layerBox(layer, w, h);
+      const shown = (layer.keys ?? []).length ? { ...layer, props: keyedNow(layer) } : layer;
+      const b = layerBox(shown, w, h);
       isolate(ctx, () => {
         ctx.strokeStyle = pal.accent;
         ctx.lineWidth = 1.5;
@@ -675,6 +692,59 @@ export const Editor = (() => {
           ctx.fillRect(hx - 4, hy - 4, 8, 8);
       });
     }
+
+    /* ---------------- keyframes ----------------
+     *
+     * A key is the layer's placement at one frame. Pressing Key writes where
+     * the graphic is now; moving the playhead and dragging it writes another,
+     * and between them the renderer interpolates. Two keys is an animation,
+     * which is the smallest honest version of this and the one a person can
+     * actually hold in their head.
+     */
+    const localFrame = (layer) => Math.round(playhead * (composition().fps || 30)) - layer.from;
+
+    /**
+     * A number, or the fallback.
+     *
+     * `Number(null)` is 0 and 0 is finite, so the obvious version of this
+     * quietly turned every unset field into zero — which for opacity meant a
+     * keyframed graphic animated perfectly and invisibly.
+     */
+    const num = (v, fallback) => {
+      if (v == null || v === "") return fallback;
+      const n = Number(v);
+      return Number.isFinite(n) ? n : fallback;
+    };
+
+    /** The layer's placement right now, as a key. */
+    function keyFrom(layer) {
+      const p = layer.props?.point ?? {};
+      return {
+        f: Math.max(0, localFrame(layer)),
+        x: num(p.x, 0.5),
+        y: num(p.y, 0.5),
+        width: num(layer.props?.width, 0.24),
+        height: num(layer.props?.height, 0.18),
+        rotation: num(layer.props?.rotation, 0),
+        opacity: num(layer.props?.opacity, 1),
+      };
+    }
+
+    /** Put a key at the playhead, replacing one already on that frame. */
+    function addKey(layer, e, patch = {}) {
+      const key = { ...keyFrom(layer), ...patch };
+      const keys = (layer.keys ?? []).filter((k) => k.f !== key.f).concat(key).sort((a, b) => a.f - b.f);
+      editLayer(layer.id, { keys }, e);
+      return keys;
+    }
+
+    function clearKeys(layer, e) {
+      editLayer(layer.id, { keys: [] }, e);
+      refresh();
+    }
+
+    /** The key sitting exactly on the playhead, if there is one. */
+    const keyHere = (layer) => (layer.keys ?? []).find((k) => k.f === Math.max(0, localFrame(layer))) || null;
 
     /* Dragging on the picture. */
     let onFrame = null;
@@ -714,23 +784,31 @@ export const Editor = (() => {
       const dy = (y - onFrame.y) / r.height;
       onFrame.x = x; onFrame.y = y;
 
-      const p = layer.props?.point ?? { x: 0.5, y: 0.5 };
-      if (onFrame.mode === "move") {
-        editLayer(layer.id, {
-          props: {
-            point: {
-              x: Math.max(0, Math.min(1, (Number(p.x) || 0.5) + dx)),
-              y: Math.max(0, Math.min(1, (Number(p.y) || 0.5) + dy)),
-            },
-          },
-        }, e);
+      const animated = (layer.keys ?? []).length > 0;
+      const nowKey = animated ? (keyHere(layer) ?? keyFrom(layer)) : null;
+      const p = animated ? nowKey : (layer.props?.point ?? { x: 0.5, y: 0.5 });
+      const curW = animated ? nowKey.width : num(layer.props?.width, 0.24);
+      const curH = animated ? nowKey.height : num(layer.props?.height, 0.18);
+
+      const next = onFrame.mode === "move"
+        ? {
+            x: Math.max(0, Math.min(1, num(p.x, 0.5) + dx)),
+            y: Math.max(0, Math.min(1, num(p.y, 0.5) + dy)),
+          }
+        : {
+            width: Math.max(0.02, Math.min(1.5, curW + dx * 2)),
+            height: Math.max(0.02, Math.min(1.5, curH + dy * 2)),
+          };
+
+      if (animated) {
+        // An animated layer is edited at the frame you are looking at, which
+        // is what makes dragging the way you author the motion rather than a
+        // thing that fights it.
+        addKey(layer, e, next);
+      } else if (onFrame.mode === "move") {
+        editLayer(layer.id, { props: { point: { x: next.x, y: next.y } } }, e);
       } else {
-        editLayer(layer.id, {
-          props: {
-            width: Math.max(0.02, Math.min(1.5, (Number(layer.props?.width) || 0.24) + dx * 2)),
-            height: Math.max(0.02, Math.min(1.5, (Number(layer.props?.height) || 0.18) + dy * 2)),
-          },
-        }, e);
+        editLayer(layer.id, { props: { width: next.width, height: next.height } }, e);
       }
     });
 
@@ -1056,6 +1134,15 @@ export const Editor = (() => {
             <span>On screen <b class="mono">${(layer.durationInFrames / fps).toFixed(1)}s</b></span>
             <input type="range" data-lmove="dur" min="0.3" max="20" step="0.1" value="${(layer.durationInFrames / fps).toFixed(1)}">
           </label>
+          ${MOVABLE.has(layer.component) ? `
+          <div class="ed-head"><span>Motion</span></div>
+          <p class="insp-hint">${(layer.keys ?? []).length
+            ? `${layer.keys.length} keyframe${layer.keys.length === 1 ? "" : "s"}. Move the playhead and drag it on the picture to add another.`
+            : "Put a key where it starts, move the playhead, then drag it. Two keys is an animation."}</p>
+          <div class="insp-keys">
+            <button class="btn btn-mini btn-accent" data-key="add">${keyHere(layer) ? "Update key" : "Key"}</button>
+            ${(layer.keys ?? []).length ? `<button class="btn btn-mini" data-key="clear">Clear</button>` : ""}
+          </div>` : ""}
           <button class="btn btn-danger btn-wide" data-ldrop="${layer.id}">Delete</button>
         </div>`;
     }
@@ -2065,6 +2152,16 @@ export const Editor = (() => {
     });
 
     insp.addEventListener("click", (e) => {
+      const keyBtn = e.target.closest("[data-key]");
+      if (keyBtn) {
+        const layer = liveLayers().find((l) => l.id === selected);
+        if (!layer) return;
+        if (keyBtn.dataset.key === "clear") return clearKeys(layer, e);
+        addKey(layer, e);
+        Desk.toast(`Key at ${timecode(playhead)}`, "good");
+        return void refresh();
+      }
+
       const lnone = e.target.closest("[data-lnone]");
       if (lnone) {
         const layer = liveLayers().find((l) => l.id === selected);

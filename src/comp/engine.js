@@ -284,3 +284,48 @@ export function phase(frame, durationInFrames, { enter = 10, exit = 10, easing =
 }
 
 export const clamp01 = (n) => Math.max(0, Math.min(1, Number(n) || 0));
+
+/**
+ * Keyframes.
+ *
+ * A layer can carry `keys`: a list of `{ f, ... }` where `f` is a frame
+ * relative to the layer's own start, and the rest are property values at that
+ * moment. Between two keys every listed number is interpolated; outside the
+ * first and last, the nearest key holds.
+ *
+ * This is deliberately not a general animation system. It moves, sizes, turns
+ * and fades what is already there, which is what a person means when they say
+ * "make it slide in and settle" — and it stays a pure function of the frame,
+ * so the export can still render frame 512 without having rendered 511.
+ */
+export const KEYABLE = ["x", "y", "width", "height", "opacity", "rotation"];
+
+export function keyedAt(keys, frame, easing = "out") {
+  if (!Array.isArray(keys) || keys.length === 0) return null;
+  const sorted = keys.slice().sort((a, b) => (a.f || 0) - (b.f || 0));
+  if (sorted.length === 1 || frame <= (sorted[0].f || 0)) return { ...sorted[0], f: undefined };
+  const last = sorted[sorted.length - 1];
+  if (frame >= (last.f || 0)) return { ...last, f: undefined };
+
+  let a = sorted[0];
+  let b = sorted[1];
+  for (let i = 0; i < sorted.length - 1; i++) {
+    if (frame >= (sorted[i].f || 0) && frame <= (sorted[i + 1].f || 0)) {
+      a = sorted[i]; b = sorted[i + 1];
+      break;
+    }
+  }
+  const span = Math.max(1, (b.f || 0) - (a.f || 0));
+  const t = easingOf(easing)(clamp01((frame - (a.f || 0)) / span));
+
+  const out = {};
+  for (const k of KEYABLE) {
+    const av = a[k];
+    const bv = b[k];
+    if (!Number.isFinite(av) && !Number.isFinite(bv)) continue;
+    const from = Number.isFinite(av) ? av : bv;
+    const to = Number.isFinite(bv) ? bv : av;
+    out[k] = from + (to - from) * t;
+  }
+  return out;
+}

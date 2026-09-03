@@ -97,6 +97,9 @@ export const getComposition = {
         palette_role: l.palette_role,
         easing: l.easing,
         props: l.props,
+        // Keyframes, so an agent can see what a person animated by hand and
+        // reason about it rather than proposing over the top of it.
+        keys: (l.keys ?? []).length ? l.keys : null,
         reason: l.reason,
         proposed_by: l.origin,
       })),

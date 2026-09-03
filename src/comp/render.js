@@ -15,7 +15,7 @@
  */
 
 import { componentFor } from "./components.js";
-import { activeAt, formatOf, FPS, resolve } from "./engine.js";
+import { activeAt, formatOf, FPS, keyedAt, resolve } from "./engine.js";
 import { isolate, palette, roleColour, roleInk, u } from "./paint.js";
 
 /**
@@ -37,6 +37,39 @@ const PROPOSED_ALPHA = 0.8;
  * against a 1080-tall frame and are scaled here, so one spec is correct at
  * both without knowing either exists.
  */
+/**
+ * A layer's props at one frame, with any keyframes applied.
+ *
+ * `x` and `y` fold back into `point`, because that is the field a component
+ * reads and a keyframe should not be a second way of saying where something
+ * is. With no keys this returns the props untouched and costs one comparison.
+ */
+function keyedProps(node, local) {
+  const base = node.props ?? {};
+  const keys = node.keys;
+  if (!Array.isArray(keys) || keys.length === 0) return base;
+
+  const now = keyedAt(keys, local, node.easing);
+  if (!now) return base;
+
+  const out = { ...base };
+  if (Number.isFinite(now.width)) out.width = now.width;
+  if (Number.isFinite(now.height)) out.height = now.height;
+  if (Number.isFinite(now.rotation)) out.rotation = now.rotation;
+  if (Number.isFinite(now.opacity)) out.opacity = now.opacity;
+  if (Number.isFinite(now.x) || Number.isFinite(now.y)) {
+    const p = base.point ?? {};
+    out.point = {
+      x: Number.isFinite(now.x) ? now.x : (Number(p.x) || 0.5),
+      y: Number.isFinite(now.y) ? now.y : (Number(p.y) || 0.5),
+    };
+  }
+  // A keyframed layer animates from its keys, so the component's own entrance
+  // would fight it. Anything with keys is told to hold still and be placed.
+  if (out.animation == null) out.animation = "none";
+  return out;
+}
+
 export function renderComposition(ctx, opts = {}) {
   const {
     width,
@@ -80,9 +113,14 @@ export function renderComposition(ctx, opts = {}) {
       ctx.textBaseline = "alphabetic";
       ctx.lineJoin = "round";
 
+      // Keyframes are resolved here rather than in each component, so every
+      // graphic gains them at once and none of them has to know they exist.
+      const local = frame - entry.from;
+      const props = keyedProps(node, local);
+
       try {
         component.draw(ctx, {
-          frame: frame - entry.from,
+          frame: local,
           durationInFrames: entry.durationInFrames,
           fps,
           width,
@@ -90,7 +128,7 @@ export function renderComposition(ctx, opts = {}) {
           scale,
           safe,
           pal,
-          props: node.props ?? {},
+          props,
           position: node.position ?? component.defaults.position,
           role,
           colour: roleColour(role, pal),

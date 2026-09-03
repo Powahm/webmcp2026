@@ -285,6 +285,7 @@ export function editLayer(layerId, patch, gesture) {
     palette_role: patch.palette_role ?? target.palette_role,
     // A component change replaces the props outright: the fields differ per
     // component, and merging leaves the old one's fields hanging off the new.
+    keys: patch.keys ?? target.keys,
     props: patch.props
       ? (patch.component && patch.component !== target.component
           ? patch.props
