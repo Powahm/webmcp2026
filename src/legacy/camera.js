@@ -234,7 +234,7 @@ export const Camera = (() => {
           <p class="cam-blocked-msg"></p>
           <button class="btn btn-ghost" data-act="retry">Try again</button>
         </div>
-        <div class="cam-rec" hidden><span class="cam-dot"></span><span class="cam-time mono">0:00</span></div>
+        <div class="cam-rec" hidden><span class="cam-dot"></span><span class="cam-time mono">00:00:00</span></div>
 
         <!-- The teleprompter, over the preview rather than over the desktop.
              Tailwind utilities with the theme's own custom properties, so it
@@ -450,7 +450,7 @@ export const Camera = (() => {
         if (prompt.script) prompt.marks.push({ line: prompt.line, at: 0 });
         shutter.dataset.recording = "true";
         shutter.setAttribute("aria-label", "Stop recording");
-        recTime.textContent = "0:00";
+        recTime.textContent = "00:00:00";
         recBadge.hidden = false;
       } catch (err) {
         Desk.toast(describeError(err), "bad");

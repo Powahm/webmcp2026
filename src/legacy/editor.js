@@ -273,7 +273,7 @@ export const Editor = (() => {
             <svg class="ico-pause" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 2.5h3v11h-3zM8.5 2.5h3v11h-3z"/></svg>
           </button>
           <input class="scrub" type="range" min="0" max="1000" value="0" aria-label="Playhead">
-          <span class="ed-clock mono">0:00 / 0:00</span>
+          <span class="ed-clock mono">00:00:00 / 00:00:00</span>
           <button class="btn btn-accent" data-act="export">Export</button>
         </div>
       </section>

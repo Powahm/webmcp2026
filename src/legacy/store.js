@@ -216,10 +216,19 @@ export const Clips = (() => {
   };
 })();
 
-/* seconds -> 0:07 / 1:04 */
+/**
+ * seconds -> 00:00:07 / 00:01:04 / 01:12:30
+ *
+ * Fixed width, hours first, so a duration never changes shape as it grows and
+ * two durations stacked in a list line up on the same digits. Two hour digits
+ * carry a ten hour take, which is longer than anything this app can record in
+ * one go, and the pad is unconditional because a column of `9:59` above
+ * `10:00` is the misreading this replaced.
+ */
+export const pad2 = (n) => String(Math.floor(Math.max(0, n))).padStart(2, "0");
+
 export function timecode(seconds) {
   if (!Number.isFinite(seconds) || seconds < 0) seconds = 0;
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${String(s).padStart(2, "0")}`;
+  const whole = Math.floor(seconds);
+  return `${pad2(whole / 3600)}:${pad2((whole % 3600) / 60)}:${pad2(whole % 60)}`;
 }

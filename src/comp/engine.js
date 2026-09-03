@@ -55,9 +55,8 @@ export const toSeconds = (frames, fps = FPS) => (Number(frames) || 0) / fps;
 export function frameCode(frame, fps = FPS) {
   const f = Math.max(0, Math.round(Number(frame) || 0));
   const total = Math.floor(f / fps);
-  const mins = Math.floor(total / 60);
-  const secs = total % 60;
-  return `${mins}:${String(secs).padStart(2, "0")}.${String(f % fps).padStart(2, "0")}`;
+  const pad = (n) => String(Math.floor(Math.max(0, n))).padStart(2, "0");
+  return `${pad(total / 3600)}:${pad((total % 3600) / 60)}:${pad(total % 60)}.${pad(f % fps)}`;
 }
 
 /* ----------------------------------------------------------------- easings */
