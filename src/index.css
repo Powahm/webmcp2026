@@ -15,6 +15,7 @@
 @import "tailwindcss/utilities.css";
 
 @import "./styles/desk.css";
+@import "./styles/modern.css";
 
 /*
  * React needs a mount node, and the original markup put the menubar, the
