@@ -4,6 +4,7 @@ import { allFolders, offerFolder } from "../folders/offered.js";
 import { proposalsFor, proposeLine } from "../scripts/proposals.js";
 import { allSkills, loadedAt, markLoaded, matchSkills } from "../legacy/aiskills.js";
 import { currentSignals } from "../skills/signals.js";
+import { framed as framedIn, secure } from "../env/browser.js";
 import { Camera } from "../legacy/camera.js";
 import { Editor } from "../legacy/editor.js";
 import { Scripts } from "../legacy/scripts-app.js";
@@ -82,7 +83,7 @@ async function skillNudge() {
 export const getDesktopState = {
   name: "get_desktop_state",
   description:
-    "Return which apps and folders exist on this desktop, which windows are open, and which one has focus. Call it first: what the user is looking at decides whether they are writing, filming or editing, and a note about the timeline is useless to someone standing in front of a camera.",
+    "Return which apps and folders exist on this desktop, which windows are open, and which one has focus, plus what this browser lets the page do. Call it first: what the user is looking at decides whether they are writing, filming or editing, and a note about the timeline is useless to someone standing in front of a camera.",
   inputSchema: NO_INPUT,
   annotations: READ_ONLY,
   execute: async () => {
@@ -93,6 +94,19 @@ export const getDesktopState = {
       apps: Desk.catalogue(),
       windows,
       focused: focused ? { id: focused.id, title: focused.title } : null,
+      // Whether the page is in a frame decides what it is allowed to do at
+      // all: a page inside somebody else's frame is not given the camera, the
+      // microphone or the directory picker unless that page passed them down.
+      // Without this an agent asked why recording does nothing can only guess,
+      // and the answer is not in any of the other tools.
+      browser: {
+        in_a_frame: framedIn(),
+        secure_context: secure(),
+        can_record: Boolean(navigator.mediaDevices?.getUserMedia),
+        note: framedIn()
+          ? "This page is inside another page's frame. The camera, the microphone and the folder picker are only available if that page passed them down; if recording or adding a folder does nothing, say so and suggest opening this address in a tab of its own."
+          : undefined,
+      },
       note: windows.length
         ? undefined
         : "Nothing is open. Use open_app, or ask what they are working on.",
