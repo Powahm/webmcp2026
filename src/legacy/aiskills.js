@@ -1,5 +1,6 @@
 import { Store } from "./store.js";
 import { Desk } from "./shell.js";
+import DESIGNED from "../skills/motion-graphics-that-look-designed.md?raw";
 
 /**
  * AI Skills — instructions this page hands to whatever agent is reading it.
@@ -248,7 +249,7 @@ onto the same second is the failure this file exists to prevent.
 ## Space: two elements never share a position
 
 Positions are \`upper_left\`, \`upper_right\`, \`lower_left\`, \`lower_right\`,
-\`center\`, \`top_bar\`, \`bottom_bar\`.
+\`center\`, \`bottom_bar\`.
 
 - **One element per position at a time.** Before you place a second element at
   \`center\`, check the first has ended.
@@ -374,7 +375,7 @@ bullets" is as much a design decision as the layer itself.
 `;
 
 /**
- * Four skills to start with, so the folder is never a blank page.
+ * Five skills to start with, so the folder is never a blank page.
  *
  * Missing ones are added rather than the whole set being skipped when anything
  * is there. Bailing on the first existing skill meant a browser that had opened
@@ -389,6 +390,7 @@ export async function seed() {
     ["link-to-script.md", FROM_A_LINK],
     ["building-a-motion-graphics-clip.md", MOTION],
     ["taste-not-slop.md", TASTE],
+    ["motion-graphics-that-look-designed.md", DESIGNED],
   ];
   for (const [filename, body] of stock) {
     if (!have.has(filename)) await addSkill(parseSkill(filename, body));
