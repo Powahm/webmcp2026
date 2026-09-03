@@ -38,7 +38,7 @@ backend to receive anything.
 | **Camera** | Camera or screen capture with your mic mixed in. The teleprompter runs over the preview and records which line you were on at which second. |
 | **Editor** | Library, timeline, trim, six looks, speed, and an export that replays the cut into a canvas. The bottom pane switches between **Timeline**, **Transcript** and **Code**. Motion graphics and sound compose here. |
 
-## Twenty-seven site tools
+## Twenty-eight site tools
 
 Registered on `document.modelContext.registerTool`, with a `navigator.modelContext`
 fallback for Chrome's origin trial. Read-only tools carry `readOnlyHint`; every schema
@@ -51,8 +51,8 @@ sets `additionalProperties: false`.
 `get_transcript` · `get_composition_code`
 
 **Proposing** — `propose_graphic` · `propose_graphic_change` · `propose_script_line` ·
-`offer_folder` · `propose_layer` · `propose_layer_change` · `propose_sound` ·
-`propose_format` · `propose_cut` · `propose_tidy`
+`offer_folder` · `propose_layer` · `propose_blank_clip` · `propose_layer_change` ·
+`propose_sound` · `propose_format` · `propose_cut` · `propose_tidy`
 
 Most of them are the scripting API `scripts-app.js` already handed to human-written
 scripts, described in JSON Schema and given to an agent instead of to a text editor.
