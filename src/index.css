@@ -1443,9 +1443,17 @@
 
 /* The way in. Double click opens a clip like a precomp anywhere else, and this
    is the same door for anyone who has not learned that yet. */
+/* Clear of the out grip, deliberately.
+   `.tl-open` is opacity:0 until the clip is hovered, and an invisible button
+   still takes the press. Four pixels from the right edge it overlapped the
+   inner half of `.tl-grip--out` across its own height, and `beginGesture`
+   refuses anything inside a button -- so grabbing a motion graphics clip's
+   right edge near the top did nothing at all, and grabbing it lower down
+   worked, which is the worst kind of broken. Fourteen pixels is the grip's
+   nine plus a little air. */
 .tl-open {
   position: absolute;
-  top: 4px; right: 4px;
+  top: 4px; right: 14px;
   padding: 1px 6px;
   font-family: var(--font-mono);
   font-size: 9.5px;
