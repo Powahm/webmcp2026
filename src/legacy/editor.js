@@ -835,10 +835,10 @@ export const Editor = (() => {
         const el = overlayVideos.get(lane.id);
         if (!el || el.readyState < 2) continue;
         try {
-          const fit = fitVideo(el.videoWidth || w, el.videoHeight || h, w, h, fitOf(item));
           // The item's own placement, through the same function the spine and
           // the export use, so a nudged overlay is nudged in the file too.
           const t = transformOf(item);
+          const fit = fitVideo(el.videoWidth || w, el.videoHeight || h, w, h, fitOf(item), panOf(t));
           ctx.save();
           applyTransform(ctx, t, w, h);
           ctx.drawImage(el, fit.x, fit.y, fit.w, fit.h);
@@ -1714,6 +1714,25 @@ export const Editor = (() => {
      */
     const fitOf = (thing) => (thing?.fit === "contain" ? "contain" : "cover");
 
+    /**
+     * The transform's pan, as CSS object-position percentages.
+     *
+     * This is the fix for "the whole video is cropped and I cannot move it".
+     * The pan used to be a `transform: translate()` on the video element, and
+     * with `object-fit: cover` that element *is* the frame: the source is
+     * already cropped to it, so translating slid the cropped picture out of
+     * frame and showed the backdrop instead of revealing more of the source.
+     *
+     * object-position is the primitive that actually means "which part of the
+     * source the frame shows", and it clamps itself to however much is
+     * hidden. x = +1 pushes the picture right, which is the same as showing
+     * the source's left edge, hence 50 - x*50.
+     */
+    const panOf = (t) => ({
+      px: Math.max(0, Math.min(100, 50 - (Number(t?.x) || 0) * 50)),
+      py: Math.max(0, Math.min(100, 50 - (Number(t?.y) || 0) * 50)),
+    });
+
     const transformOf = (seg) => ({ ...NO_TRANSFORM, ...(seg?.transform || {}) });
 
     /** The transform at a moment, with the clip's own keyframes applied. */
@@ -1738,12 +1757,17 @@ export const Editor = (() => {
     function cssTransform(t) {
       const sx = t.flipH ? -t.scale : t.scale;
       const sy = t.flipV ? -t.scale : t.scale;
-      return `translate(${(t.x * 100).toFixed(3)}%, ${(t.y * 100).toFixed(3)}%) rotate(${t.rotation}deg) scale(${sx}, ${sy})`;
+      // No translate. The pan is object-position, because translating a
+      // cover-fitted element moves the crop and its contents together instead
+      // of moving the crop across the source.
+      return `rotate(${t.rotation}deg) scale(${sx}, ${sy})`;
     }
 
-    /** Point the export's canvas at the same place. Caller restores. */
+    /** Point the export's canvas at the same place. Caller restores.
+     *  Scale, rotation and flip only: the pan arrives in the rect fitVideo
+     *  returns, exactly as object-position supplies it in the preview. */
     function applyTransform(ctx, t, w, h) {
-      ctx.translate(w / 2 + t.x * w, h / 2 + t.y * h);
+      ctx.translate(w / 2, h / 2);
       ctx.rotate((t.rotation * Math.PI) / 180);
       ctx.scale(t.flipH ? -t.scale : t.scale, t.flipV ? -t.scale : t.scale);
       ctx.translate(-w / 2, -h / 2);
@@ -1755,9 +1779,17 @@ export const Editor = (() => {
       const t = at ? transformAt(at.seg) : NO_TRANSFORM;
       video.style.transform = cssTransform(t);
       video.style.transformOrigin = "center";
-      // object-fit in the preview, the same word fitVideo takes at export, so
-      // the two cannot mean different things.
+      // object-fit and object-position in the preview, the same two numbers
+      // fitVideo takes at export, so the two cannot mean different things.
       video.style.objectFit = at ? fitOf(at.seg) : "cover";
+      const pan = panOf(t);
+      video.style.objectPosition = `${pan.px.toFixed(2)}% ${pan.py.toFixed(2)}%`;
+
+      // A grab cursor on a picture that cannot move is a promise the frame
+      // cannot keep, and footage already the shape of the frame has nothing
+      // hidden to pan to.
+      const g = at ? panGearing(at.seg, frameBox.getBoundingClientRect()) : { gx: 0, gy: 0 };
+      frameBox.style.cursor = g.gx || g.gy ? "" : "default";
     }
 
     /* ---------------- keyframes ----------------
@@ -1835,13 +1867,54 @@ export const Editor = (() => {
       e.preventDefault();
     });
 
+    /**
+     * How far a pixel of cursor moves the pan.
+     *
+     * The picture should sit under the cursor, so a drag of `dx` has to move
+     * the visible content by `dx` — and the content can only move through the
+     * part of it that is hidden. That overflow is what sets the gearing, not
+     * the width of the frame: gearing to the frame made the picture crawl at
+     * roughly a third of the pointer and feel like it was resisting.
+     *
+     * Returns 0 on each axis with nothing hidden, which is the honest answer
+     * on `contain` and on footage that already matches the frame.
+     */
+    function panGearing(thing, rect) {
+      const vw = video.videoWidth || 0;
+      const vh = video.videoHeight || 0;
+      if (!(vw > 0) || !(vh > 0) || !(rect.width > 0) || !(rect.height > 0)) return { gx: 0, gy: 0 };
+
+      const t = transformOf(thing);
+      const scale = t.scale || 1;
+      // The rectangle the picture actually occupies, from the same function
+      // the export uses, so the gearing is derived from the real geometry
+      // rather than a second guess at it.
+      const box = fitVideo(vw * scale, vh * scale, rect.width, rect.height, fitOf(thing));
+
+      // offset = (frame - drawn) * px/100 and px = 50 - x*50, so moving the
+      // content by dx needs x to change by -2*dx/(frame - drawn).
+      //
+      // One formula covers both fits, and the sign falls out of it. On cover
+      // (frame - drawn) is negative, which is overflow to reveal; on contain
+      // it is positive, which is slack to slide the letterboxed picture
+      // around in. Special-casing contain to zero meant a fitted clip could
+      // not be nudged off-centre to make room for a caption.
+      const slackX = rect.width - box.w;
+      const slackY = rect.height - box.h;
+      return {
+        gx: Math.abs(slackX) > 0.5 ? -2 / slackX : 0,
+        gy: Math.abs(slackY) > 0.5 ? -2 / slackY : 0,
+      };
+    }
+
     frameBox.addEventListener("pointermove", (e) => {
       if (!reframing) return;
       const t = transformOf(reframing.seg);
+      const { gx, gy } = panGearing(reframing.seg, reframing.rect);
       reframing.seg.transform = {
         ...t,
-        x: Math.max(-1, Math.min(1, t.x + (e.clientX - reframing.x) / reframing.rect.width)),
-        y: Math.max(-1, Math.min(1, t.y + (e.clientY - reframing.y) / reframing.rect.height)),
+        x: Math.max(-1, Math.min(1, t.x + (e.clientX - reframing.x) * gx)),
+        y: Math.max(-1, Math.min(1, t.y + (e.clientY - reframing.y) * gy)),
       };
       reframing.x = e.clientX;
       reframing.y = e.clientY;
@@ -3195,16 +3268,17 @@ export const Editor = (() => {
             // both sides is not a vertical video, it is a landscape video
             // someone gave up on, and stretching every clip to the canvas
             // distorted any footage that was not the first clip's shape.
+            // The clip's own reframe, from the same numbers the preview uses.
+            const t = transformAt(at.seg, playhead);
             const fit = fitVideo(
               video.videoWidth || first?.width || canvas.width,
               video.videoHeight || first?.height || canvas.height,
               canvas.width,
               canvas.height,
-              fitOf(at.seg)
+              fitOf(at.seg),
+              panOf(t)
             );
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            // The clip's own reframe, from the same numbers the preview uses.
-            const t = transformAt(at.seg, playhead);
             ctx.save();
             applyTransform(ctx, t, canvas.width, canvas.height);
             ctx.drawImage(video, fit.x, fit.y, fit.w, fit.h);
