@@ -18,9 +18,9 @@ import { Camera } from "./camera.js";
    the composition sits on top of the cut and never owns the footage. */
 import { createMixer, createScheduler, speechRanges } from "../comp/audio.js";
 import { generate } from "../comp/codegen.js";
-import { SFX_PRESETS } from "../comp/composition.js";
+import { COMPONENT_INFO, SFX_PRESETS, validateLayer } from "../comp/composition.js";
 import { formatOf, toSeconds } from "../comp/engine.js";
-import { palette } from "../comp/paint.js";
+import { PALETTE_ROLES as COMP_ROLES, palette, POSITIONS as COMP_POSITIONS } from "../comp/paint.js";
 import { fitVideo, renderComposition } from "../comp/render.js";
 import {
   acceptAudio,
@@ -333,7 +333,7 @@ export const Editor = (() => {
       libList.innerHTML = clips.length
         ? clips.map((c) => `
             <div class="lib-item">
-              <button class="lib-add" data-add="${c.id}" title="Add to timeline">
+              <button class="lib-add" draggable="true" data-add="${c.id}" title="Add to the timeline, or drag onto a lane">
                 ${c.thumb ? `<img src="${c.thumb}" alt="">` : `<span class="strip-blank"></span>`}
                 <span class="lib-name">${Desk.esc(c.name)}</span>
                 <span class="lib-time mono">${timecode(c.duration)}</span>
@@ -342,6 +342,83 @@ export const Editor = (() => {
             </div>`).join("")
         : `<p class="lib-empty">No clips yet. Record one in Camera, or import a file.</p>`;
     }
+
+    /* The components a Text clip can be: the ones whose whole content is
+       words. A process flow or a comparison card wants a list, so it is the
+       agent's to propose rather than something to switch into by accident. */
+    const TEXTY_COMPONENTS = Object.keys(COMPONENT_INFO).filter((k) => {
+      const f = COMPONENT_INFO[k].fields || {};
+      return "text" in f && !("items" in f);
+    });
+
+    /* ---------------- overlay lanes ----------------
+     *
+     * A lane above the spine needs its own decoder, so each gets a hidden
+     * <video>. They are never shown: the preview draws them onto the same
+     * canvas the graphics use, and the export draws them onto the canvas it is
+     * recording. That is deliberate — one drawing path for both, the same rule
+     * the composition follows, so an overlay cannot look right in the preview
+     * and wrong in the file.
+     */
+    const overlayVideos = new Map();
+
+    function overlayVideo(laneId) {
+      let el = overlayVideos.get(laneId);
+      if (!el) {
+        el = document.createElement("video");
+        el.playsInline = true;
+        el.muted = true;              // overlay sound is a lane of its own
+        el.preload = "auto";
+        el.style.display = "none";
+        body.appendChild(el);
+        overlayVideos.set(laneId, el);
+      }
+      return el;
+    }
+
+    /** Point every overlay lane at the right frame of the right clip. */
+    async function syncOverlays(time, { play = false } = {}) {
+      const active = new Map(overlaysAt(time).map((o) => [o.lane.id, o]));
+      const waits = [];
+      for (const lane of lanes.filter((l) => l.kind === "video")) {
+        const el = overlayVideo(lane.id);
+        const hit = active.get(lane.id);
+        if (!hit) { el.pause(); continue; }
+
+        const clip = byId.get(hit.item.clipId);
+        if (!clip) continue;
+        const url = Clips.url(clip);
+        if (el.dataset.clip !== hit.item.clipId) {
+          el.src = url;
+          el.dataset.clip = hit.item.clipId;
+          waits.push(new Promise((r) => {
+            const bail = setTimeout(r, 4000);
+            el.onloadeddata = () => { clearTimeout(bail); r(); };
+          }));
+        }
+        el.playbackRate = hit.item.speed || 1;
+        const target = hit.item.in + hit.offset * (hit.item.speed || 1);
+        if (Math.abs(el.currentTime - target) > 0.12) el.currentTime = target;
+        if (play) el.play().catch(() => {});
+        else el.pause();
+      }
+      if (waits.length) await Promise.all(waits);
+    }
+
+    /** Draw whatever the overlay lanes are showing, bottom lane first. */
+    function drawOverlays(ctx, w, h, time) {
+      for (const { lane } of overlaysAt(time)) {
+        const el = overlayVideos.get(lane.id);
+        if (!el || el.readyState < 2) continue;
+        try {
+          const fit = fitVideo(el.videoWidth || w, el.videoHeight || h, w, h);
+          ctx.drawImage(el, fit.x, fit.y, fit.w, fit.h);
+        } catch { /* frame not ready */ }
+      }
+    }
+
+    /** True when anything but the spine wants painting. */
+    const hasOverlayPicture = () => lanes.some((l) => l.kind === "video" && l.items.length);
 
     /* ---------------- the timeline ---------------- */
 
@@ -433,7 +510,9 @@ export const Editor = (() => {
       return liveLayers().map((l) => {
         const at = l.from / fps;
         const dur = Math.max(0.2, l.durationInFrames / fps);
-        const words = (l.text || l.items?.[0] || l.component || "Graphic").toString();
+        // validateLayer nests the words under props; the layer itself carries
+        // only timing and placement.
+        const words = (l.props?.text || l.props?.items?.[0] || l.component || "Graphic").toString();
         return `
           <div class="tl-item tl-item--gfx ${l.status === "proposed" ? "is-proposed" : ""}"
                data-layer="${l.id}" style="left:${pctOf(at)}%; width:${pctOf(dur)}%"
@@ -634,7 +713,69 @@ export const Editor = (() => {
           : ""}`;
     }
 
+    /**
+     * Editing a text clip.
+     *
+     * The fields are the layer's own schema, not a second model of it: the
+     * same `component`, `text`, `position` and `palette_role` an agent fills
+     * in through propose_layer. Which means a person and an agent are editing
+     * the same object, and neither has a field the other cannot see.
+     */
+    function textPanelHtml(layer) {
+      const fps = composition().fps || 30;
+      // The real lists, from the engine that has to draw them. Inventing a
+      // menu here is how you get a dropdown offering a value the renderer
+      // refuses — which is exactly what "bottom" was.
+      const POS = COMP_POSITIONS;
+      const ROLES = COMP_ROLES;
+      const COMPONENTS = TEXTY_COMPONENTS;
+      return `
+        <div class="ed-head"><span>Text</span></div>
+        <div class="insp-body">
+          <label class="field">
+            <span>Words</span>
+            <textarea class="insp-text" data-text="${layer.id}" rows="3">${Desk.esc(layer.props?.text || "")}</textarea>
+          </label>
+          <label class="field">
+            <span>Second line</span>
+            <input type="text" data-sub="${layer.id}" value="${Desk.esc(layer.props?.subtext || "")}" placeholder="optional">
+          </label>
+          <label class="field">
+            <span>Look</span>
+            <select data-lset="component">
+              ${COMPONENTS.map((c) => `<option value="${c}" ${c === layer.component ? "selected" : ""}>${c.replace(/_/g, " ")}</option>`).join("")}
+            </select>
+          </label>
+          <label class="field">
+            <span>Where</span>
+            <select data-lset="position">
+              ${POS.map((c) => `<option value="${c}" ${c === layer.position ? "selected" : ""}>${c.replace(/_/g, " ")}</option>`).join("")}
+            </select>
+          </label>
+          <label class="field">
+            <span>Colour</span>
+            <select data-lset="palette_role">
+              ${ROLES.map((c) => `<option value="${c}" ${c === layer.palette_role ? "selected" : ""}>${c}</option>`).join("")}
+            </select>
+          </label>
+          <label class="field">
+            <span>Starts <b class="mono">${timecode(layer.from / fps)}</b></span>
+            <input type="range" data-lmove="from" min="0" max="${Math.max(1, Math.round(total()))}" step="0.05" value="${layer.from / fps}">
+          </label>
+          <label class="field">
+            <span>On screen <b class="mono">${(layer.durationInFrames / fps).toFixed(1)}s</b></span>
+            <input type="range" data-lmove="dur" min="0.3" max="20" step="0.1" value="${(layer.durationInFrames / fps).toFixed(1)}">
+          </label>
+          <button class="btn btn-danger btn-wide" data-ldrop="${layer.id}">Delete text</button>
+        </div>`;
+    }
+
     function renderInspector() {
+      const layer = liveLayers().find((l) => l.id === selected);
+      if (layer) {
+        insp.innerHTML = textPanelHtml(layer) + graphicsHtml() + compositionHtml();
+        return;
+      }
       const seg = timeline.find((s) => s.uid === selected);
       if (!seg) {
         insp.innerHTML =
@@ -876,6 +1017,8 @@ export const Editor = (() => {
       // effect that retriggered every time you scrubbed over it would make the
       // preview unusable.
       scheduler?.seek(playhead);
+      syncOverlays(playhead, { play });
+      syncLaneAudio(playhead, { play });
       renderClock();
       paintPlayhead();
       highlightWord();
@@ -896,6 +1039,8 @@ export const Editor = (() => {
       }
       // Fire any accepted effect the playhead just crossed.
       scheduler?.tick(playhead, liveAudio());
+      syncOverlays(playhead, { play: true });
+      syncLaneAudio(playhead, { play: true });
       renderClock();
       paintPlayhead();
       highlightWord();
@@ -921,6 +1066,8 @@ export const Editor = (() => {
       playBtn.setAttribute("aria-label", "Play");
       cancelAnimationFrame(raf);
       video.pause();
+      overlayVideos.forEach((el) => el.pause());
+      laneAudio.forEach(({ el }) => el.pause());
       stopBeds();
       renderClock();
     }
@@ -944,6 +1091,61 @@ export const Editor = (() => {
       }
       return audioGraph;
     }
+
+    /**
+     * The audio lanes, wired into the same graph the recorder captures.
+     *
+     * One <audio> per lane, routed through the export destination as well as
+     * the speakers, so a music bed a person dropped on A1 is in the file for
+     * the same reason the spine's own sound is: it went through the graph the
+     * MediaRecorder is listening to. A source node can only be created once
+     * per element, hence the cache.
+     */
+    const laneAudio = new Map();
+
+    function laneAudioEl(laneId) {
+      let entry = laneAudio.get(laneId);
+      if (!entry) {
+        const el = document.createElement("audio");
+        el.preload = "auto";
+        el.style.display = "none";
+        body.appendChild(el);
+        entry = { el, wired: false };
+        laneAudio.set(laneId, entry);
+      }
+      const { ctx, dest } = ensureAudio();
+      if (ctx && !entry.wired) {
+        try {
+          const src = ctx.createMediaElementSource(entry.el);
+          src.connect(ctx.destination);
+          if (dest) src.connect(dest);
+          entry.wired = true;
+        } catch { /* already wired, or no graph */ }
+      }
+      return entry.el;
+    }
+
+    function syncLaneAudio(time, { play = false } = {}) {
+      const active = new Map(audioAt(time).map((a) => [a.lane.id, a]));
+      for (const lane of lanes.filter((l) => l.kind === "audio")) {
+        const hit = active.get(lane.id);
+        const el = laneAudioEl(lane.id);
+        if (!hit) { el.pause(); continue; }
+        const clip = byId.get(hit.item.clipId);
+        if (!clip) continue;
+        if (el.dataset.clip !== hit.item.clipId) {
+          el.src = Clips.url(clip);
+          el.dataset.clip = hit.item.clipId;
+        }
+        el.volume = Math.max(0, Math.min(1, hit.item.gain ?? 1));
+        const target = hit.item.in + hit.offset;
+        if (Math.abs(el.currentTime - target) > 0.16) el.currentTime = target;
+        if (play) el.play().catch(() => {});
+        else el.pause();
+      }
+    }
+
+    const hasLaneAudio = () => lanes.some((l) => l.kind === "audio" && l.items.length);
 
     async function runExport() {
       if (!timeline.length) return Desk.toast("Nothing on the timeline to export.", "bad");
@@ -979,6 +1181,9 @@ export const Editor = (() => {
       const duration = total();
 
       if (hasSound()) ensureMixer();
+      // Wire every audio lane before the recorder starts; a source connected
+      // mid-recording is a lane that is silent for the first half of the file.
+      if (hasLaneAudio()) lanes.filter((l) => l.kind === "audio").forEach((l) => laneAudioEl(l.id));
       recorder.start(250);
       playhead = 0;
       await seekTo(0, { play: true });
@@ -1011,7 +1216,10 @@ export const Editor = (() => {
           // Proposals are excluded: only what the editor accepted is in the
           // file, and the look never has to be reconciled between two
           // renderers because there is only one.
+          // Overlay lanes are pictures, so they get the same filter-free
+          // treatment as the spine and go on before any graphic.
           ctx.filter = "none";
+          drawOverlays(ctx, canvas.width, canvas.height, playhead);
           drawGraphics(ctx, canvas.width, canvas.height, playhead, acceptedGraphics(), { showProposed: false });
           renderComposition(ctx, {
             width: canvas.width,
@@ -1027,6 +1235,7 @@ export const Editor = (() => {
           // Effects fire into the same graph the recorder is capturing, so
           // what you heard in the preview is what is in the file.
           scheduler?.tick(playhead, liveAudio());
+          syncLaneAudio(playhead, { play: true });
 
           const local = Math.max(0, (video.currentTime - at.seg.in) / at.seg.speed);
           playhead = at.start + local;
@@ -1415,6 +1624,37 @@ export const Editor = (() => {
     });
 
     insp.addEventListener("input", (e) => {
+      // Text first: the layer panel and the clip panel share this listener,
+      // and a layer is selected the same way a segment is.
+      const layer = liveLayers().find((l) => l.id === selected);
+      if (layer) {
+        const fps = composition().fps || 30;
+        // Typing edits the layer in place. Rebuilding it per keystroke would
+        // hand it a new id sixty times a sentence, and the caret with it.
+        if (e.target.dataset.text != null) {
+          editLayer(layer.id, { props: { text: e.target.value } }, e);
+          return void renderTrack();
+        }
+        if (e.target.dataset.sub != null) {
+          editLayer(layer.id, { props: { subtext: e.target.value || null } }, e);
+          return void renderTrack();
+        }
+        const lset = e.target.dataset.lset;
+        if (lset === "position") { editLayer(layer.id, { position: e.target.value }, e); return void renderTrack(); }
+        if (lset === "palette_role") { editLayer(layer.id, { palette_role: e.target.value }, e); return void renderTrack(); }
+        // A different component takes different fields, so it is re-checked.
+        if (lset === "component") return void patchLayer(layer, { component: e.target.value }, e);
+        const lmove = e.target.dataset.lmove;
+        if (lmove === "from") {
+          editLayer(layer.id, { from: Math.round(Number(e.target.value) * fps) }, e);
+          return void refresh();
+        }
+        if (lmove === "dur") {
+          editLayer(layer.id, { durationInFrames: Math.round(Number(e.target.value) * fps) }, e);
+          return void refresh();
+        }
+      }
+
       const set = e.target.dataset.set;
       const seg = timeline.find((s) => s.uid === selected);
       if (!set || !seg) return;
@@ -1431,12 +1671,63 @@ export const Editor = (() => {
     });
 
     insp.addEventListener("click", (e) => {
+      const drop = e.target.closest("[data-ldrop]");
+      if (drop) {
+        removeLayer(drop.dataset.ldrop, e);
+        selected = null;
+        return refresh();
+      }
       if (e.target.dataset.set !== "mute") return;
       const seg = timeline.find((s) => s.uid === selected);
       if (!seg) return;
       seg.muted = !seg.muted;
       refresh();
       seekTo(playhead);
+    });
+
+    /**
+     * The keys an editor expects.
+     *
+     * Left and right step a frame, shift steps a second, and J K L is the
+     * shuttle every NLE has had for thirty years. Ignored while a field has
+     * focus, because S in a text box means the letter S.
+     */
+    body.addEventListener("keydown", (e) => {
+      if (e.target.closest("input, textarea, select")) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const frame = 1 / (composition().fps || 30);
+      const step = e.shiftKey ? 1 : frame;
+
+      switch (e.key) {
+        case " ":
+          e.preventDefault();
+          return void (playing ? stop() : play());
+        case "ArrowLeft": case "j": case "J":
+          e.preventDefault();
+          if (playing) stop();
+          return void seekTo(playhead - step);
+        case "ArrowRight": case "l": case "L":
+          e.preventDefault();
+          if (playing) stop();
+          return void seekTo(playhead + step);
+        case "k": case "K":
+          e.preventDefault();
+          return void stop();
+        case "Home":
+          e.preventDefault();
+          return void seekTo(0);
+        case "End":
+          e.preventDefault();
+          return void seekTo(total());
+        case "s": case "S":
+          e.preventDefault();
+          return splitAtPlayhead();
+        case "t": case "T":
+          e.preventDefault();
+          return addTextClip(e);
+        default:
+          break;
+      }
     });
 
     body.addEventListener("keydown", (e) => {
@@ -1461,12 +1752,51 @@ export const Editor = (() => {
 
     /* drag to reorder the spine */
     let dragUid = null;
+    let dragClipId = null;
+
     laneBox.addEventListener("dragstart", (e) => {
       dragUid = e.target.closest("[data-seg]")?.dataset.seg || null;
     });
+    libList.addEventListener("dragstart", (e) => {
+      dragClipId = e.target.closest("[data-add]")?.dataset.add || null;
+      if (dragClipId) e.dataTransfer.setData("text/plain", dragClipId);
+    });
     laneBox.addEventListener("dragover", (e) => e.preventDefault());
-    laneBox.addEventListener("drop", (e) => {
+    laneBox.addEventListener("drop", async (e) => {
       e.preventDefault();
+
+      // A clip dragged out of the library lands on the lane it was dropped on,
+      // at the second it was dropped at. That is the only way to put anything
+      // on an overlay lane, and it is the reason the lanes are worth having.
+      const laneEl = e.target.closest("[data-lane]");
+      const laneId = laneEl?.dataset.lane;
+      if (dragClipId && laneId && laneId !== "spine" && laneId !== "gfx") {
+        const lane = laneById(laneId);
+        const clip = byId.get(dragClipId) || (await Clips.all()).find((c) => c.id === dragClipId);
+        if (lane && clip) {
+          byId.set(clip.id, clip);
+          lane.items.push({
+            uid: `it-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            clipId: clip.id,
+            name: clip.name,
+            at: Math.max(0, timeAtPointer(e)),
+            in: 0,
+            out: clip.duration || 5,
+            speed: 1,
+            gain: 1,
+          });
+          dragClipId = null;
+          return refresh();
+        }
+      }
+      if (dragClipId && (laneId === "spine" || !laneId)) {
+        dragClipId = null;
+        await addClip(e.dataTransfer.getData("text/plain") || "");
+        await rebuildTranscript();
+        return refresh();
+      }
+      dragClipId = null;
+
       const overUid = e.target.closest("[data-seg]")?.dataset.seg;
       if (!dragUid || !overUid || dragUid === overUid) return;
       const from = timeline.findIndex((s) => s.uid === dragUid);
@@ -1689,6 +2019,53 @@ export const Editor = (() => {
       refresh();
     }
 
+    /**
+     * Change a text clip's content.
+     *
+     * Position, colour and wording go through validateLayer the same way a
+     * proposal does, so a person cannot type a layer the renderer would refuse
+     * to draw. The result is accepted immediately: they made it, so there is
+     * nothing to approve.
+     */
+    function patchLayer(layer, patch, e) {
+      const fps = composition().fps || 30;
+      const checked = validateLayer(
+        {
+          component: patch.component ?? layer.component,
+          text: patch.text ?? layer.props?.text ?? "",
+          subtext: patch.subtext ?? layer.props?.subtext ?? "",
+          eyebrow: layer.props?.eyebrow ?? "",
+          items: layer.props?.items ?? undefined,
+          at_seconds: layer.from / fps,
+          duration_seconds: layer.durationInFrames / fps,
+          // A component change drops the old placement rather than carrying
+          // it over: a lower third has no business being centred, and the
+          // component's own default is the right answer.
+          position: patch.position ?? (patch.component ? undefined : layer.position),
+          palette_role: patch.palette_role ?? layer.palette_role,
+        },
+        { cutSeconds: total(), fps }
+      );
+      if (!checked.ok) return void Desk.toast(checked.error || "That will not draw.", "bad");
+
+      // Edited in place rather than staged-and-swapped. The old version made a
+      // second layer and deleted the first, which is two ids for one thing and
+      // leaves a stray behind the moment either half is refused.
+      const done = editLayer(
+        layer.id,
+        {
+          component: checked.layer.component,
+          position: checked.layer.position,
+          palette_role: checked.layer.palette_role,
+          easing: checked.layer.easing,
+          props: checked.layer.props,
+        },
+        e
+      );
+      if (!done.ok) return void Desk.toast(done.error || "Could not change it.", "bad");
+      refresh();
+    }
+
     function select(uid) {
       selected = uid;
       renderTrack();
@@ -1755,7 +2132,7 @@ export const Editor = (() => {
       // times a second rather than sixty.
       if (palAge++ % 20 === 0) pal = palette();
 
-      const anything = liveGraphics().length || liveLayers().length || composition().pendingFormat;
+      const anything = liveGraphics().length || liveLayers().length || composition().pendingFormat || hasOverlayPicture();
       if (!anything) {
         // Clear once, then stop drawing. With nothing to paint this loop was
         // burning a frame budget forever, including while minimised.
@@ -1783,6 +2160,10 @@ export const Editor = (() => {
 
       gfxCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
       gfxCtx.clearRect(0, 0, w, h);
+      // Pictures first, then graphics over them: the same order the export
+      // uses, and the reason an overlay lane covers the spine rather than
+      // hiding behind it.
+      drawOverlays(gfxCtx, w, h, playhead);
       drawGraphics(gfxCtx, w, h, playhead, liveGraphics());
 
       // The composition, on the same canvas and from the same playhead. One
@@ -1807,8 +2188,16 @@ export const Editor = (() => {
 
     const offGraphics = onGraphics(() => renderInspector());
     const offComposition = onComposition(() => {
-      renderInspector();
+      // Typing in the text panel changes the composition, which fires this.
+      // Rebuilding the panel mid-sentence takes the caret with it, so the
+      // panel holding focus is left alone and repaints when focus leaves.
+      if (!insp.contains(document.activeElement)) renderInspector();
       renderCode();
+    });
+    insp.addEventListener("focusout", () => {
+      // Only once focus has actually left the panel, not while it moves
+      // between two fields inside it.
+      setTimeout(() => { if (!insp.contains(document.activeElement)) renderInspector(); }, 0);
     });
     const offCuts = onCuts(() => renderCuts());
     const offTranscripts = onTranscripts(() => renderWords());

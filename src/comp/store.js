@@ -272,10 +272,26 @@ export function editLayer(layerId, patch, gesture) {
 
   const from = Math.max(0, Math.round(patch.from ?? target.from));
   const durationInFrames = Math.max(3, Math.round(patch.durationInFrames ?? target.durationInFrames));
-  doc = {
-    ...doc,
-    layers: doc.layers.map((l) => (l.id === layerId ? { ...l, from, durationInFrames } : l)),
+  // Words and placement change in place. A component change does not: the
+  // fields differ per component, so that one goes back through validateLayer
+  // rather than being merged blind.
+  const next = {
+    ...target,
+    from,
+    durationInFrames,
+    component: patch.component ?? target.component,
+    easing: patch.easing ?? target.easing,
+    position: patch.position ?? target.position,
+    palette_role: patch.palette_role ?? target.palette_role,
+    // A component change replaces the props outright: the fields differ per
+    // component, and merging leaves the old one's fields hanging off the new.
+    props: patch.props
+      ? (patch.component && patch.component !== target.component
+          ? patch.props
+          : { ...target.props, ...patch.props })
+      : target.props,
   };
+  doc = { ...doc, layers: doc.layers.map((l) => (l.id === layerId ? next : l)) };
   emit();
   return { ok: true };
 }
