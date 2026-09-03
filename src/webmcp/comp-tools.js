@@ -33,6 +33,7 @@ import { Editor } from "../legacy/editor.js";
 import { Clips, timecode } from "../legacy/store.js";
 import { findDeadWeight, findWords, toCutTime } from "../transcript/transcript.js";
 import { hasApiKey, transcriptsFor } from "../transcript/store.js";
+import { skillNudge } from "./nudge.js";
 import { fail, json, NO_INPUT, READ_ONLY } from "./result.js";
 
 const round = (n) => Math.round((Number(n) || 0) * 100) / 100;
@@ -68,12 +69,17 @@ export const getComposition = {
     "Return the motion graphics, sound and format layered over the cut, with every timing in both seconds and frames. Call it before proposing anything so you build on what is there instead of stacking a second title card on the first, and so you know the format: a graphic laid out for 16:9 reads differently once the same composition is reframed to 9:16.",
   inputSchema: NO_INPUT,
   annotations: READ_ONLY,
-  execute: () => {
+  execute: async () => {
     const doc = composition();
     const { fps } = doc;
     const format = formatOf(doc.format);
 
     return json({
+      // The skill that fits what is on screen rides along here too: this is
+      // the read every graphics proposal is told to make first, so a skill
+      // about motion design that only surfaced on get_timeline would be
+      // missed by an agent that went straight to the composition.
+      ...(await skillNudge()),
       format: doc.format,
       aspect: format.label,
       width: format.width,
