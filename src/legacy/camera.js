@@ -1,4 +1,4 @@
-import { Store, Clips, timecode } from "./store.js";
+import { Store, Clips, timecode, noPictureMessage } from "./store.js";
 import { Desk } from "./shell.js";
 import { Editor } from "./editor.js";
 
@@ -503,10 +503,14 @@ export const Camera = (() => {
     });
 
     fileInput.addEventListener("change", async () => {
+      const count = fileInput.files.length;
+      const mute = [];
       for (const file of fileInput.files) {
-        await Clips.save(file, { name: file.name.replace(/\.[^.]+$/, ""), kind: "import" });
+        const clip = await Clips.save(file, { name: file.name.replace(/\.[^.]+$/, ""), kind: "import" });
+        if (clip.hasPicture === false) mute.push(clip.name);
       }
-      Desk.toast(`Imported ${fileInput.files.length} file(s)`, "good");
+      if (mute.length) Desk.toast(noPictureMessage(mute), "bad");
+      else Desk.toast(`Imported ${count} file(s)`, "good");
       fileInput.value = "";
       renderStrip();
     });

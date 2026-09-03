@@ -110,6 +110,23 @@ export const Store = (() => {
 
 /* ---------- clip helpers shared by camera, editor and scripts ---------- */
 
+/**
+ * What to say about a file whose picture this browser will not draw.
+ *
+ * Almost always a codec rather than a broken file: .mp4 is a container, and
+ * the H.265 inside one straight off a phone or a Mac screen recording is not
+ * something most browsers will decode, while the AAC beside it plays happily.
+ * That is why it arrives as a black picture with sound rather than as an
+ * error. The advice is the useful part -- the file is fine, it needs
+ * re-encoding to H.264 or WebM -- so it is written once and used everywhere
+ * this comes up.
+ */
+export function noPictureMessage(names) {
+  const list = Array.isArray(names) ? names : [names];
+  const what = list.length === 1 ? `“${list[0]}”` : `${list.length} files`;
+  return `${what}: sound imported, but this browser cannot decode the picture. Re-encode to H.264 or WebM.`;
+}
+
 export const Clips = (() => {
   const urls = new Map();
 
@@ -164,21 +181,45 @@ export const Clips = (() => {
       video.playsInline = true;
       video.src = url;
 
+      /**
+       * Metadata, not the first frame.
+       *
+       * `loadedmetadata` is where duration and dimensions arrive, and it comes
+       * a long time before `loadeddata` on a big import: an .mp4 written
+       * without faststart keeps its index at the end of the file, so nothing
+       * decodes until the whole thing has been read. Waiting for a frame here
+       * is what used to time an honest hour-long recording out and file it
+       * under "zero seconds long".
+       */
       const meta = await new Promise((resolve) => {
-        const bail = setTimeout(() => resolve(null), 6000);
-        video.onloadeddata = () => { clearTimeout(bail); resolve(true); };
-        video.onerror = () => { clearTimeout(bail); resolve(null); };
+        const bail = setTimeout(() => resolve("timeout"), 15000);
+        video.onloadedmetadata = () => { clearTimeout(bail); resolve("ok"); };
+        video.onerror = () => { clearTimeout(bail); resolve("error"); };
       });
 
       let duration = 0;
       let thumb = "";
       let width = 0;
       let height = 0;
+      // Undefined, not false: "we never got far enough to look" is a different
+      // answer from "we looked and there is no picture", and only the second
+      // one is worth telling somebody their file is unplayable over.
+      let hasPicture;
 
-      if (meta) {
+      if (meta === "ok") {
         duration = await measure(video);
         width = video.videoWidth;
         height = video.videoHeight;
+        hasPicture = width > 0 && height > 0;
+      }
+
+      if (hasPicture) {
+        // Now a frame is worth waiting for, because there is one to draw.
+        await new Promise((r) => {
+          if (video.readyState >= 2) return r();
+          const bail = setTimeout(r, 8000);
+          video.onloadeddata = () => { clearTimeout(bail); r(); };
+        });
         try {
           video.currentTime = Math.min(0.1, duration / 4);
           await new Promise((r) => {
@@ -189,8 +230,20 @@ export const Clips = (() => {
         thumb = poster(video);
       }
 
+      video.src = "";
       URL.revokeObjectURL(url);
-      return { duration, thumb, width, height };
+      /**
+       * Whether this browser can actually draw the file, as opposed to open it.
+       *
+       * A container and a codec are different questions. An .mp4 whose video
+       * track is H.265, or AV1 on a browser without it, loads and plays its
+       * audio perfectly while the picture never arrives: no error fires,
+       * because as far as the element is concerned it has a track it can play.
+       * The tell is that the video has no dimensions. Recording it here is what
+       * lets the rest of the app say so, rather than showing a black rectangle
+       * and leaving someone to wonder which of the two of us is broken.
+       */
+      return { duration, thumb, width, height, hasPicture };
     },
 
     async save(blob, { name, kind = "recording" } = {}) {
