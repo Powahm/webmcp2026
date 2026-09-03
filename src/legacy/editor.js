@@ -1825,6 +1825,7 @@ export const Editor = (() => {
         <div class="ed-head">
           <span>Composition</span>
           ${pending ? `<span class="gfx-count">${pending} to judge</span>` : ""}
+          ${pending ? `<button class="btn btn-mini btn-accent" data-act="accept-all">Accept all</button>` : ""}
         </div>
         <div class="cmp-formats">${formats}</div>
         ${reframe}
@@ -3063,6 +3064,16 @@ export const Editor = (() => {
       }
 
       /* ---- the composition ---- */
+
+      // One click, the same guard as each single Accept: `e` is this click,
+      // so every accept it fans out still carries a trusted gesture. Nothing
+      // here can be reached without a real person pressing a real button.
+      if (t.closest('[data-act="accept-all"]')) {
+        pendingLayers().forEach((l) => acceptLayer(l.id, e));
+        pendingAudio().forEach((a) => acceptAudio(a.id, e));
+        if (composition().pendingFormat) acceptFormat(e);
+        return;
+      }
 
       const fmt = t.closest("[data-format]");
       if (fmt) return void setFormat(fmt.dataset.format, e);
