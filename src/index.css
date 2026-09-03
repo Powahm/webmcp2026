@@ -834,7 +834,7 @@
 
 .tl-lane {
   position: relative;
-  min-height: 42px;
+  min-height: 48px;
   padding-left: 34px;
   border: var(--bw) dashed color-mix(in srgb, var(--line) 45%, transparent);
   border-radius: var(--radius-s);
@@ -861,7 +861,7 @@
 .tl-lane-x:hover { color: #fff; background: var(--red, #D9432A); }
 .tl-lane-body { position: relative; height: 100%; min-height: inherit; }
 .tl-lane--spine .tl-lane-body { min-height: 56px; }
-.tl-lane:not(.tl-lane--spine) .tl-lane-body { min-height: 40px; }
+.tl-lane:not(.tl-lane--spine) .tl-lane-body { min-height: 46px; }
 
 .tl-item {
   position: absolute;
@@ -873,6 +873,9 @@
   padding: 5px 9px;
   overflow: hidden;
   min-width: 14px;
+  /* Two lines in a 40px block clipped the first one. Centre them and let the
+     block breathe instead of pinning them to the bottom edge. */
+  justify-content: center;
   color: #fff;
   text-align: left;
   background-color: var(--purple);
