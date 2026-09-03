@@ -579,7 +579,13 @@ body {
 
 .win-meta {
   margin-left: auto;
-  flex: none;
+  /* Was `flex: none`, so a long title plus a long meta overflowed the bar and
+     the meta was clipped mid-word by the window's own overflow. It may shrink
+     now, and says so with an ellipsis instead of just being cut. */
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: 11.5px;
   color: var(--text-muted);
   white-space: nowrap;

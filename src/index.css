@@ -856,10 +856,29 @@
 .tl-zoom { width: 108px; }
 
 .tl-scroll { overflow-x: auto; overflow-y: hidden; padding: 7px 9px 9px; }
-.tl { position: relative; width: 100%; min-width: 100%; }
+
+/* The lane-label gutter, in one place.
+   Four things have to agree about where a second is: the ruler ticks, the
+   lane bodies, the playhead and the pointer. They agree because they all
+   derive from this one number and from .tl-field below. */
+.tl { --tl-gutter: 34px; position: relative; width: 100%; min-width: 100%; }
+
+/* The timeline's coordinate space: inset past the gutter, spanning every
+   lane. Percentages inside it mean the same thing as percentages inside a
+   lane body, and timeAtPointer measures exactly this box. */
+.tl-field {
+  position: absolute;
+  left: var(--tl-gutter);
+  right: 0;
+  top: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 4;
+}
 
 .tl-ruler {
   position: relative;
+  margin-left: var(--tl-gutter);
   height: 19px;
   border-bottom: var(--bw) solid var(--line);
   cursor: pointer;
@@ -872,7 +891,7 @@
 .tl-lane {
   position: relative;
   min-height: 48px;
-  padding-left: 34px;
+  padding-left: var(--tl-gutter);
   border: var(--bw) dashed color-mix(in srgb, var(--line) 45%, transparent);
   border-radius: var(--radius-s);
   background: color-mix(in srgb, var(--line) 5%, transparent);
@@ -954,6 +973,8 @@
   pointer-events: none;
   z-index: 4;
 }
+/* The grab handle is the one thing in the field that takes a pointer. */
+.tl-field .tl-playhead-grab { pointer-events: auto; }
 .tl-playhead-grab {
   position: absolute;
   top: -3px; left: 50%;
@@ -1047,9 +1068,27 @@
   background: color-mix(in srgb, var(--accent) 55%, transparent);
   outline: none;
 }
-.ed-grip--lib  { top: 0; bottom: 0; left: calc(var(--ed-lib, 152px) - 3px); width: 7px; cursor: col-resize; }
-.ed-grip--insp { top: 0; bottom: 0; right: calc(var(--ed-insp, 220px) - 3px); width: 7px; cursor: col-resize; }
-.ed-grip--tl   { left: 0; right: 0; top: -3px; height: 7px; cursor: row-resize; }
+/*
+ * The two column grips are placed in the stage's own grid cell rather than
+ * absolutely against the whole editor.
+ *
+ * They used to be `top: 0; bottom: 0` inside `.ed`, which made each one a
+ * full-height bar running down through the timeline — visible as a stripe
+ * whenever the pointer was anywhere in that column, and, at z-index 6, a 7px
+ * strip that swallowed every pointerdown meant for the track behind it.
+ * Sharing the stage's grid area confines them to the row they resize.
+ */
+.ed-grip--lib,
+.ed-grip--insp {
+  position: relative;
+  grid-area: stage;
+  align-self: stretch;
+  width: 7px;
+  cursor: col-resize;
+}
+.ed-grip--lib  { justify-self: start; margin-left: -3px; }
+.ed-grip--insp { justify-self: end; margin-right: -3px; }
+.ed-grip--tl   { position: absolute; left: 0; right: 0; top: -3px; height: 7px; cursor: row-resize; }
 
 /* While a drag is running, nothing else should be selecting text or taking
    the pointer out from under it. */
@@ -1136,3 +1175,150 @@
 .insp-stats dd { margin: 0; color: var(--text); }
 
 .ed-formats-list { display: flex; align-items: center; gap: 6px; }
+
+/* ============================================================
+   Editor bug fixes: form controls, the inspector rail, drop
+   feedback and inline rename.
+   ============================================================ */
+
+/*
+ * Text fields in the app's own language.
+ *
+ * There was no rule at all for a text input or a textarea — only for a range —
+ * so every one of them rendered as a browser-default white box with black
+ * text, which in the dark theme reads as a hole in the panel. These take the
+ * same surface, border and radius as `.select`, so a Words box and a Look
+ * dropdown are visibly the same kind of thing.
+ */
+.field input[type="text"],
+.field input[type="number"],
+.field input[type="search"],
+.field textarea,
+.insp-text,
+.tl-rename {
+  width: 100%;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text);
+  background: var(--surface-2);
+  border: var(--bw) solid var(--line);
+  border-radius: var(--radius-s);
+}
+.field textarea,
+.insp-text {
+  resize: vertical;
+  min-height: 52px;
+  font-family: var(--font-body);
+}
+.field input::placeholder,
+.field textarea::placeholder,
+.insp-text::placeholder {
+  color: var(--text-muted);
+  opacity: 1;
+}
+.field input[type="text"]:focus-visible,
+.field textarea:focus-visible,
+.insp-text:focus-visible,
+.tl-rename:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 1px;
+  border-color: var(--blue);
+}
+
+/* A colour input is a swatch, not a grey button with a swatch in it. */
+.field input[type="color"] {
+  width: 100%;
+  height: 28px;
+  padding: 2px;
+  background: var(--surface-2);
+  border: var(--bw) solid var(--line);
+  border-radius: var(--radius-s);
+  cursor: pointer;
+}
+
+/* Selects inside a field were inheriting the 150px cap in some panels. */
+.field select {
+  width: 100%;
+  padding: 5px 8px;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--text);
+  background: var(--surface-2);
+  border: var(--bw) solid var(--line);
+  border-radius: var(--radius-s);
+  cursor: pointer;
+}
+
+/*
+ * The inspector rail's three tabs have to fit 220px.
+ *
+ * With the shared `.cmp-tab` padding and 0.06em tracking, CLIP / GRAPHICS /
+ * COMP overflowed the rail and the third one was clipped by `.ed-insp`'s
+ * `overflow: hidden`. Tighter padding, no tracking, and an ellipsis as the
+ * backstop so a narrow rail degrades instead of hiding a tab.
+ */
+.insp-tabs {
+  display: flex;
+  gap: 3px;
+  padding: 5px 5px 0;
+  min-width: 0;
+}
+.insp-tabs .cmp-tab {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 5px 4px;
+  letter-spacing: 0;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The count badge must not push the label out of its own tab. */
+.insp-tabs .cmp-tab.has-waiting::after { margin-left: 4px; }
+
+/* ---- where a dragged clip will land ---- */
+
+/*
+ * A drop marker, not a guess.
+ *
+ * Dragging a clip with no feedback means the only way to find out where it
+ * lands is to let go, and the only way to undo that is to drag it back. The
+ * lane being targeted lights up and a line shows the seam it will fall into.
+ */
+.tl-lane.is-drop-target {
+  border-style: solid;
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.tl-drop {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  width: 3px;
+  margin-left: -1.5px;
+  background: var(--accent);
+  border-radius: 2px;
+  z-index: 5;
+  pointer-events: none;
+}
+/* A caret at the top, so the seam is findable when the lane is busy. */
+.tl-drop::before {
+  content: "";
+  position: absolute;
+  top: -1px; left: 50%;
+  width: 11px; height: 9px;
+  margin-left: -5.5px;
+  background: var(--accent);
+  border-radius: 2px 2px 5px 5px;
+}
+.tl-item.is-dragging { opacity: .4; }
+
+/* ---- renaming, in place ---- */
+
+.tl-rename { position: absolute; inset: 3px; z-index: 8; font-size: 11.5px; }
+
+.insp-name-row { display: flex; align-items: center; gap: 6px; }
+.insp-name-row .insp-name { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.insp-name-row .btn { flex: none; }

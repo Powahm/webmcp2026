@@ -313,9 +313,25 @@ export const Editor = (() => {
                cannot drift out of register when the timeline is zoomed. -->
           <div class="tl-scroll">
             <div class="tl">
+              <!-- One coordinate space for the ruler, the lanes and the
+                   playhead, inset past the lane-label gutter.
+
+                   This used to be three. The lanes are padded to leave room
+                   for their names, so a clip at 50% sat halfway across
+                   (width - gutter), while the ruler ticks and the playhead sat
+                   halfway across the full width and timeAtPointer measured the
+                   full width too. Everything therefore disagreed by the gutter
+                   plus a scale factor — about two seconds on a minute-long
+                   cut — which is why a cut landed nowhere near where it was
+                   aimed. The tl-field element below is that one space, and it
+                   is the only rectangle the pointer is measured against. -->
               <div class="tl-ruler" data-seek></div>
               <div class="tl-lanes"></div>
-              <div class="tl-playhead" data-playhead><span class="tl-playhead-grab"></span></div>
+              <!-- An inset overlay spanning every lane: the playhead lives in
+                   it, and it is the rectangle the pointer is measured against. -->
+              <div class="tl-field" data-field>
+                <div class="tl-playhead" data-playhead><span class="tl-playhead-grab"></span></div>
+              </div>
             </div>
           </div>
           <div class="cut-strip"></div>
@@ -345,6 +361,7 @@ export const Editor = (() => {
     const tlScroll = body.querySelector(".tl-scroll");
     const ruler = body.querySelector(".tl-ruler");
     const laneBox = body.querySelector(".tl-lanes");
+    const field = body.querySelector(".tl-field");
     const head = body.querySelector(".tl-playhead");
     const zoom = body.querySelector(".tl-zoom");
     const insp = body.querySelector(".insp-panes");
@@ -374,6 +391,8 @@ export const Editor = (() => {
        stale transcript would place a caption confidently in the wrong place. */
     let transcript = null;
     let transcribing = false;
+    /** True while the name field is open in the inspector. */
+    let renaming = false;
 
     // Rebuilds are fired from a dozen places and each awaits IndexedDB, so two
     // can be in flight at once. Only the newest may write, or a slow read from
@@ -497,16 +516,36 @@ export const Editor = (() => {
      */
     const overlayVideos = new Map();
 
+    /**
+     * The element for one overlay lane, wired for sound.
+     *
+     * It used to be `muted = true`, on the reasoning that overlay sound
+     * belongs on an audio lane. In practice that meant dragging a video onto
+     * V2 silently threw its audio away with no control anywhere to get it
+     * back. It now plays at the item's own gain, and it is routed into the
+     * same graph the export records from — the same wiring `laneAudioEl` does
+     * — so what you hear in the preview is what lands in the file.
+     */
+    const overlayWired = new Set();
+
     function overlayVideo(laneId) {
       let el = overlayVideos.get(laneId);
       if (!el) {
         el = document.createElement("video");
         el.playsInline = true;
-        el.muted = true;              // overlay sound is a lane of its own
         el.preload = "auto";
         el.style.display = "none";
         body.appendChild(el);
         overlayVideos.set(laneId, el);
+      }
+      const { ctx: audioCtx, dest } = ensureAudio();
+      if (audioCtx && !overlayWired.has(laneId)) {
+        try {
+          const src = audioCtx.createMediaElementSource(el);
+          src.connect(audioCtx.destination);
+          if (dest) src.connect(dest);
+          overlayWired.add(laneId);
+        } catch { /* already wired, or no graph */ }
       }
       return el;
     }
@@ -532,6 +571,7 @@ export const Editor = (() => {
           }));
         }
         el.playbackRate = hit.item.speed || 1;
+        el.volume = Math.max(0, Math.min(1, hit.item.gain ?? 1));
         const target = hit.item.in + hit.offset * (hit.item.speed || 1);
         if (Math.abs(el.currentTime - target) > 0.12) el.currentTime = target;
         if (play) el.play().catch(() => {});
@@ -542,12 +582,18 @@ export const Editor = (() => {
 
     /** Draw whatever the overlay lanes are showing, bottom lane first. */
     function drawOverlays(ctx, w, h, time) {
-      for (const { lane } of overlaysAt(time)) {
+      for (const { lane, item } of overlaysAt(time)) {
         const el = overlayVideos.get(lane.id);
         if (!el || el.readyState < 2) continue;
         try {
           const fit = fitVideo(el.videoWidth || w, el.videoHeight || h, w, h);
+          // The item's own placement, through the same function the spine and
+          // the export use, so a nudged overlay is nudged in the file too.
+          const t = transformOf(item);
+          ctx.save();
+          applyTransform(ctx, t, w, h);
           ctx.drawImage(el, fit.x, fit.y, fit.w, fit.h);
+          ctx.restore();
         } catch { /* frame not ready */ }
       }
     }
@@ -569,16 +615,25 @@ export const Editor = (() => {
     const span = () => Math.max(total(), 1);
     const pctOf = (seconds) => (seconds / span()) * 100;
 
-    /** Where a pointer landed, in cut seconds. */
+    /**
+     * Where a pointer landed, in cut seconds.
+     *
+     * Measured against `.tl-field`, never against `.tl`. The lanes are inset
+     * by the label gutter and the field is inset by the same amount, so this
+     * is the only rectangle in which "half way across" and "half the running
+     * time" are the same place. Measuring the outer box is what made a cut
+     * land seconds away from where it was aimed.
+     */
     function timeAtPointer(e) {
-      const r = tl.getBoundingClientRect();
+      const r = field.getBoundingClientRect();
+      if (!(r.width > 0)) return 0;
       const x = Math.max(0, Math.min(e.clientX - r.left, r.width));
       return (x / r.width) * span();
     }
 
     /** Ruler ticks at a spacing that stays readable at any zoom. */
     function rulerHtml() {
-      const width = tl.getBoundingClientRect().width || 900;
+      const width = field.getBoundingClientRect().width || 900;
       const seconds = span();
       const perPx = seconds / width;
       const steps = [0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300];
@@ -642,24 +697,6 @@ export const Editor = (() => {
     }
 
     /** The spine's own sound, as its own row. Linked, not separate. */
-    function a1Html() {
-      let at = 0;
-      return timeline.map((seg) => {
-        const dur = segDuration(seg);
-        const clip = byId.get(seg.clipId);
-        const start = at;
-        at += dur;
-        if (seg.blank) return "";
-        return `
-          <div class="tl-item tl-item--a1 ${seg.muted ? "is-muted" : ""}" data-seg="${seg.uid}"
-               style="left:${pctOf(start)}%; width:${pctOf(dur)}%"
-               role="button" tabindex="0" aria-pressed="${seg.uid === selected}"
-               aria-label="${Desk.esc(clip?.name || "audio")}, ${seg.muted ? "muted" : "sound on"}">
-            <span class="tl-item-name">${Desk.esc(clip?.name || "audio")}</span>
-            <span class="tl-item-time mono">${seg.muted ? "muted" : "sound"}</span>
-          </div>`;
-      }).join("");
-    }
 
     /**
      * A1: the spine's own sound, on its own row.
@@ -1449,12 +1486,119 @@ export const Editor = (() => {
      * A graphic and a clip are both "the thing you are working on", so they
      * share a tab rather than each having one that is empty most of the time.
      */
+    /** The lane and item behind a uid, for the panels and the handlers. */
+    function findItem(uid) {
+      for (const lane of lanes) {
+        const it = lane.items.find((x) => x.uid === uid);
+        if (it) return { lane, it };
+      }
+      return null;
+    }
+
+    /**
+     * Position, rotation and flip for one lane item.
+     *
+     * The same normalised numbers the spine uses — x and y as fractions of the
+     * frame, scale as a multiplier, rotation in degrees — so one set of
+     * sliders drives the preview and the export through the same
+     * `applyTransform`.
+     */
+    function itemTransformFields(it) {
+      const t = transformOf(it);
+      return `
+        <div class="ed-head"><span>Transform</span></div>
+        <div class="insp-body insp-body--tight">
+          <label class="field"><span>Across <b class="mono">${t.x.toFixed(2)}</b></span>
+            <input type="range" data-item-tf="x" min="-1" max="1" step="0.01" value="${t.x}"></label>
+          <label class="field"><span>Down <b class="mono">${t.y.toFixed(2)}</b></span>
+            <input type="range" data-item-tf="y" min="-1" max="1" step="0.01" value="${t.y}"></label>
+          <label class="field"><span>Scale <b class="mono">${t.scale.toFixed(2)}</b></span>
+            <input type="range" data-item-tf="scale" min="0.2" max="4" step="0.01" value="${t.scale}"></label>
+          <label class="field"><span>Rotate <b class="mono">${Math.round(t.rotation)}&deg;</b></span>
+            <input type="range" data-item-tf="rotation" min="-180" max="180" step="1" value="${t.rotation}"></label>
+          <div class="insp-row">
+            <button class="btn btn-mini" data-item-flip="flipH" aria-pressed="${t.flipH}">Flip across</button>
+            <button class="btn btn-mini" data-item-flip="flipV" aria-pressed="${t.flipV}">Flip down</button>
+          </div>
+        </div>`;
+    }
+
+    /**
+     * A clip on an overlay lane.
+     *
+     * Selecting one used to show "Select a clip or a graphic", because the
+     * panel only knew about layers, staged sounds and the spine. Everything
+     * dragged onto a V or A lane was therefore unreachable: no volume, no
+     * position, no trim, no name.
+     */
+    function itemPanelHtml(lane, it) {
+      const clip = byId.get(it.clipId);
+      const max = clip?.duration || it.out;
+      const isAudio = lane.kind === "audio";
+      return `
+        <div class="ed-head"><span>${isAudio ? "Sound" : "Overlay"}</span></div>
+        <div class="insp-body">
+          ${nameRowHtml(it.name || clip?.name || "Clip")}
+          ${clip ? clipStatsHtml({ in: it.in, out: it.out, speed: it.speed || 1 }, clip) : ""}
+
+          <label class="field">
+            <span>Volume <b class="mono">${Math.round((it.gain ?? 1) * 100)}%</b></span>
+            <input type="range" data-item-set="gain" min="0" max="1" step="0.02" value="${it.gain ?? 1}">
+          </label>
+          <label class="field">
+            <span>Starts <b class="mono">${timecode(it.at)}</b></span>
+            <input type="range" data-item-set="at" min="0" max="${Math.max(1, Math.ceil(total()))}" step="0.05" value="${it.at.toFixed(2)}">
+          </label>
+          <label class="field">
+            <span>Trim in <b class="mono">${timecode(it.in)}</b></span>
+            <input type="range" data-item-set="in" min="0" max="${max}" step="0.05" value="${it.in}">
+          </label>
+          <label class="field">
+            <span>Trim out <b class="mono">${timecode(it.out)}</b></span>
+            <input type="range" data-item-set="out" min="0" max="${max}" step="0.05" value="${it.out}">
+          </label>
+          <label class="field">
+            <span>Speed</span>
+            <select data-item-set="speed">
+              ${SPEEDS.map((sp) => `<option value="${sp}" ${sp === (it.speed || 1) ? "selected" : ""}>${sp}&times;</option>`).join("")}
+            </select>
+          </label>
+
+          ${isAudio ? "" : itemTransformFields(it)}
+
+          <button class="btn btn-danger btn-wide" data-item-drop="${it.uid}">Remove from lane</button>
+        </div>`;
+    }
+
+    /**
+     * The name, with a way to change it.
+     *
+     * A library full of "export-00_41" is a library you cannot navigate, and
+     * the name is the one thing about a clip that was read-only everywhere.
+     */
+    function nameRowHtml(name) {
+      if (renaming) {
+        return `<label class="field">
+          <span>Name</span>
+          <input type="text" data-rename-input value="${Desk.esc(name)}" spellcheck="false"
+                 aria-label="Clip name">
+        </label>`;
+      }
+      return `<div class="insp-name-row">
+        <p class="insp-name">${Desk.esc(name)}</p>
+        <button class="btn btn-mini" data-rename="start" title="Rename">Rename</button>
+      </div>`;
+    }
+
     function clipPaneHtml() {
       const layer = liveLayers().find((l) => l.id === selected);
       if (layer) return layerPanelHtml(layer);
 
       const sound = liveAudio().find((a) => a.id === selected);
       if (sound) return soundPanelHtml(sound);
+
+      const onLane = findItem(selected);
+      if (onLane) return itemPanelHtml(onLane.lane, onLane.it);
 
       const seg = timeline.find((s) => s.uid === selected);
       if (!seg) {
@@ -1484,7 +1628,7 @@ export const Editor = (() => {
       return `
         <div class="ed-head"><span>Clip</span></div>
         <div class="insp-body">
-          <p class="insp-name">${Desk.esc(clip?.name || "Missing clip")}</p>
+          ${nameRowHtml(clip?.name || "Missing clip")}
           ${clipStatsHtml(seg, clip)}
 
           <label class="field">
@@ -1510,6 +1654,10 @@ export const Editor = (() => {
             </select>
           </label>
 
+          <label class="field">
+            <span>Volume <b class="mono">${Math.round((seg.gain ?? 1) * 100)}%</b></span>
+            <input type="range" data-set="gain" min="0" max="1" step="0.02" value="${seg.gain ?? 1}">
+          </label>
           <button class="btn btn-ghost btn-wide" data-set="mute" aria-pressed="${seg.muted}">${seg.muted ? "Muted" : "Sound on"}</button>
 
           ${transitionFields(seg)}
@@ -2345,6 +2493,8 @@ export const Editor = (() => {
 
       const cutChip = t.closest("[data-cut]");
       if (cutChip) {
+        // Selecting it is what lets Backspace dismiss it.
+        select(cutChip.dataset.cut);
         const c = pendingCuts().find((x) => x.id === cutChip.dataset.cut);
         if (c) return void seekTo(Math.max(0, c.start - 0.6));
       }
@@ -2508,6 +2658,42 @@ export const Editor = (() => {
         return void seekTo(playhead);
       }
 
+      // A lane item: volume, placement, trim and speed.
+      const iset = e.target.dataset.itemSet;
+      if (iset) {
+        const found = findItem(selected);
+        if (!found) return;
+        const { it } = found;
+        const v = Number(e.target.value);
+        if (iset === "gain") it.gain = v;
+        if (iset === "at") it.at = Math.max(0, v);
+        if (iset === "in") it.in = Math.min(v, it.out - 0.1);
+        if (iset === "out") it.out = Math.max(v, it.in + 0.1);
+        if (iset === "speed") it.speed = v || 1;
+        const label = e.target.closest(".field")?.querySelector("b");
+        if (label) {
+          label.textContent = iset === "gain" ? `${Math.round(v * 100)}%`
+            : iset === "at" || iset === "in" || iset === "out" ? timecode(v) : String(v);
+        }
+        // syncOverlays and syncLaneAudio both read item.gain, and seekTo
+        // runs them, so the change is audible on the next frame.
+        renderTrack();
+        return void seekTo(playhead);
+      }
+
+      // A lane item's transform.
+      const itf = e.target.dataset.itemTf;
+      if (itf) {
+        const found = findItem(selected);
+        if (!found) return;
+        const { it } = found;
+        const v = Number(e.target.value);
+        it.transform = { ...transformOf(it), [itf]: v };
+        const label = e.target.closest(".field")?.querySelector("b");
+        if (label) label.textContent = itf === "rotation" ? `${Math.round(v)}°` : v.toFixed(2);
+        return void paintFrame();
+      }
+
       const snd = e.target.dataset.snd;
       if (snd) {
         const a = liveAudio().find((x) => x.id === selected);
@@ -2547,6 +2733,16 @@ export const Editor = (() => {
       }
 
       const set = e.target.dataset.set;
+      if (set === "gain") {
+        const gseg = timeline.find((x) => x.uid === selected);
+        if (!gseg) return;
+        gseg.gain = Number(e.target.value);
+        // The element is the spine's own audio, so this lands immediately.
+        video.volume = Math.max(0, Math.min(1, gseg.gain));
+        const label = e.target.closest(".field")?.querySelector("b");
+        if (label) label.textContent = `${Math.round(gseg.gain * 100)}%`;
+        return;
+      }
       const seg = timeline.find((s) => s.uid === selected);
       if (!set || !seg) return;
 
@@ -2585,6 +2781,38 @@ export const Editor = (() => {
         selected = null;
         return refresh();
       }
+      // Rename opens the field; the field commits on change or on Enter.
+      if (e.target.closest("[data-rename]")) {
+        renaming = true;
+        renderInspector();
+        const field = insp.querySelector("[data-rename-input]");
+        field?.focus();
+        field?.select();
+        return;
+      }
+
+      const itemDrop = e.target.closest("[data-item-drop]");
+      if (itemDrop) {
+        const found = findItem(itemDrop.dataset.itemDrop);
+        if (found) {
+          found.lane.items = found.lane.items.filter((x) => x.uid !== found.it.uid);
+          selected = null;
+          Desk.toast("Removed from the lane", "good");
+          refresh();
+        }
+        return;
+      }
+
+      const itemFlip = e.target.closest("[data-item-flip]");
+      if (itemFlip) {
+        const found = findItem(selected);
+        if (!found) return;
+        const which = itemFlip.dataset.itemFlip;
+        found.it.transform = { ...transformOf(found.it), [which]: !transformOf(found.it)[which] };
+        renderInspector();
+        return void paintFrame();
+      }
+
       const sndDrop = e.target.closest("[data-snd-drop]");
       if (sndDrop) {
         removeAudio(sndDrop.dataset.sndDrop, e);
@@ -2719,15 +2947,70 @@ export const Editor = (() => {
     let dragClipId = null;
 
     laneBox.addEventListener("dragstart", (e) => {
-      dragUid = e.target.closest("[data-seg]")?.dataset.seg || null;
+      const held = e.target.closest("[data-seg]");
+      dragUid = held?.dataset.seg || null;
+      held?.classList.add("is-dragging");
     });
     libList.addEventListener("dragstart", (e) => {
       dragClipId = e.target.closest("[data-add]")?.dataset.add || null;
       if (dragClipId) e.dataTransfer.setData("text/plain", dragClipId);
     });
-    laneBox.addEventListener("dragover", (e) => e.preventDefault());
+    /**
+     * Where the thing you are dragging will land.
+     *
+     * Dropping with no feedback means the only way to find out where a clip
+     * goes is to let go of it, and the only way to undo that is to drag it
+     * back. The lane under the pointer lights up and a line marks the seam.
+     * On the spine the marker snaps to a real seam between clips, because that
+     * is the only place a clip can actually go.
+     */
+    let dropMark = null;
+
+    function clearDrop() {
+      laneBox.querySelectorAll(".is-drop-target").forEach((el) => el.classList.remove("is-drop-target"));
+      laneBox.querySelectorAll(".is-dragging").forEach((el) => el.classList.remove("is-dragging"));
+      dropMark?.remove();
+      dropMark = null;
+    }
+
+    /** The nearest cut between two clips, for a spine drop. */
+    function nearestSeam(at) {
+      const seams = [0];
+      let acc = 0;
+      for (const seg of timeline) { acc += segDuration(seg); seams.push(acc); }
+      return seams.reduce((best, sm) => (Math.abs(sm - at) < Math.abs(best - at) ? sm : best), 0);
+    }
+
+    function showDrop(e) {
+      const laneEl = e.target.closest?.("[data-lane]");
+      if (!laneEl) return void clearDrop();
+
+      laneBox.querySelectorAll(".is-drop-target").forEach((el) => el.classList.remove("is-drop-target"));
+      laneEl.classList.add("is-drop-target");
+
+      const bodyEl = laneEl.querySelector(".tl-lane-body");
+      if (!bodyEl) return;
+      if (!dropMark) {
+        dropMark = document.createElement("div");
+        dropMark.className = "tl-drop";
+      }
+      if (dropMark.parentElement !== bodyEl) bodyEl.appendChild(dropMark);
+
+      const at = timeAtPointer(e);
+      const seconds = laneEl.dataset.lane === "spine" ? nearestSeam(at) : Math.max(0, at);
+      dropMark.style.left = `${pctOf(seconds)}%`;
+    }
+
+    laneBox.addEventListener("dragover", (e) => { e.preventDefault(); showDrop(e); });
+    laneBox.addEventListener("dragleave", (e) => {
+      // Only when the pointer has actually left the lanes, not on every
+      // crossing between two children of them.
+      if (!laneBox.contains(e.relatedTarget)) clearDrop();
+    });
+    laneBox.addEventListener("dragend", clearDrop);
     laneBox.addEventListener("drop", async (e) => {
       e.preventDefault();
+      clearDrop();
 
       // A clip dragged out of the library lands on the lane it was dropped on,
       // at the second it was dropped at. That is the only way to put anything
@@ -3164,6 +3447,17 @@ export const Editor = (() => {
     function deleteSelected(e) {
       if (!selected) return;
 
+      // A staged cut is a suggestion like any other, and it was the one kind
+      // Backspace could not reach: the chips were clickable but never
+      // selectable, so there was nothing for the key to act on.
+      const cut = pendingCuts().find((c) => c.id === selected);
+      if (cut) {
+        rejectCut(cut.id, e);
+        selected = null;
+        Desk.toast("Cut suggestion dismissed", "good");
+        return void refresh();
+      }
+
       const layer = liveLayers().find((l) => l.id === selected);
       if (layer) {
         removeLayer(layer.id, e);
@@ -3449,6 +3743,48 @@ export const Editor = (() => {
       paintFrame();
       renderCode();
     });
+    /**
+     * Commit a rename.
+     *
+     * A lane item carries its own label, so renaming one is local. A spine
+     * clip has no name of its own — it points at a library record — so
+     * renaming it renames the clip, which is what makes the library
+     * navigable and is almost always what was meant.
+     */
+    async function commitRename(value) {
+      const name = String(value ?? "").trim().slice(0, 80);
+      renaming = false;
+      if (!name) return void renderInspector();
+
+      const found = findItem(selected);
+      if (found) {
+        found.it.name = name;
+        refresh();
+        return;
+      }
+
+      const seg = timeline.find((x) => x.uid === selected);
+      const clip = seg && byId.get(seg.clipId);
+      if (clip) {
+        clip.name = name;
+        byId.set(clip.id, clip);
+        await Store.put("clips", clip);   // emits, so the library redraws
+        Desk.toast("Renamed", "good");
+        refresh();
+        return;
+      }
+      renderInspector();
+    }
+
+    insp.addEventListener("change", (e) => {
+      if (e.target.matches?.("[data-rename-input]")) commitRename(e.target.value);
+    });
+    insp.addEventListener("keydown", (e) => {
+      if (!e.target.matches?.("[data-rename-input]")) return;
+      if (e.key === "Enter") { e.preventDefault(); commitRename(e.target.value); }
+      if (e.key === "Escape") { e.preventDefault(); renaming = false; renderInspector(); }
+    });
+
     insp.addEventListener("focusout", () => {
       // Only once focus has actually left the panel, not while it moves
       // between two fields inside it.
