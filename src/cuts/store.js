@@ -125,7 +125,7 @@ export function settle(id) {
  * Every range here is an absolute position in the finished edit, so taking
  * two seconds out at 0:05 moves everything later two seconds earlier. Without
  * this, accepting the first of a batch leaves the rest pointing at the wrong
- * words — and `propose_tidy` exists to stage a whole batch at once, so that is
+ * words, and `propose_tidy` exists to stage a whole batch at once, so that is
  * not an edge case, it is the normal path.
  *
  * Cuts that start before the removal are untouched. A cut that overlapped it
@@ -155,7 +155,7 @@ const segLength = (seg) => Math.max(0.05, (seg.out - seg.in) / (seg.speed || 1))
  *
  * Pure: takes an array of segments and returns a new one. The interesting case
  * is a range that falls inside a single segment, which has to become two
- * segments of the same clip — a real split, which the timeline could not do
+ * segments of the same clip (a real split), which the timeline could not do
  * before this existed. A range covering a whole segment drops it, and a range
  * clipping an end just moves that end.
  *

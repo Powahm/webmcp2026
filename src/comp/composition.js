@@ -72,7 +72,7 @@ const listOf = (label, values) => `${label} must be one of: ${values.join(", ")}
  * Check a proposed layer and fill in what it left out.
  *
  * `context` carries the length of the cut in seconds, so a graphic cannot be
- * placed past the end of the footage — which is the single most common way a
+ * placed past the end of the footage, which is the single most common way a
  * proposal comes back looking like it did nothing at all.
  */
 export function validateLayer(input, context = {}) {
@@ -83,7 +83,7 @@ export function validateLayer(input, context = {}) {
   if (!component) {
     return fail(
       `"${key}" is not a component.`,
-      `Use one of: ${COMPONENT_KEYS.join(", ")}. ${COMPONENT_KEYS.map((k) => `${k} — ${COMPONENT_INFO[k].blurb}`).join(" ")}`
+      `Use one of: ${COMPONENT_KEYS.join(", ")}. ${COMPONENT_KEYS.map((k) => `${k}: ${COMPONENT_INFO[k].blurb}`).join(" ")}`
     );
   }
 
@@ -104,7 +104,7 @@ export function validateLayer(input, context = {}) {
   if ("timings" in fields) {
     if (Array.isArray(input.timings) && input.timings.length) {
       // One per word or none. A mismatch used to fall through to the even
-      // spread, which is the exact behaviour timings exist to replace — and
+      // spread, which is the exact behaviour timings exist to replace, and
       // the caller was told the layer staged fine.
       const words = String(input.text ?? "").split(/\s+/).filter(Boolean).length;
       if (input.timings.length !== words) {
@@ -129,7 +129,7 @@ export function validateLayer(input, context = {}) {
   /**
    * Everything else a component declares.
    *
-   * The named cases above exist because they need shaping — a list from a
+   * The named cases above exist because they need shaping: a list from a
    * string, one timing per word, a point clamped to the frame. The rest are
    * plain values, and copying them by their declared type means adding a field
    * to a component is the whole job: no second list here to remember.
@@ -207,8 +207,8 @@ export function validateLayer(input, context = {}) {
   const position = input.position == null ? component.defaults.position : str(input.position, 20);
   if (!POSITIONS.includes(position)) return fail(`"${position}" is not a position.`, listOf("position", POSITIONS));
 
-  // A role, or a literal hex. Roles are still the right default — they resolve
-  // against the live theme, so one spec reads in light and dark — but refusing
+  // A role, or a literal hex. Roles are still the right default: they resolve
+  // against the live theme, so one spec reads in light and dark, but refusing
   // every colour outside a palette of six turned out to mean "you cannot make
   // the title pink", which is not a design principle, it is a missing feature.
   const role = input.palette_role == null ? component.defaults.palette_role : str(input.palette_role, 20);
@@ -280,7 +280,7 @@ export function validateAudio(input, context = {}) {
     if (!SFX_PRESETS[preset]) {
       return fail(
         `"${preset}" is not a sound effect.`,
-        `${listOf("preset", SFX_NAMES)} ${SFX_NAMES.map((n) => `${n} — ${SFX_PRESETS[n].blurb}`).join(" ")}`
+        `${listOf("preset", SFX_NAMES)} ${SFX_NAMES.map((n) => `${n}: ${SFX_PRESETS[n].blurb}`).join(" ")}`
       );
     }
     return {

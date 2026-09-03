@@ -1,4 +1,4 @@
-# Deskmate — overview
+# Deskmate: overview
 
 The single source of truth for what this is, what exists, and what is left.
 Submission for **The WebMCP Challenge**, deadline **3 September 2026, 1pm PDT / 10pm Berlin**.
@@ -25,7 +25,7 @@ The state that decides whether the agent is useful has never left the page:
 - whether the Camera is idle, armed or rolling, and how far into the take you are
 - which clip is selected on the timeline, and where the playhead sits
 - which take you just decided was the keeper
-- **what you said and when you said it** — and this one is the sharpest, because it is the fact
+- **what you said and when you said it**, and this one is the sharpest, because it is the fact
   a transcription service *cannot* give you. A server can tell you what is in a file you
   uploaded. It cannot tell you what you were reading off the prompter when you said it, because
   the prompter is in this tab and so are the clicks that advanced it.
@@ -61,7 +61,8 @@ Everything below is built and tested.
 | Scripts | `src/legacy/scripts-app.js` | Lines-and-shot-directions model, Draft and Shot list views, research pane, suggestions drawn into the draft, standalone rehearsal prompter. |
 | Skills / AI Skills | `src/legacy/skills.js`, `src/legacy/aiskills.js` | Craft notes, plus a folder of markdown the agent can load, with triggers. |
 | Motion graphics | `src/graphics/` | Six declarative types, one renderer for preview and export, propose and accept. |
-| **Motion graphics clips** | `src/legacy/editor.js` | A clip is a span of the cut that holds elements. Open one and it becomes the timeline: its own length, one element to a row, trim and move in local time. Explicit on the spine, floating over the footage, or gathered implicitly around elements the agent proposed with no clip to hold them. Exactly one clip owns an element, and the composition underneath is still one flat list in cut frames, so the tool contract, the codegen and the export never learned about any of this. |
+| **Motion graphics clips** | `src/legacy/editor.js`, `src/comp/store.js` | A clip is a span of the cut that holds elements. Open one and it becomes the timeline: its own length, one element to a row, trim and move in local time. Explicit on the spine, floating over the footage, or gathered implicitly around elements the agent proposed with no clip to hold them. Ownership is a field on the element, not a question about where its start second lands, so shortening a clip cannot hand its contents to the clip beside it and trimming its head takes frames off the head. An element pushed only partly outside keeps its own origin and gets a window, so it draws from the clip's edge half-animated rather than replaying its entrance there; one pushed out entirely is parked and comes back when the clip widens. The composition underneath is still one flat list in cut frames, so the tool contract, the codegen and the export never learned about any of this. |
+| **Undo and redo** | `src/legacy/editor.js` | Over the cut: add, trim, move, reorder, split, delete, clear, and accepted cuts. Ctrl+Z and Ctrl+Shift+Z, or the buttons. A snapshot carries the composition with it, because a timeline edit takes composition state with it. Restoring goes through `restoreComposition`, which takes the same trusted gesture every other decision does, so undo is a person's click and there is still no route from a tool to a state nobody clicked their way into. |
 | **The agent's cursor** | `src/agent/Cursor.jsx` | A pointer that springs to the surface each tool call actually touched and presses it, and a border that breathes on the window while a call is in flight. Driven only by real calls, like the ghost. |
 | **Composition engine** | `src/comp/` | Frames at 30fps, `Sequence` resolution, `interpolate`/`spring`, eleven components, three formats, synthesised sound, TSX codegen. |
 | **Transcripts** | `src/transcript/` | Word timing derived from prompter marks; Whisper as an opt-in upgrade on the user's own key. |
@@ -73,8 +74,8 @@ Everything below is built and tested.
 The composition engine is a purpose-built alternative to a React video framework rather than
 an integration of one. The reason is structural: this is a static page with no backend, and
 the render path of every such framework needs Node and a headless browser. The model was
-worth taking — frames rather than seconds, time-shifting sequences, animation as a pure
-function of the frame — and the dependency was not.
+worth taking (frames rather than seconds, time-shifting sequences, animation as a pure
+function of the frame), and the dependency was not.
 
 ### Verified
 
@@ -88,13 +89,11 @@ and it is not the real thing.
 
 ## Still open
 
-- A motion graphics clip that runs past the end of the cut is drawn up to the
-  cut's end and no further. `total()` is the spine plus the overlay lanes, and
-  a floating clip is not in it.
-- Editor basics beyond trim and reorder: splitting a clip, transitions.
-- Export is real-time canvas capture, so it is WebM at the source clip's dimensions and
-  takes as long as the cut. WebCodecs with `mp4-muxer` is the path to MP4, exact frame
-  rates and 4K, and it replaces `runExport` entirely.
+- Export is real-time canvas capture, so it takes as long as the cut and is
+  whatever container the browser will encode. WebCodecs with `mp4-muxer` is the
+  path to exact frame rates and 4K, and it replaces `runExport` entirely.
+- Undo covers the cut, not the composition on its own. Accepting a proposal is
+  not an undo step; Reject is the button for that.
 - The demo video and the Devpost write-up.
 
 ## The demo, three minutes
@@ -108,9 +107,10 @@ and it is not the real thing.
 4. Ask the agent for a list over the bit where you say "three things". It calls `get_transcript`
    with that quote, gets exact seconds back, then `propose_layer`. A dashed list appears at that
    frame and previews live.
-5. **Accept it.** It goes solid. Open the **Code tab** — the composition is a TSX file with
-   `<Sequence from={115} durationInFrames={150}>`. That is not a description of the graphic,
-   those are the frames it renders on.
+5. **Accept it.** It goes solid. `get_composition_code` returns the composition as the TSX
+   it compiles to: `<Sequence from={115} durationInFrames={150}>`. That is not a description
+   of the graphic, those are the frames it renders on. (The Code tab it used to be shown in
+   was removed in `fca1d40`; say the line, do not go looking for the tab.)
 6. Second ask, on the thing you just accepted: "hold it two seconds longer and put a thump under
    it." `get_composition`, then `propose_layer_change` and `propose_sound`. This compounding turn
    is the whole argument, because a page-scraper cannot know what you just chose to keep.

@@ -1,5 +1,6 @@
 import { addDeskFolder } from "./desk.js";
 import { folderById, markImported } from "./offered.js";
+import { framed } from "../env/browser.js";
 
 /**
  * Letting a folder in.
@@ -147,21 +148,36 @@ function folderNameFrom(files) {
  * changed nothing.
  *
  * showDirectoryPicker is the good path. The input fallback is for browsers, and
- * embedded frames, that do not expose it.
+ * embedded frames, that do not expose it, and for the case this used to get
+ * wrong: a browser that exposes it and then refuses to open it.
  */
 export const CANCELLED = Symbol("cancelled");
 
-/** What to say when the browser would not open a picker at all. */
+/** What to say when neither picker would open. */
 function pickerProblem(err) {
   const name = err?.name || "";
   if (name === "SecurityError" || name === "NotAllowedError") {
-    return "This browser would not open a folder picker here. Try the page in its own tab.";
+    return "This browser would not open a folder picker here. Open the page in its own tab and try again.";
   }
   return `Could not open the folder: ${err?.message || name || "unknown error"}`;
 }
 
+/**
+ * Ask for a folder, by whichever of the two ways this browser allows.
+ *
+ * The File System Access picker is the better one where it works. It is also
+ * the one that a page inside somebody else's frame is not allowed to open: the
+ * function is there, calling it throws, and this used to report that as the end
+ * of the matter. It is not. `<input webkitdirectory>` asks for the same folder
+ * through a plain file input, which no permissions policy takes away, and since
+ * this app only ever reads the files it loses nothing but the handle.
+ *
+ * So: in a frame, do not even try the one that will be refused, because the
+ * failed attempt spends the click. Outside a frame, try it, and fall back to
+ * the input on anything except the person closing the dialog themselves.
+ */
 function chooseFiles() {
-  if (window.showDirectoryPicker) {
+  if (window.showDirectoryPicker && !framed()) {
     return window
       .showDirectoryPicker({ mode: "read" })
       .then(async (dir) => {
@@ -171,9 +187,14 @@ function chooseFiles() {
         }
         return out;
       })
-      .catch((err) => (err?.name === "AbortError" ? CANCELLED : err));
+      .catch((err) => (err?.name === "AbortError" ? CANCELLED : chooseByInput()));
   }
 
+  return chooseByInput();
+}
+
+/** The folder, through a plain file input. */
+function chooseByInput() {
   return new Promise((resolve) => {
     const input = document.createElement("input");
     input.type = "file";
@@ -196,7 +217,7 @@ function chooseFiles() {
 
     // The old version resolved null 600ms after focus returned. On a folder
     // with any size to it the change event has not fired by then, so the
-    // import was abandoned while the browser was still reading the directory —
+    // import was abandoned while the browser was still reading the directory,
     // which is exactly the "it just disappears" symptom. Give it real time, and
     // only give up if nothing was chosen.
     window.addEventListener(

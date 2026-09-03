@@ -9,8 +9,8 @@
  * Nothing the agent sends is ever evaluated. It sends a spec, the spec is
  * checked field by field in composition.js, and the code below is *generated
  * from the checked spec*. So the agent gets the thing that makes code the
- * right interface — an artifact that is precise, diffable, reviewable, and
- * says exactly what will happen on which frame — without the thing that makes
+ * right interface (an artifact that is precise, diffable, reviewable, and
+ * says exactly what will happen on which frame) without the thing that makes
  * evaluated code the wrong one, which is that a single bad prop can blank the
  * preview or take down the page.
  *
@@ -94,7 +94,7 @@ function commentOut(lines, pad, why) {
   // A `*` followed by `/` anywhere inside would close the comment early.
   const safe = lines.map((l) => l.replace(/\*\//g, "* /"));
   return [
-    `${pad}{/* PROPOSED, not in the video${why ? ` — ${why}` : ""}`,
+    `${pad}{/* PROPOSED, not in the video${why ? `: ${why}` : ""}`,
     ...safe,
     `${pad}*/}`,
   ];
@@ -177,7 +177,7 @@ export function generate(doc, { cutSeconds = 0, name = "Cut" } = {}) {
 
   const head = [
     "/**",
-    ` * ${name} — generated from the composition in the Editor.`,
+    ` * ${name}: generated from the composition in the Editor.`,
     " *",
     " * Do not hand-edit: the Composition tab is the source and this is printed",
     " * from it. Times are frames at " + fps + "fps, so " + fps + " is one second and every",

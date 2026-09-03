@@ -1,8 +1,9 @@
 import { Store } from "./store.js";
 import { Desk } from "./shell.js";
+import DESIGNED from "../skills/motion-graphics-that-look-designed.md?raw";
 
 /**
- * AI Skills — instructions this page hands to whatever agent is reading it.
+ * AI Skills: instructions this page hands to whatever agent is reading it.
  *
  * The honest framing matters here, because the obvious description of this is
  * wrong. A web page cannot install anything into ChatGPT. There is no API for
@@ -23,8 +24,8 @@ import { Desk } from "./shell.js";
  *
  * The file format is the SKILL.md convention, because that is what agents
  * already read: YAML frontmatter carrying `name` and `description`, then a
- * markdown body. A file without frontmatter still works — the name comes from
- * the filename and the description from the first line — because someone
+ * markdown body. A file without frontmatter still works: the name comes from
+ * the filename and the description from the first line, because someone
  * dropping a plain note in here should not have to know any of that.
  */
 
@@ -45,6 +46,17 @@ export const markLoaded = (id) => {
   emit();
 };
 export const loadedAt = (id) => loaded.get(id) || null;
+
+/**
+ * Put the open window back on its list.
+ *
+ * The guided tour points at a card and at the list around it, and a window
+ * left on one skill's page has neither. Rather than the tour reaching into the
+ * window's markup, or pressing its Back button on its behalf, the window lends
+ * out the one function that does it and takes it back when it closes.
+ */
+let backToList = () => {};
+export const showSkillsList = () => backToList();
 
 /**
  * Read YAML frontmatter, shallowly.
@@ -105,7 +117,55 @@ export function parseSkill(filename, raw) {
   };
 }
 
-export const allSkills = () => Store.all("aiskills");
+/**
+ * Records written by an older build can predate a field. A skill saved before
+ * `triggers` existed has none, and the window's render read `.length` off it,
+ * threw, and left the list blank under a title that still said "5 skills".
+ * Fill in what is missing from what is there, so an old record reads the same
+ * as a new one everywhere downstream.
+ */
+function normalise(skill) {
+  const body = String(skill.body ?? "");
+  return {
+    ...skill,
+    filename: skill.filename || "skill.md",
+    name: skill.name || "Untitled skill",
+    description: skill.description || "",
+    triggers: Array.isArray(skill.triggers) ? skill.triggers : [],
+    body,
+    words: Number.isFinite(skill.words) ? skill.words : body.split(/\s+/).filter(Boolean).length,
+    meta: skill.meta && typeof skill.meta === "object" ? skill.meta : {},
+  };
+}
+
+/**
+ * Rebuild the file text a skill was parsed out of.
+ *
+ * The store keeps the parsed fields, not the bytes that arrived, so anything
+ * that wants to hand the person their file back has to put the frontmatter
+ * together again. It is written from the parsed values rather than from `meta`
+ * because those are what the rest of the app actually reads, and a file whose
+ * `name:` line disagreed with the name on the card would be a trap. Every other
+ * key follows verbatim, for the same reason parseSkill kept it.
+ */
+export function toRaw(skill) {
+  const s = normalise(skill);
+  const own = new Set(["name", "description", "triggers"]);
+  const rest = Object.entries(s.meta).filter(([key]) => !own.has(key));
+
+  // A plain note that declared nothing stays a plain note. Growing a
+  // frontmatter block the moment someone opens it would put three lines in
+  // front of a person who never asked for any.
+  if (!Object.keys(s.meta).length && !s.description) return s.body;
+
+  const front = [`name: ${s.name}`];
+  if (s.description) front.push(`description: ${s.description}`);
+  if (s.triggers.length) front.push(`triggers: ${s.triggers.join(", ")}`);
+  for (const [key, value] of rest) front.push(`${key}: ${value}`);
+  return `---\n${front.join("\n")}\n---\n\n${s.body}`;
+}
+
+export const allSkills = async () => (await Store.all("aiskills")).map(normalise);
 
 /**
  * Which skills fit what is happening on the page right now.
@@ -248,7 +308,7 @@ onto the same second is the failure this file exists to prevent.
 ## Space: two elements never share a position
 
 Positions are \`upper_left\`, \`upper_right\`, \`lower_left\`, \`lower_right\`,
-\`center\`, \`top_bar\`, \`bottom_bar\`.
+\`center\`, \`bottom_bar\`.
 
 - **One element per position at a time.** Before you place a second element at
   \`center\`, check the first has ended.
@@ -300,13 +360,81 @@ number, \`invert\` for a dip to black.
 
 ## Say what you did
 
-Every proposal takes a \`reason\`. Say what it is for in the person's own terms —
-"the three points you list at 0:14" — not "added a bullet list". They are reading
+Every proposal takes a \`reason\`. Say what it is for in the person's own terms:
+"the three points you list at 0:14", not "added a bullet list". They are reading
 the reason to decide, and there is no tool that decides for them.
 `;
 
+const TASTE = `---
+name: Taste, not slop
+description: Use before writing any headline, label or caption text, or when the creator says a graphic reads flat, generic or "made by AI".
+triggers: graphic, graphics, title, headline, copy, caption, text, slop, generic, bland, bullet_list, quote_card, title_card
+---
+
+# Taste, not slop
+
+Most of what makes an AI-made interface look AI-made is not available to you here, and that is
+deliberate. \`paint.js\` draws flat fills, a 2px ink border and a hard offset shadow with zero blur
+-- there is no gradient function in this renderer, no blur, no glassmorphism, because none of those
+exist as calls you can make. The type is Bricolage Grotesque over IBM Plex Sans, fixed, not a
+choice. The palette is six roles -- \`accent\`, \`warm\`, \`cool\`, \`positive\`, \`plain\`, \`invert\` --
+not a colour wheel. You cannot accidentally build the purple-to-blue gradient every AI landing page
+reaches for, because the tool you would need to build it does not exist.
+
+That means the slop this file exists to stop is not visual. It is what you still control: the
+words, the repetition, and the one door left open into a literal colour.
+
+## The hex door
+
+A \`colour\` prop takes a role or a hex, and a hex is taken at its word -- \`roleColour\` in
+\`paint.js\` does not second-guess it. That is the one place you could still hand-build the thing
+the renderer was built to prevent: reach for \`#7C3AED\` or \`#3B82F6\` because the phrase in your
+head is "make it pop," and you have quietly recreated indigo-to-blue on a page designed never to
+have it. Ask what a role already means before naming a hex. Use a literal colour only when the
+creator names one -- a brand colour, a hex from their own deck -- never as a synonym for "accent,
+but more."
+
+## Words
+
+A caption in a demo video is read in under a second, so it has no room for a word that was already
+worn out on every SaaS landing page before this one. Do not write, and reject if you are tidying
+someone else's:
+
+| Banned | Because | Say instead |
+|---|---|---|
+| Elevate, Empower, Unlock, Supercharge, Revolutionize, Streamline | means nothing until it names what changed | the actual thing that changed |
+| Seamless, Effortless, Frictionless | a claim, not a fact the viewer can check | the number or the step it removed |
+| "Welcome to", "In this video", "Let's dive in" | describes the video instead of being it | open on the claim itself |
+| Game-changer, Next-level, Cutting-edge | says nothing a specific noun wouldn't say better | the noun |
+
+A \`stat_badge\` gets a real number, not "many" or "10x faster*" with no source. A \`quote_card\`
+gets the actual sentence someone said, not a paraphrase that sounds more like a testimonial. If the
+composition has nothing concrete to put in a box, that is a sign the box should not exist yet --
+propose fewer elements, not vaguer ones.
+
+## Repetition is the tell
+
+Three identical cards in a row is the single most recognisable AI layout, and this engine can still
+produce its version of it: the same component, the same \`palette_role\`, the same position, three
+rows of a \`bullet_list\` in the same voice, back to back. Before adding an element, call
+\`get_composition\` and look at what is already there in this clip. If the last two elements share a
+component and a role, change one of them -- role, position, or which component does the job --
+rather than adding a third that matches.
+
+\`accent\` is spent once per clip, per the motion-graphics skill. That rule exists for the same
+reason: a graphic where everything is loud is a graphic where nothing is.
+
+## Applying it
+
+Before a \`propose_layer\` or \`propose_blank_clip\` call that carries text: run the copy past the
+banned-words table, check whether a hex is standing in for a role that already says what you mean,
+and check the last one or two elements in the clip for a repeat you are about to add to. Say what
+you avoided in the \`reason\` if it is not obvious -- "kept it to the one stat rather than three
+bullets" is as much a design decision as the layer itself.
+`;
+
 /**
- * Three skills to start with, so the folder is never a blank page.
+ * Five skills to start with, so the folder is never a blank page.
  *
  * Missing ones are added rather than the whole set being skipped when anything
  * is there. Bailing on the first existing skill meant a browser that had opened
@@ -320,6 +448,8 @@ export async function seed() {
     ["hook-in-three-seconds.md", EXAMPLE],
     ["link-to-script.md", FROM_A_LINK],
     ["building-a-motion-graphics-clip.md", MOTION],
+    ["taste-not-slop.md", TASTE],
+    ["motion-graphics-that-look-designed.md", DESIGNED],
   ];
   for (const [filename, body] of stock) {
     if (!have.has(filename)) await addSkill(parseSkill(filename, body));
@@ -332,12 +462,14 @@ export function open(origin) {
   Desk.openWindow({
     id: "aiskills",
     title: "AI Skills",
+    help: "aiskills",
     meta: "for the agent",
     tint: TINT,
     size: { w: 760, h: 620 },
     origin,
     build(body, win) {
       body.className = "win-body ais";
+      body.dataset.view = "list";
       body.innerHTML = `
         <div class="ais-bar">
           <p class="ais-lede">
@@ -345,17 +477,76 @@ export function open(origin) {
             It asks for the index, then pulls in a skill when one is relevant.
           </p>
           <button class="btn btn-mini" data-act="add">Add .md</button>
+          <button class="btn btn-mini" data-act="new">New</button>
           <input type="file" accept=".md,.markdown,.txt,text/markdown,text/plain" multiple hidden data-act="file">
         </div>
-        <div class="ais-drop"><div class="ais-list"></div></div>`;
+        <div class="ais-drop"><div class="ais-list"></div></div>
+        <div class="ais-detail"></div>`;
 
       const list = body.querySelector(".ais-list");
       const drop = body.querySelector(".ais-drop");
+      const detail = body.querySelector(".ais-detail");
       const fileInput = body.querySelector('[data-act="file"]');
+
+      /**
+       * Which of the two views the window is showing, and what is half-typed
+       * into it.
+       *
+       * It is held here rather than read back off the markup because every
+       * write to this store re-renders this window, the person's own save
+       * included. Working the mode out from the DOM would mean saving a skill
+       * threw them back to the list one keystroke after they asked to keep it.
+       */
+      let view = { mode: "list", id: null, editing: false, draft: null, caret: null };
+
+      const openDetail = (id) => {
+        view = { mode: "detail", id, editing: false, draft: null, caret: null };
+        render();
+      };
+      const showList = () => {
+        const from = view.id;
+        view = { mode: "list", id: null, editing: false, draft: null, caret: null };
+        // Focus follows the way you came. Without this, leaving a skill drops
+        // focus on the document and the next Tab starts at the menubar again.
+        render().then(() => {
+          const back = list.querySelector(`[data-open-skill="${from}"]`) || body.querySelector('[data-act="add"]');
+          back?.focus({ preventScroll: true });
+        });
+      };
+      backToList = showList;
+      const cancelEdit = () => {
+        view.editing = false;
+        view.draft = null;
+        view.caret = null;
+        render();
+      };
 
       async function render() {
         const skills = await allSkills();
 
+        // What is in the textarea belongs to the person and is not in the
+        // store yet, so a render fired by something else (the seed finishing,
+        // a tool writing) has to hand it back rather than wipe it.
+        if (view.editing) {
+          const live = detail.querySelector(".ais-editor");
+          if (live) {
+            view.draft = live.value;
+            view.caret = [live.selectionStart, live.selectionEnd];
+          }
+        }
+
+        if (view.mode === "detail") {
+          const skill = skills.find((s) => s.id === view.id);
+          if (skill) return renderDetail(skill);
+          // Removed while it was open, from this window or from anywhere else.
+          // There is no file behind the pane any more, and a detail view of
+          // nothing is worse than the list.
+          view = { mode: "list", id: null, editing: false, draft: null, caret: null };
+        }
+        return renderList(skills);
+      }
+
+      async function renderList(skills) {
         // The same match the tool layer makes, shown to the person, so they can
         // tell whether a skill they wrote will ever actually fire. A trigger
         // that never matches is the commonest way one of these files ends up
@@ -366,6 +557,11 @@ export function open(origin) {
           matching = new Set(matchSkills(skills, await currentSignals()).map((m) => m.skill.id));
         } catch { /* the desktop is mid-boot; the list still renders */ }
 
+        // Working out the matches is a round trip, and a card opened in the
+        // meantime has already moved the window on. Do not drag it back.
+        if (view.mode !== "list") return;
+
+        body.dataset.view = "list";
         win.setMeta(`${skills.length} skill${skills.length === 1 ? "" : "s"}`);
         list.innerHTML = skills.length
           ? skills
@@ -390,13 +586,119 @@ export function open(origin) {
                               ? `<span class="ais-card-idle">waiting for ${Desk.esc(s.triggers.slice(0, 2).join(" or "))}</span>`
                               : `<span class="ais-card-idle">no triggers, load on request only</span>`
                       }
-                      <button class="btn btn-mini btn-danger" data-remove="${s.id}">Remove</button>
+                      <span class="ais-card-acts">
+                        <button class="btn btn-mini" data-open-skill="${s.id}" aria-label="Open ${Desk.esc(s.name)}">Open</button>
+                        <button class="btn btn-mini btn-danger" data-remove="${s.id}" aria-label="Remove ${Desk.esc(s.name)}">Remove</button>
+                      </span>
                     </footer>
                   </article>`;
               })
               .join("")
-          : `<p class="ais-empty">Nothing here yet. Drop a <code>.md</code> file in, or press Add.<br>
+          : `<p class="ais-empty">Nothing here yet. Drop a <code>.md</code> file in, press Add, or press New and write one.<br>
              Frontmatter with <code>name</code> and <code>description</code> is read if it is there, and worked out from the file if it is not.</p>`;
+      }
+
+      /**
+       * One skill, on its own, in the same window.
+       *
+       * Reading a skill is reading a file, so it is shown as one: the text, in
+       * a mono well, exactly as it is written. Nothing renders the markdown,
+       * because the agent is handed the same characters and the person should
+       * be looking at what the agent gets, not at a prettier version of it.
+       */
+      function renderDetail(skill) {
+        body.dataset.view = "detail";
+        // With the list hidden the window's meta line is the only thing naming
+        // the file, and knowing which one you are about to rewrite is the point
+        // of it.
+        win.setMeta(skill.filename);
+
+        const raw = view.draft ?? toRaw(skill);
+        const facts = [
+          `${skill.words} word${skill.words === 1 ? "" : "s"}`,
+          skill.triggers.length
+            ? `triggers: ${skill.triggers.join(", ")}`
+            : "no triggers, load on request only"
+        ];
+
+        detail.innerHTML = `
+          <div class="ais-detail-head">
+            <button class="btn btn-mini" data-act="back">Back</button>
+            <span class="ais-detail-title">
+              <span class="ais-detail-name">${Desk.esc(skill.name)}</span>
+              <span class="ais-detail-file mono">${Desk.esc(skill.filename)}</span>
+            </span>
+            <span class="ais-detail-acts">
+              ${
+                view.editing
+                  ? `<button class="btn btn-mini" data-act="cancel">Cancel</button>
+                     <button class="btn btn-mini btn-accent" data-act="save">Save</button>`
+                  : `<button class="btn btn-mini" data-act="edit">Edit</button>`
+              }
+            </span>
+          </div>
+          <p class="ais-detail-desc">${Desk.esc(skill.description || "No description.")}</p>
+          <p class="ais-detail-facts mono">${facts.map((f) => `<span>${Desk.esc(f)}</span>`).join("")}</p>
+          ${
+            view.editing
+              ? `<textarea class="ais-body ais-editor" spellcheck="false" aria-label="Text of ${Desk.esc(skill.filename)}" placeholder="---&#10;name: What it is&#10;description: When to use it&#10;triggers: a word, another word&#10;---&#10;&#10;The instructions themselves.">${Desk.esc(raw)}</textarea>`
+              : skill.body
+                ? `<pre class="ais-body">${Desk.esc(skill.body)}</pre>`
+                : `<div class="ais-body ais-body-empty">
+                     <p>This file is empty.</p>
+                     <p class="ais-body-empty-note">Nothing is offered to the agent until there is something in it.</p>
+                     <button class="btn btn-mini btn-accent" data-act="edit">Write it</button>
+                   </div>`
+          }`;
+
+        if (view.editing) {
+          // Editing was asked for, so the caret belongs in the box. Putting it
+          // back where it was matters on the renders this window did not start
+          // itself, which arrive mid-sentence.
+          const box = detail.querySelector(".ais-editor");
+          const [from, to] = view.caret || [raw.length, raw.length];
+          box.focus({ preventScroll: true });
+          box.setSelectionRange(Math.min(from, raw.length), Math.min(to, raw.length));
+        }
+      }
+
+      async function saveEdit() {
+        const box = detail.querySelector(".ais-editor");
+        const current = (await allSkills()).find((s) => s.id === view.id);
+        if (!box || !current) return render();
+
+        // parseSkill mints a fresh id and a fresh timestamp because it is
+        // normally reading a file it has never seen before. This is the same
+        // skill, so both are put back: the store key, the position in the list
+        // and the "the agent loaded this" marker all hang off that id, and a
+        // new one would leave the old record sitting next to it.
+        const next = { ...parseSkill(current.filename, box.value), id: current.id, created: current.created };
+        view.editing = false;
+        view.draft = null;
+        view.caret = null;
+        await addSkill(next);
+        Desk.toast(`${next.filename} saved`, "good");
+        render();
+      }
+
+      /**
+       * A skill written here rather than dropped in.
+       *
+       * It is saved empty and opened straight into the editor, so the file
+       * exists in the list from the first keystroke instead of living in a
+       * dialog that can be lost. The filename is the one thing a blank file
+       * cannot work out for itself, so it is numbered rather than repeated:
+       * two files called untitled.md is a list nobody can read.
+       */
+      async function createSkill() {
+        const taken = new Set((await allSkills()).map((s) => s.filename));
+        let filename = "untitled.md";
+        for (let n = 2; taken.has(filename); n += 1) filename = `untitled-${n}.md`;
+
+        const skill = parseSkill(filename, "");
+        view = { mode: "detail", id: skill.id, editing: true, draft: "", caret: null };
+        await addSkill(skill);
+        render();
       }
 
       async function ingest(files) {
@@ -413,11 +715,38 @@ export function open(origin) {
 
       body.addEventListener("click", async (e) => {
         if (e.target.closest('[data-act="add"]')) return fileInput.click();
+        if (e.target.closest('[data-act="new"]')) return createSkill();
+        if (e.target.closest('[data-act="back"]')) return showList();
+        if (e.target.closest('[data-act="cancel"]')) return cancelEdit();
+        if (e.target.closest('[data-act="save"]')) return saveEdit();
+        if (e.target.closest('[data-act="edit"]')) {
+          view.editing = true;
+          view.draft = null;
+          view.caret = null;
+          return render();
+        }
+
         const gone = e.target.closest("[data-remove]");
         if (gone) {
           await removeSkill(gone.dataset.remove);
-          render();
+          return render();
         }
+
+        // The Open button is the path a keyboard takes. The whole card answers
+        // a click as well, because a card that opens something and ignores
+        // being clicked reads as broken.
+        const card = e.target.closest("[data-open-skill]") || e.target.closest("[data-skill]");
+        if (card) openDetail(card.dataset.openSkill || card.dataset.skill);
+      });
+
+      // Escape backs out of an edit. The desktop closes the top window on
+      // Escape and shell.js only spares the script editor, by class name, so
+      // the event is stopped here instead: losing the window would be a far
+      // ruder answer to Escape than losing the edit.
+      body.addEventListener("keydown", (e) => {
+        if (e.key !== "Escape" || !e.target.closest(".ais-editor")) return;
+        e.stopPropagation();
+        cancelEdit();
       });
 
       fileInput.addEventListener("change", () => {
@@ -441,7 +770,7 @@ export function open(origin) {
 
       const off = onAiSkills(render);
       const offStore = Store.on("aiskills", render);
-      win.onCleanup(() => { off(); offStore(); });
+      win.onCleanup(() => { off(); offStore(); backToList = () => {}; });
 
       render();
     }

@@ -95,7 +95,7 @@ export async function persist(clip, transcript) {
 
 /** Forget a derived transcript so the next ask rebuilds it. The timings come
  *  from the take, not the script, so editing the script afterwards does not
- *  invalidate them — but re-transcribing with Whisper does. */
+ *  invalidate them, but re-transcribing with Whisper does. */
 export function forget(clipId) {
   cache.delete(clipId);
   emit();

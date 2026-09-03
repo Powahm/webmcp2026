@@ -1,9 +1,15 @@
-import { Store, Clips, timecode } from "./store.js";
+import {
+  askForCameraAndMic,
+  describeEnvironment,
+  framed as framedIn,
+  openInOwnTab,
+} from "../env/browser.js";
+import { Store, Clips, timecode, noPictureMessage } from "./store.js";
 import { Desk } from "./shell.js";
 import { Editor } from "./editor.js";
 
 /* ============================================================
-   Camera — live preview and recording.
+   Camera: live preview and recording.
    The same recorder backs both the window UI and the scripting
    API, so camera.record(3) in a script behaves identically.
    ============================================================ */
@@ -53,7 +59,7 @@ export const Camera = (() => {
     return options.find((t) => window.MediaRecorder?.isTypeSupported?.(t)) || "";
   }
 
-  const framed = () => { try { return window.self !== window.top; } catch { return true; } };
+  const framed = () => framedIn();
 
   function describeError(err) {
     const name = err?.name || "";
@@ -67,7 +73,7 @@ export const Camera = (() => {
       if (name === "UnsupportedError" || !navigator.mediaDevices?.getDisplayMedia) {
         return framed()
           ? "This preview frame does not allow screen capture. Open the deployed site to record your screen."
-          : "Screen capture needs a secure page — https or localhost.";
+          : "Screen capture needs a secure page: https or localhost.";
       }
     }
     if (name === "NotFoundError" || name === "OverconstrainedError")
@@ -77,7 +83,7 @@ export const Camera = (() => {
     if (name === "UnsupportedError" || !navigator.mediaDevices?.getUserMedia) {
       return framed()
         ? "This preview frame does not allow camera access. Open the deployed site to record, or use Import video."
-        : "Camera access needs a secure page — https or localhost. Import video works anywhere.";
+        : "Camera access needs a secure page: https or localhost. Import video works anywhere.";
     }
     return err?.message || "The camera could not be started.";
   }
@@ -225,16 +231,33 @@ export const Camera = (() => {
   /* ---------------- window UI ---------------- */
 
   function build(body, win) {
+    // `source` outlives one window: it is module state, not per-window state,
+    // so closing the window while on Screen and reopening it left the select
+    // showing its default "Camera" option while acquire() still reached for
+    // getDisplayMedia underneath. A fresh window always starts on Camera.
+    source = "camera";
+
     body.className = "win-body cam";
     body.innerHTML = `
       <div class="cam-stage">
         <video class="cam-video" playsinline muted autoplay></video>
+        <!-- Three doors out, in the order worth trying. Asking is first
+             because it is the one that works when the browser simply has not
+             been asked yet; a tab of its own is second because it is the only
+             thing that helps when the surrounding page never passed the camera
+             down; Try again is last, for when the person has just changed
+             something themselves. -->
         <div class="cam-blocked" hidden>
           <p class="cam-blocked-title">Camera unavailable</p>
           <p class="cam-blocked-msg"></p>
-          <button class="btn btn-ghost" data-act="retry">Try again</button>
+          <div class="cam-blocked-acts">
+            <button class="btn btn-accent" data-act="ask">Ask for camera and mic</button>
+            <button class="btn btn-ghost" data-act="own-tab" hidden>Open in its own tab</button>
+            <button class="btn btn-ghost" data-act="retry">Try again</button>
+          </div>
+          <p class="cam-blocked-env mono"></p>
         </div>
-        <div class="cam-rec" hidden><span class="cam-dot"></span><span class="cam-time mono">0:00</span></div>
+        <div class="cam-rec" hidden><span class="cam-dot"></span><span class="cam-time mono">00:00:00</span></div>
 
         <!-- The teleprompter, over the preview rather than over the desktop.
              Tailwind utilities with the theme's own custom properties, so it
@@ -386,7 +409,51 @@ export const Camera = (() => {
         shutter.disabled = true;
         blocked.hidden = false;
         blockedMsg.textContent = describeError(err);
+        showEnvironment();
       }
+    }
+
+    /**
+     * Ask for the camera and the microphone, deliberately.
+     *
+     * The prompt usually arrives the moment this window opens, which is a
+     * prompt nobody pressed anything for: some browsers, agent browsers in
+     * particular, dismiss one of those on the person's behalf and there is no
+     * way back to it. This button is a request the person made, so the browser
+     * has a gesture to attach the prompt to and they know what they are
+     * answering. A grant is remembered for the origin, so pressing record next
+     * time asks nobody.
+     */
+    async function askPermission() {
+      const ask = body.querySelector('[data-act="ask"]');
+      if (ask) { ask.disabled = true; ask.textContent = "Asking…"; }
+      const result = await askForCameraAndMic();
+      if (ask) { ask.disabled = false; ask.textContent = "Ask for camera and mic"; }
+
+      if (result.ok) {
+        Desk.toast("Camera and mic allowed.", "good");
+        return connect();
+      }
+      blocked.hidden = false;
+      blockedMsg.textContent = describeError({ name: result.error, message: result.detail });
+      showEnvironment();
+    }
+
+    /**
+     * What the browser says about itself, under the message.
+     *
+     * A refusal with no reason is the thing this window has always been worst
+     * at: "Camera unavailable" is true and useless. This is the one line that
+     * separates a permission the person can grant from a frame that was never
+     * given the camera to pass down, and it decides whether the way out is
+     * worth offering.
+     */
+    async function showEnvironment() {
+      const line = body.querySelector(".cam-blocked-env");
+      const escape = body.querySelector('[data-act="own-tab"]');
+      if (escape) escape.hidden = !framed();
+      if (!line) return;
+      line.textContent = await describeEnvironment();
     }
 
     async function listDevices() {
@@ -405,7 +472,7 @@ export const Camera = (() => {
       const clips = (await Clips.all()).slice(-6).reverse();
       strip.innerHTML = clips.length
         ? clips.map((c) => `
-            <button class="strip-clip" data-clip="${c.id}" title="${Desk.esc(c.name)} — open in Editor">
+            <button class="strip-clip" data-clip="${c.id}" title="${Desk.esc(c.name)} (open in Editor)">
               ${c.thumb ? `<img src="${c.thumb}" alt="">` : `<span class="strip-blank"></span>`}
               <span class="strip-time mono">${timecode(c.duration)}</span>
             </button>`).join("")
@@ -450,7 +517,7 @@ export const Camera = (() => {
         if (prompt.script) prompt.marks.push({ line: prompt.line, at: 0 });
         shutter.dataset.recording = "true";
         shutter.setAttribute("aria-label", "Stop recording");
-        recTime.textContent = "0:00";
+        recTime.textContent = "00:00:00";
         recBadge.hidden = false;
       } catch (err) {
         Desk.toast(describeError(err), "bad");
@@ -461,6 +528,15 @@ export const Camera = (() => {
       const act = e.target.closest("[data-act]")?.dataset.act;
       if (act === "record") toggleRecord();
       if (act === "retry") connect();
+      if (act === "ask") return void askPermission();
+      if (act === "own-tab") {
+        // Straight off the click. A window opened later is a popup, and popups
+        // are blocked, which would look like this button doing nothing.
+        if (!openInOwnTab()) {
+          Desk.toast("This browser would not open a new tab. Copy the address into one yourself.", "bad");
+        }
+        return;
+      }
       if (act === "import") fileInput.click();
       if (act === "mic") {
         withAudio = !withAudio;
@@ -480,33 +556,31 @@ export const Camera = (() => {
     });
 
     /**
-     * Switching to Screen does not open the picker.
+     * Switching to Screen opens the picker right away.
      *
-     * getDisplayMedia needs a user gesture, and a `change` event on a select is
-     * one, but the picker would then appear before the person has decided
-     * anything. Worse, cancelling it leaves the app with no stream and a dead
-     * preview. So the switch only arms the source; pressing record opens the
-     * picker, which is the moment they actually meant to choose a window.
+     * A `change` event on a select is a real user gesture, same as a click, so
+     * getDisplayMedia can be called straight from it. Cancelling the picker
+     * just lands on the same "camera unavailable" state any other refusal
+     * does, with its own Try again — no reason to make the person press
+     * record first just to get the prompt they were already asking for.
      */
     sourceSelect.addEventListener("change", () => {
       source = sourceSelect.value;
       release();
       video.srcObject = null;
       select.hidden = source === "screen";
-      if (source === "screen") {
-        blocked.hidden = false;
-        blockedMsg.textContent = "Press record and pick a window or a screen. Your mic is mixed in if it is on.";
-        shutter.disabled = false;
-      } else {
-        connect();
-      }
+      connect();
     });
 
     fileInput.addEventListener("change", async () => {
+      const count = fileInput.files.length;
+      const mute = [];
       for (const file of fileInput.files) {
-        await Clips.save(file, { name: file.name.replace(/\.[^.]+$/, ""), kind: "import" });
+        const clip = await Clips.save(file, { name: file.name.replace(/\.[^.]+$/, ""), kind: "import" });
+        if (clip.hasPicture === false) mute.push(clip.name);
       }
-      Desk.toast(`Imported ${fileInput.files.length} file(s)`, "good");
+      if (mute.length) Desk.toast(noPictureMessage(mute), "bad");
+      else Desk.toast(`Imported ${count} file(s)`, "good");
       fileInput.value = "";
       renderStrip();
     });
@@ -550,9 +624,11 @@ export const Camera = (() => {
     Desk.openWindow({
       id: "camera",
       title: "Camera",
+      help: "camera",
       meta: "live",
       tint: TINT,
-      size: "large",
+      size: { w: 760, h: 700 },
+      minSize: { w: 480, h: 420 },
       origin,
       build
     });

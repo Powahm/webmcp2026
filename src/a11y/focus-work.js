@@ -1,20 +1,20 @@
 /**
- * Focus work — the keyboard's map of the desktop.
+ * Focus work: the keyboard's map of the desktop.
  *
  * A desktop metaphor is a mouse metaphor by default: things are where you can
  * see them, and you get to them by pointing. That is fine until you cannot
  * point. Everything here exists so the same machine can be driven from the
  * keyboard alone, and so a screen reader is told about the things that happen
- * on their own — a window flying open, a window folding back into the dock.
+ * on their own: a window flying open, a window folding back into the dock.
  *
  * Three pieces, deliberately small:
  *
- * - `announce` — one polite live region for the whole page, because window
+ * - `announce`: one polite live region for the whole page, because window
  *   state changes are invisible to anything that is not watching pixels.
- * - `trapFocus` — Tab stays inside a modal while it is up, and focus goes back
+ * - `trapFocus`: Tab stays inside a modal while it is up, and focus goes back
  *   to whatever opened it. A dialog you can Tab out of behind the scrim is a
  *   dialog you have lost.
- * - `linearNav` — arrow keys move between the icons on the desktop. Tab still
+ * - `linearNav`: arrow keys move between the icons on the desktop. Tab still
  *   reaches every one of them; this is in addition, not instead, because the
  *   icons read as a row of launchers and both habits are common.
  */
@@ -43,7 +43,7 @@ let live = null;
  *
  * The region is created on first use and never removed. It has to be in the
  * document before the text lands in it, or a screen reader has nothing to
- * watch — which is why the text is written on the next frame rather than in
+ * watch, which is why the text is written on the next frame rather than in
  * the same tick the node is appended.
  */
 export function announce(message) {
@@ -106,8 +106,8 @@ export function trapFocus(container, { initial } = {}) {
 /**
  * Arrow keys, Home and End move between the items in a row.
  *
- * Tab order is left alone on purpose. Roving tabindex — one stop for the whole
- * group — is the textbook pattern for a toolbar, but these are launchers on a
+ * Tab order is left alone on purpose. Roving tabindex (one stop for the whole
+ * group) is the textbook pattern for a toolbar, but these are launchers on a
  * desktop, and someone who has learned that Tab walks the icons should not
  * find that it suddenly skips past all of them.
  */

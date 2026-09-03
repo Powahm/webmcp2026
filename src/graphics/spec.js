@@ -122,7 +122,7 @@ export function validate(input, { timelineLength } = {}) {
   if (!TYPES.includes(type)) {
     return fail(
       `"${type}" is not a graphic type.`,
-      `Use one of: ${TYPES.join(", ")}. ${Object.entries(TYPE_INFO).map(([k, v]) => `${k} — ${v.blurb}`).join(" ")}`
+      `Use one of: ${TYPES.join(", ")}. ${Object.entries(TYPE_INFO).map(([k, v]) => `${k}: ${v.blurb}`).join(" ")}`
     );
   }
 

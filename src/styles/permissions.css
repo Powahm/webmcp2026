@@ -1,0 +1,93 @@
+/* ============================================================
+   The permissions chip and its panel.
+   ============================================================ */
+
+/*
+ * Three colours, and only three, because a light that means four things is not
+ * a light. Green is granted, amber is nobody has asked, and refused takes the
+ * accent, which is what everything else in this app already goes when it has
+ * bad news. Refused is the only one worth interrupting for, so it is the only
+ * one that changes the chip itself.
+ */
+
+.perm-wrap { position: relative; }
+
+.perm-chip { gap: 7px; }
+.perm-glyph { width: 13px; height: 13px; flex: none; color: var(--text-muted); }
+.perm-chip[data-worst="off"] .perm-glyph { color: var(--accent); }
+
+.perm-orbs { display: inline-flex; gap: 3px; }
+
+.perm-orb {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--text-muted);
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.18);
+}
+.perm-orb[data-state="on"] { background: var(--green); }
+.perm-orb[data-state="ask"] { background: var(--yellow); }
+.perm-orb[data-state="off"] { background: var(--accent); }
+.perm-orb--big { width: 10px; height: 10px; margin-top: 3px; }
+
+/* The word is the label for anyone who does not read a row of dots as a
+   sentence. It is the first thing to go when the menubar runs out of room. */
+.perm-word { font-size: 12px; }
+@media (max-width: 1080px) { .perm-word { display: none; } }
+
+.perm-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 500;
+  width: 330px;
+  max-width: calc(100vw - 24px);
+  padding: 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  background: var(--surface);
+  border: var(--bw) solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 4px 4px 0 var(--shadow);
+}
+
+.perm-lede { margin: 0 0 10px; color: var(--text-muted); }
+
+.perm-list { display: grid; gap: 9px; margin: 0; padding: 0; list-style: none; }
+
+.perm-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 8px;
+  align-items: start;
+  padding-bottom: 9px;
+  border-bottom: 1px solid var(--line);
+}
+.perm-row:last-child { border-bottom: none; padding-bottom: 0; }
+
+.perm-main { display: grid; gap: 2px; min-width: 0; }
+.perm-name { display: flex; align-items: baseline; gap: 6px; font-weight: 600; }
+.perm-state {
+  font-size: 9.5px;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.perm-row[data-state="on"] .perm-state { color: var(--green); }
+.perm-row[data-state="off"] .perm-state { color: var(--accent); }
+.perm-what { color: var(--text-muted); }
+.perm-why { font-size: 11px; color: var(--text-muted); opacity: .85; }
+.perm-why:empty { display: none; }
+
+.perm-act { white-space: nowrap; align-self: center; }
+
+.perm-foot { display: flex; gap: 6px; margin-top: 11px; }
+.perm-foot .btn { flex: 1 1 auto; }
+
+.perm-frame-note {
+  margin: 9px 0 0;
+  padding-top: 9px;
+  font-size: 11px;
+  color: var(--text-muted);
+  border-top: 1px solid var(--line);
+}

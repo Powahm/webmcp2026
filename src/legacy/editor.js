@@ -1,4 +1,4 @@
-import { Store, Clips, timecode } from "./store.js";
+import { Clips, Folders, noPictureMessage, Store, timecode } from "./store.js";
 import { drawGraphics } from "../graphics/render.js";
 import {
   accept as acceptGraphic,
@@ -14,10 +14,9 @@ import { Camera } from "./camera.js";
 
 /* The composition engine: the frame-accurate graphics layer over the cut, the
    transcript derived from the teleprompter, and cuts staged against the edit.
-   The timeline, the trims and the six looks below are untouched by all of it —
+   The timeline, the trims and the six looks below are untouched by all of it:
    the composition sits on top of the cut and never owns the footage. */
 import { createMixer, createScheduler, speechRanges } from "../comp/audio.js";
-import { generate } from "../comp/codegen.js";
 import { COMPONENT_INFO, SFX_PRESETS, validateLayer } from "../comp/composition.js";
 import { formatOf, keyedAt, toSeconds } from "../comp/engine.js";
 import { isolate, PALETTE_ROLES as COMP_ROLES, palette, POSITIONS as COMP_POSITIONS } from "../comp/paint.js";
@@ -45,6 +44,10 @@ import {
   removeLayer,
   setFormat,
   shiftAfter,
+  adoptInside,
+  reseat,
+  disown,
+  restoreComposition,
 } from "../comp/store.js";
 import { applyCut, onCuts, pendingCuts, proposeCut, rejectCut, retime, settle } from "../cuts/store.js";
 import { FILLERS, findDeadWeight, toCutTime } from "../transcript/transcript.js";
@@ -52,7 +55,7 @@ import { hasApiKey, onTranscripts, setApiKey, transcriptsFor } from "../transcri
 import { transcribe } from "../transcript/whisper.js";
 
 /* ============================================================
-   Editor — a timeline of trimmed clips with per-clip grading.
+   Editor: a timeline of trimmed clips with per-clip grading.
    Export replays the timeline into a canvas and records the
    canvas stream, so there is no encoder dependency.
    ============================================================ */
@@ -74,6 +77,10 @@ export const Editor = (() => {
   let timeline = [];
   let selected = null;
   let refresh = () => {};
+  /** Remember the cut before changing it. Assigned by the open window, the
+   *  same way `refresh` is, because the undo stack lives with the window and
+   *  `addClip` and `addBlank` out here have to be able to push onto it. */
+  let mark = () => {};
 
   /**
    * Lanes above and below the spine.
@@ -152,7 +159,28 @@ export const Editor = (() => {
 
   const segDuration = (seg) => Math.max(0.05, (seg.out - seg.in) / seg.speed);
   const spine = () => timeline.reduce((sum, seg) => sum + segDuration(seg), 0);
-  const total = () => Math.max(spine(), overlayEnd());
+  /**
+   * How far the floating motion graphics clips reach.
+   *
+   * Assigned by the open window, because the floats live with it. It is a hook
+   * rather than a read of `floats` for the same reason `refresh` is one: the
+   * length of the cut is asked for out here, and the clips are in there.
+   *
+   * Without it, `total()` was the spine plus the overlay lanes and a floating
+   * clip was in neither, so a title sequence hung off the end of the last shot
+   * was drawn up to the end of that shot and stopped mid-animation.
+   */
+  let floatEnd = () => 0;
+  const total = () => Math.max(spine(), overlayEnd(), floatEnd());
+
+  /**
+   * A clip this browser can play but not draw.
+   *
+   * Explicitly `false`, never merely falsy: clips saved before the probe
+   * started recording this have no such field at all, and "we never checked"
+   * is not "we checked and there is no picture".
+   */
+  const noPicture = (clip) => clip?.hasPicture === false;
 
   function segmentAt(time) {
     let acc = 0;
@@ -165,9 +193,10 @@ export const Editor = (() => {
     return last ? { seg: last, offset: segDuration(last), start: acc - segDuration(last) } : null;
   }
 
-  async function addClip(clipId, { select = true } = {}) {
+  async function addClip(clipId, { select = true, at = timeline.length } = {}) {
     const clip = (await Clips.all()).find((c) => c.id === clipId);
     if (!clip) return null;
+    mark();
     byId.set(clip.id, clip);
     const seg = {
       uid: `seg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -178,7 +207,8 @@ export const Editor = (() => {
       speed: 1,
       muted: false
     };
-    timeline.push(seg);
+    const i = Math.max(0, Math.min(at, timeline.length));
+    timeline.splice(i, 0, seg);
     if (select) selected = seg.uid;
     await retimeTranscript();
     refresh();
@@ -190,13 +220,14 @@ export const Editor = (() => {
    *
    * Until now a graphic had to sit on footage, which meant you could not build
    * a title sequence, a lower-third pack or an animated card without shooting
-   * something first to put underneath it. A blank is a segment like any other
-   * — it takes up time on the spine, it trims, it splits — it just paints a
+   * something first to put underneath it. A blank is a segment like any other:
+   * it takes up time on the spine, it trims, it splits; it just paints a
    * colour instead of decoding a video. Everything downstream treats it as a
    * segment, so the transcript, the export and the cut tools needed no special
    * case beyond "there is no picture to draw".
    */
   function addBlank({ seconds = 5, colour = null, select = true } = {}) {
+    mark();
     const seg = {
       uid: `seg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       clipId: null,
@@ -227,16 +258,25 @@ export const Editor = (() => {
           <button class="cmp-tab" role="tab" data-lib="clips" aria-selected="true" tabindex="0">Library</button>
           <button class="cmp-tab" role="tab" data-lib="text" aria-selected="false" tabindex="-1">Text</button>
           <button class="cmp-tab" role="tab" data-lib="trans" aria-selected="false" tabindex="-1">Transitions</button>
+          <button class="cmp-tab" role="tab" data-lib="words" aria-selected="false" tabindex="-1">Transcript</button>
         </div>
         <div class="lib-pane" data-libpane="clips">
           <div class="ed-lib-bar">
-            <button class="btn btn-mini" data-act="import">Import</button>
+            <button class="btn btn-mini" data-act="import" title="Import video files into the library">Video</button>
+            <button class="btn btn-mini" data-act="import-audio" title="Import music or sound effects into the library">Audio</button>
             <input type="file" accept="video/*" multiple hidden data-act="file">
+            <input type="file" accept="audio/*" multiple hidden data-act="lib-audio-file">
           </div>
+          <!-- Folders are a filter, not a tree. One row of chips with one open
+               at a time: a library of forty takes and a music bed is a library
+               you scroll rather than read, and nesting would only move the
+               scrolling somewhere else. -->
+          <div class="lib-folders" role="group" aria-label="Library folders"></div>
           <div class="ed-lib-list"></div>
         </div>
         <div class="lib-pane" data-libpane="text" hidden></div>
         <div class="lib-pane" data-libpane="trans" hidden></div>
+        <div class="lib-pane" data-libpane="words" hidden></div>
         <div class="lib-pane" data-libpane="motion" hidden></div>
       </aside>
 
@@ -254,6 +294,10 @@ export const Editor = (() => {
           <canvas class="ed-gfx"></canvas>
           </div>
           <p class="ed-empty">Add a clip from the library to start cutting.</p>
+          <!-- Shown over the picture when the clip under the playhead is one
+               this browser can play but not draw, so a black frame says why
+               it is black instead of looking like a broken editor. -->
+          <p class="ed-nopic" hidden></p>
         </div>
         <!-- The format lives where the picture is, because it is a thing you
              look at and change, not a setting you go and find. -->
@@ -272,7 +316,7 @@ export const Editor = (() => {
             <svg class="ico-pause" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 2.5h3v11h-3zM8.5 2.5h3v11h-3z"/></svg>
           </button>
           <input class="scrub" type="range" min="0" max="1000" value="0" aria-label="Playhead">
-          <span class="ed-clock mono">0:00 / 0:00</span>
+          <span class="ed-clock mono">00:00:00 / 00:00:00</span>
           <button class="btn btn-accent" data-act="export">Export</button>
         </div>
       </section>
@@ -303,21 +347,22 @@ export const Editor = (() => {
           <!-- The page you are on. Editing the cut and building a motion
                graphics clip are two different jobs with two different sets of
                panels, so they are two pages rather than one crowded one. -->
+          <!-- Only visible while scoped into a motion graphics clip's own
+               timeline: the way back out, kept beside the page it returns
+               you to rather than in a crumb bar of its own further down. -->
+          <button class="btn btn-mini ed-back" data-act="scope-out" hidden>← Timeline</button>
           <div class="ed-pages" role="group" aria-label="Page">
             <button class="btn btn-mini ed-page" data-page-to="edit" aria-pressed="true">Edit</button>
             <button class="btn btn-mini ed-page" data-page-to="motion" aria-pressed="false" hidden>Motion</button>
           </div>
-          <div class="cmp-tabs" role="tablist" aria-label="Timeline views">
-            <button class="cmp-tab" role="tab" id="tab-track" aria-controls="pane-track"
-                    data-tab="track" aria-selected="true" tabindex="0">Timeline</button>
-            <button class="cmp-tab" role="tab" id="tab-words" aria-controls="pane-words"
-                    data-tab="words" aria-selected="false" tabindex="-1">Transcript</button>
-            <button class="cmp-tab" role="tab" id="tab-code" aria-controls="pane-code"
-                    data-tab="code" aria-selected="false" tabindex="-1">Code</button>
-          </div>
-          <button class="btn btn-mini" data-act="clear">Clear</button>
+          <button class="btn btn-mini btn-icon" data-act="undo" title="Undo the last timeline edit (Ctrl+Z)" aria-label="Undo" disabled>
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6.2 3.5 2.7 7l3.5 3.5M3.2 7h6.3a3.3 3.3 0 0 1 0 6.6H7"/></svg>
+          </button>
+          <button class="btn btn-mini btn-icon" data-act="redo" title="Redo the last undone edit (Ctrl+Shift+Z)" aria-label="Redo" disabled>
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m9.8 3.5 3.5 3.5-3.5 3.5M12.8 7H6.5a3.3 3.3 0 0 0 0 6.6H9"/></svg>
+          </button>
         </div>
-        <div class="cmp-pane" id="pane-track" role="tabpanel" aria-labelledby="tab-track" data-pane="track" tabindex="0">
+        <div class="cmp-pane" id="pane-track" data-pane="track" tabindex="0">
           <div class="tl-tools">
             <button class="btn btn-mini" data-act="split" title="Split the clip under the playhead (S)">Split</button>
             <button class="btn btn-mini" data-act="add-text" title="Add a text clip at the playhead (T)">Text</button>
@@ -343,8 +388,8 @@ export const Editor = (() => {
                    (width - gutter), while the ruler ticks and the playhead sat
                    halfway across the full width and timeAtPointer measured the
                    full width too. Everything therefore disagreed by the gutter
-                   plus a scale factor — about two seconds on a minute-long
-                   cut — which is why a cut landed nowhere near where it was
+                   plus a scale factor (about two seconds on a minute-long
+                   cut), which is why a cut landed nowhere near where it was
                    aimed. The tl-field element below is that one space, and it
                    is the only rectangle the pointer is measured against. -->
               <div class="tl-ruler" data-seek></div>
@@ -358,8 +403,6 @@ export const Editor = (() => {
           </div>
           <div class="cut-strip"></div>
         </div>
-        <div class="cmp-pane" id="pane-words" role="tabpanel" aria-labelledby="tab-words" data-pane="words" tabindex="0" hidden></div>
-        <div class="cmp-pane" id="pane-code" role="tabpanel" aria-labelledby="tab-code" data-pane="code" tabindex="0" hidden></div>
       </div>
 
       <div class="ed-export" hidden>
@@ -378,11 +421,13 @@ export const Editor = (() => {
     const frameBox = body.querySelector(".ed-frame");
     const formatBar = body.querySelector(".ed-formats-list");
     const empty = body.querySelector(".ed-empty");
+    const noPic = body.querySelector(".ed-nopic");
     const libList = body.querySelector(".ed-lib-list");
     const lib = body.querySelector(".ed-lib");
     const libTabs = body.querySelector(".lib-tabs");
     const libPane = (name) => body.querySelector(`[data-libpane="${name}"]`);
     let libTab = "clips";
+    const LIB_TAB_ORDER = ["clips", "text", "trans", "words"];
     const tl = body.querySelector(".tl");
     const tlScroll = body.querySelector(".tl-scroll");
     const ruler = body.querySelector(".tl-ruler");
@@ -398,19 +443,15 @@ export const Editor = (() => {
     const playBtn = body.querySelector('[data-act="play"]');
     const fileInput = body.querySelector('[data-act="file"]');
     const audioInput = body.querySelector('[data-act="audio-file"]');
+    const libAudioInput = body.querySelector('[data-act="lib-audio-file"]');
+    const libFolderBar = body.querySelector(".lib-folders");
     const exportPane = body.querySelector(".ed-export");
     const cutStrip = body.querySelector(".cut-strip");
-    const panes = {
-      track: body.querySelector('[data-pane="track"]'),
-      words: body.querySelector('[data-pane="words"]'),
-      code: body.querySelector('[data-pane="code"]'),
-    };
 
     let playing = false;
     let playhead = 0;
     let loaded = null;
     let raf = 0;
-    let tab = "track";
 
     /* The cut-level transcript, rebuilt whenever the timeline changes.
        It has to be: every trim and reorder moves every word after it, and a
@@ -443,27 +484,137 @@ export const Editor = (() => {
 
     /** Which library card is having its name typed into, if any. */
     let libRenaming = null;
+    /** The folder the library is showing: a folder id, "all", or "loose". */
+    let libFolder = "all";
+    /** The folders, as of the last render, so the chips and the move row agree. */
+    let libFolders = [];
+    /** Which card has its "put this somewhere" row open, if any. */
+    let libFiling = null;
+    /** Which folder chip is having its name typed into, if any. */
+    let folderRenaming = null;
+
+    const SOUND_MARK = `<span class="lib-wave" aria-hidden="true">
+        <svg viewBox="0 0 64 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M4 12h3M11 7v10M18 4v16M25 9v6M32 3v18M39 8v8M46 5v14M53 10v4M60 12h0"/>
+        </svg>
+      </span>`;
+
+    /** A real folder, rather than one of the two views that are not folders. */
+    const isFolder = (id) => id !== "all" && id !== "loose";
+
+    /**
+     * The row of folders above the library.
+     *
+     * Every chip carries its own count, because the question a person asks a
+     * folder row is "where did I put it", and a count is the cheapest answer
+     * that is ever right. Rename and Delete belong to whichever folder is
+     * open rather than sitting on every chip: two more buttons on each of
+     * eight chips is a row nobody can read.
+     */
+    function renderFolders(folders, total, count) {
+      const chip = (id, label, n, extra = "") => `
+        <button class="lib-fold" data-folder="${id}" aria-pressed="${libFolder === id}" ${extra}>
+          <span class="lib-fold-name">${Desk.esc(label)}</span>
+          <span class="lib-fold-n mono">${n}</span>
+        </button>`;
+
+      const loose = count("loose");
+      const named = folders
+        .map((f) =>
+          folderRenaming === f.id
+            ? `<input class="lib-fold-rename" type="text" spellcheck="false"
+                      data-folder-rename-input="${f.id}" value="${Desk.esc(f.name)}"
+                      aria-label="New name for ${Desk.esc(f.name)}">`
+            : chip(f.id, f.name, count(f.id), `data-folder-drop="${f.id}"`)
+        )
+        .join("");
+
+      libFolderBar.innerHTML =
+        chip("all", "All", total) +
+        // No point offering the loose pile when nothing is loose, unless that
+        // is the view you are standing in and it has just been emptied.
+        (loose || libFolder === "loose" ? chip("loose", "Unfiled", loose, `data-folder-drop=""`) : "") +
+        named +
+        `<button class="lib-fold lib-fold--new" data-act="new-folder" title="Make a folder" aria-label="Make a folder">+</button>` +
+        (isFolder(libFolder)
+          ? `<span class="lib-fold-tools">
+               <button class="btn btn-mini" data-folder-rename="${libFolder}">Rename</button>
+               <button class="btn btn-mini" data-folder-del="${libFolder}">Delete</button>
+             </span>`
+          : "");
+    }
+
+    /** The folders a clip can be put in, shown on the card itself. */
+    function filingHtml(clip) {
+      const here = clip.folder || "";
+      const opt = (id, label) => `
+        <button class="lib-file-opt" data-file-to="${id}" data-file-clip="${clip.id}"
+                aria-pressed="${here === id}">${Desk.esc(label)}</button>`;
+      return `
+        <div class="lib-filing" role="group" aria-label="Put ${Desk.esc(clip.name)} in a folder">
+          ${opt("", "Unfiled")}
+          ${libFolders.map((f) => opt(f.id, f.name)).join("")}
+          <button class="lib-file-opt lib-file-opt--new" data-file-new="${clip.id}">+ New folder</button>
+        </div>`;
+    }
 
     async function renderLibrary() {
-      const clips = await Clips.all();
+      const [clips, folders] = await Promise.all([Clips.all(), Folders.all()]);
+      libFolders = folders;
       clips.forEach((c) => byId.set(c.id, c));
-      libList.innerHTML = clips.length
-        ? clips.map((c) => `
-            <div class="lib-item">
-              <button class="lib-add" draggable="true" data-add="${c.id}" title="Add to the timeline, or drag onto a lane">
-                ${c.thumb ? `<img src="${c.thumb}" alt="">` : `<span class="strip-blank"></span>`}
+
+      // A clip pointing at a folder that has since gone is loose, not lost.
+      // Deleting a folder must never take the footage in it out of the library.
+      const live = new Set(folders.map((f) => f.id));
+      const folderOf = (c) => (c.folder && live.has(c.folder) ? c.folder : null);
+      if (isFolder(libFolder) && !live.has(libFolder)) libFolder = "all";
+
+      const count = (id) =>
+        clips.filter((c) => (id === "loose" ? !folderOf(c) : folderOf(c) === id)).length;
+      const shown = clips.filter((c) =>
+        libFolder === "all" ? true : libFolder === "loose" ? !folderOf(c) : folderOf(c) === libFolder
+      );
+
+      renderFolders(folders, clips.length, count);
+
+      libList.innerHTML = shown.length
+        ? shown.map((c) => {
+            const sound = c.kind === "audio";
+            return `
+            <div class="lib-item${sound ? " lib-item--sound" : ""}">
+              <button class="lib-add" draggable="true" data-add="${c.id}"
+                      title="${sound
+                        ? "Put it on an audio lane at the playhead, or drag it onto one"
+                        : noPicture(c)
+                          ? Desk.esc(noPictureMessage(c.name))
+                          : "Add to the timeline, or drag onto a lane"}">
+                ${sound
+                  ? SOUND_MARK
+                  : c.thumb ? `<img src="${c.thumb}" alt="">` : `<span class="strip-blank"></span>`}
+                ${!sound && noPicture(c) ? `<span class="lib-mute mono">no picture</span>` : ""}
                 <span class="lib-name">${Desk.esc(c.name)}</span>
-                <span class="lib-time mono">${timecode(c.duration)}</span>
+                <span class="lib-time mono">${sound ? "sound &middot; " : ""}${timecode(c.duration)}</span>
               </button>
               <button class="lib-ren" data-lib-rename="${c.id}" aria-label="Rename ${Desk.esc(c.name)}" title="Rename">✎</button>
+              <button class="lib-file" data-lib-file="${c.id}" aria-expanded="${libFiling === c.id}"
+                      aria-label="Put ${Desk.esc(c.name)} in a folder" title="Put in a folder">
+                <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor"
+                     stroke-width="2.2" stroke-linejoin="round"><path d="M3 6h6l2 2h10v11H3z"/></svg>
+              </button>
               <button class="lib-del" data-del="${c.id}" aria-label="Delete ${Desk.esc(c.name)}">×</button>
               ${libRenaming === c.id
                 ? `<input class="lib-rename" type="text" spellcheck="false"
                           data-lib-rename-input="${c.id}" value="${Desk.esc(c.name)}"
                           aria-label="New name for ${Desk.esc(c.name)}">`
                 : ""}
-            </div>`).join("")
-        : `<p class="lib-empty">No clips yet. Record one in Camera, or import a file.</p>`;
+              ${libFiling === c.id ? filingHtml(c) : ""}
+            </div>`;
+          }).join("")
+        : `<p class="lib-empty">${
+            clips.length
+              ? "Nothing in this folder yet. Drag a clip onto the folder, or use the folder button on a card."
+              : "No clips yet. Record one in Camera, or import a file."
+          }</p>`;
 
       // Focus after the list is in the document, not before it exists.
       if (libRenaming) {
@@ -471,6 +622,41 @@ export const Editor = (() => {
         if (field) { field.focus(); field.select(); }
         else libRenaming = null;
       }
+      if (folderRenaming) {
+        const field = libFolderBar.querySelector("[data-folder-rename-input]");
+        if (field) { field.focus(); field.select(); }
+        else folderRenaming = null;
+      }
+    }
+
+    /**
+     * Sound onto an audio lane, from wherever it was asked for.
+     *
+     * Clicking a sound in the library and dropping a file on the timeline are
+     * the same act with two doorways, so they run the same code: the last
+     * audio lane if there is one, a new one if there is not.
+     */
+    function addSoundAt(clip, seconds) {
+      const lane = lanes.filter((l) => l.kind === "audio").at(-1) || addLane("audio");
+      lane.items.push({
+        uid: `au-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        clipId: clip.id,
+        name: clip.name,
+        at: Math.max(0, seconds),
+        in: 0,
+        out: clip.duration || 10,
+        speed: 1,
+        gain: 1,
+      });
+      return lane;
+    }
+
+    /** Rename a folder, or leave it alone if the field was emptied. */
+    async function commitFolderRename(id, value) {
+      folderRenaming = null;
+      const name = String(value ?? "").trim().slice(0, 40);
+      if (!name) return void renderLibrary();
+      await Folders.rename(id, name);   // emits, so the row redraws
     }
 
     /**
@@ -573,7 +759,7 @@ export const Editor = (() => {
      * A lane above the spine needs its own decoder, so each gets a hidden
      * <video>. They are never shown: the preview draws them onto the same
      * canvas the graphics use, and the export draws them onto the canvas it is
-     * recording. That is deliberate — one drawing path for both, the same rule
+     * recording. That is deliberate: one drawing path for both, the same rule
      * the composition follows, so an overlay cannot look right in the preview
      * and wrong in the file.
      */
@@ -586,8 +772,8 @@ export const Editor = (() => {
      * belongs on an audio lane. In practice that meant dragging a video onto
      * V2 silently threw its audio away with no control anywhere to get it
      * back. It now plays at the item's own gain, and it is routed into the
-     * same graph the export records from — the same wiring `laneAudioEl` does
-     * — so what you hear in the preview is what lands in the file.
+     * same graph the export records from (the same wiring `laneAudioEl` does)
+     * so what you hear in the preview is what lands in the file.
      */
     const overlayWired = new Set();
 
@@ -668,8 +854,8 @@ export const Editor = (() => {
      *
      * A motion graphics clip is a span of the cut with elements inside it, and
      * that is the whole model. The composition still holds one flat list of
-     * layers positioned in cut frames, so the file the Code tab generates, the
-     * export and every tool the agent calls keep working exactly as they did.
+     * layers positioned in cut frames, so the export and every tool the agent
+     * calls keep working exactly as they did.
      * What changed is how the timeline groups them. Twenty bars fighting over
      * one lane became one clip you open, which is the same move a precomp
      * makes in any compositor and for the same reason: a lane can only show
@@ -693,24 +879,45 @@ export const Editor = (() => {
      * Motion graphics clips that float over the cut.
      *
      * A clip on the spine takes a turn: the footage stops and the graphics
-     * play. A floating one does not — it sits above the pictures for a stretch
+     * play. A floating one does not: it sits above the pictures for a stretch
      * of the cut, which is the only way to build a title sequence over someone
      * talking. It needs no compositing work because the graphics canvas already
      * draws over the frame; what it adds is a container to hold and name them,
      * so a person can open one and work in it.
      */
     let floats = [];
+    floatEnd = () => floats.reduce((max, f) => Math.max(max, f.at + f.seconds), 0);
     let floatNo = 0;
 
-    function addFloatingClip({ at = 0, seconds = 5, title = "Overlay" } = {}) {
+    function addFloatingClip({ at = 0, seconds = 5, title = "Overlay", laneId = null } = {}) {
+      mark();
       const clip = {
         id: `mcf-${Date.now().toString(36)}-${(floatNo++).toString(36)}`,
         title,
         at: Math.max(0, at),
         seconds: Math.max(0.5, Math.min(60, seconds)),
+        // The video lane it sits on, when a person put it on one. Null means
+        // the motion lane drawn above every video track, which is where the
+        // agent's loose clips live too.
+        laneId,
       };
       floats = [...floats, clip];
       return clip;
+    }
+
+    /**
+     * The first video lane with nothing on it between two cut-seconds,
+     * bottom-up: V2 before V3. An overlay added at the playhead goes on the
+     * lowest track with room rather than on a fresh one above everything.
+     * Null when every lane is busy there, or there are no lanes at all.
+     */
+    function freeVideoLaneAt(start, end) {
+      const busy = (a0, a1) => a0 < end && a1 > start;
+      return lanes.find((lane) =>
+        lane.kind === "video" &&
+        !lane.items.some((it) => busy(it.at, itemEnd(it))) &&
+        !floats.some((f) => f.laneId === lane.id && busy(f.at, f.at + f.seconds))
+      ) || null;
     }
 
     /** Clips a person or the agent actually placed, in cut seconds. */
@@ -783,7 +990,7 @@ export const Editor = (() => {
      *
      * An overlay placed over a clip on the spine covers the same seconds, and
      * asking each container separately what it holds counts every element
-     * twice — two clips both claiming six elements, and deleting one from
+     * twice: two clips both claiming six elements, and deleting one from
      * inside either leaves it in the other. The overlay wins because it sits
      * above the picture, which is the same order the frame is painted in.
      */
@@ -794,21 +1001,72 @@ export const Editor = (() => {
         || null;
     }
 
-    const holds = (c, seconds) =>
-      c.kind === "loose" ? withinClip(c, seconds) : ownerOf(seconds)?.id === c.id;
+    /**
+     * Whether a clip holds an element.
+     *
+     * A clip on the spine answers by name: the element carries the uid of the
+     * clip it was put in, so shortening that clip cannot hand its contents to
+     * the clip beside it, and trimming its head takes frames off the head
+     * rather than off the far end. Everything else -- an overlay clip, and the
+     * run of loose elements the agent left sitting over footage -- is still
+     * decided by the clock, and skips anything that already has a home.
+     */
+    const holds = (c, item) => {
+      if (c.kind === "spine") return item.owner === c.id;
+      if (item.owner) return false;
+      const seconds = item.from / (composition().fps || 30);
+      return c.kind === "loose" ? withinClip(c, seconds) : ownerOf(seconds)?.id === c.id;
+    };
 
     function layersIn(c) {
-      const fps = composition().fps || 30;
       return liveLayers()
-        .filter((l) => holds(c, l.from / fps))
+        .filter((l) => holds(c, l))
         .sort((a, b) => a.from - b.from || a.id.localeCompare(b.id));
     }
 
     function soundsIn(c) {
-      const fps = composition().fps || 30;
       return liveAudio()
-        .filter((a) => holds(c, a.from / fps))
+        .filter((a) => holds(c, a))
         .sort((a, b) => a.from - b.from);
+    }
+
+    /**
+     * Keep every motion graphics clip's contents inside that clip.
+     *
+     * Runs before the track is drawn, which is after every edit that can move
+     * a clip: a trim, a reorder, a delete, an accepted cut. For each clip on
+     * the spine it compares where the clip is now against where it was when
+     * its contents were last seated, and moves them by the difference --
+     * `start` for the clip sliding along the spine, `in` for its head being
+     * trimmed, which scrolls the animation rather than moving it.
+     *
+     * `anchor` lives on the segment because the clips themselves are derived
+     * on every read; holding one across an edit would be holding a stale copy.
+     */
+    function anchorMotion() {
+      const fps = composition().fps || 30;
+      let at = 0;
+      for (const seg of timeline) {
+        const dur = segDuration(seg);
+        const start = at;
+        at += dur;
+        if (!seg.blank) continue;
+
+        const startFrame = Math.round(start * fps);
+        const endFrame = Math.max(startFrame + 1, Math.round((start + dur) * fps));
+        const was = seg.anchor;
+        const shiftFrames = was
+          ? Math.round(((start - was.start) - (seg.in - was.in)) * fps)
+          : 0;
+        const settled = !!was
+          && shiftFrames === 0
+          && was.startFrame === startFrame
+          && was.endFrame === endFrame;
+        seg.anchor = { start, in: seg.in, startFrame, endFrame };
+
+        adoptInside(seg.uid, startFrame, endFrame);
+        reseat(seg.uid, { shiftFrames, startFrame, endFrame, settled });
+      }
     }
 
     /**
@@ -819,6 +1077,109 @@ export const Editor = (() => {
      */
     let scope = null;
     const scopeClip = () => (scope ? motionClips().find((c) => c.id === scope) || null : null);
+
+    /* ------------------------------------------------------------- history */
+
+    /**
+     * Undo and redo, over the cut.
+     *
+     * What it covers is the timeline: adding, trimming, moving, splitting,
+     * reordering and deleting clips, and the cuts accepted off the transcript.
+     * A snapshot carries the composition along with it, because a timeline
+     * edit takes composition state with it -- deleting a motion graphics clip
+     * deletes the elements inside it, and an accepted cut re-times every layer
+     * after it. Putting the spine back without them would put a clip back
+     * empty, which is not the state anyone asked to return to.
+     *
+     * What it deliberately does not cover is the composition on its own.
+     * Accepting a proposal is not an undo step: there is a Reject beside every
+     * one of them, and a stack that could quietly un-accept something a person
+     * chose is a worse answer than the button already sitting there.
+     *
+     * Deep copies, not references. `timeline` is mutated in place all over
+     * this file, so a snapshot holding the same objects would rewrite itself
+     * as the edit it exists to remember goes past.
+     */
+    const HISTORY_DEPTH = 50;
+    const history = { past: [], future: [] };
+
+    const clone = (value) =>
+      (typeof structuredClone === "function"
+        ? structuredClone(value)
+        : JSON.parse(JSON.stringify(value)));
+
+    const snapshot = () => ({
+      timeline: clone(timeline),
+      lanes: clone(lanes),
+      floats: clone(floats),
+      comp: clone(composition()),
+      selected,
+    });
+
+    /** Whether two snapshots are the same edit. Cheap, and it keeps a press
+     *  that moved nothing off the stack -- selecting a clip is not an edit. */
+    const same = (a, b) =>
+      JSON.stringify([a.timeline, a.lanes, a.floats, a.comp])
+      === JSON.stringify([b.timeline, b.lanes, b.floats, b.comp]);
+
+    function push(snap) {
+      history.past.push(snap);
+      if (history.past.length > HISTORY_DEPTH) history.past.shift();
+      history.future.length = 0;
+      renderHistory();
+    }
+
+    mark = () => push(snapshot());
+
+    /* A drag decides whether it was an edit at the end of it rather than the
+       start: a pointerdown that only selected a clip must not cost a step. */
+    let gestureSnap = null;
+    const markGesture = () => { gestureSnap = snapshot(); };
+    function settleGesture() {
+      const before = gestureSnap;
+      gestureSnap = null;
+      if (before && !same(before, snapshot())) push(before);
+    }
+
+    function restoreSnapshot(snap, e) {
+      timeline = clone(snap.timeline);
+      lanes = clone(snap.lanes);
+      floats = clone(snap.floats);
+      selected = snap.selected;
+      scope = null;
+      loaded = null;
+      restoreComposition(clone(snap.comp), e);
+      renderHistory();
+      return rebuildTranscript().then(() => {
+        refresh();
+        seekTo(Math.min(playhead, total()));
+      });
+    }
+
+    function undo(e) {
+      if (!history.past.length) return void Desk.toast("Nothing to undo.", "bad");
+      history.future.push(snapshot());
+      const snap = history.past.pop();
+      renderHistory();
+      Desk.toast("Undone", "good");
+      restoreSnapshot(snap, e);
+    }
+
+    function redo(e) {
+      if (!history.future.length) return void Desk.toast("Nothing to redo.", "bad");
+      history.past.push(snapshot());
+      const snap = history.future.pop();
+      renderHistory();
+      Desk.toast("Redone", "good");
+      restoreSnapshot(snap, e);
+    }
+
+    function renderHistory() {
+      const u = body.querySelector('[data-act="undo"]');
+      const r = body.querySelector('[data-act="redo"]');
+      if (u) u.disabled = history.past.length === 0;
+      if (r) r.disabled = history.future.length === 0;
+    }
 
     /**
      * Double click, counted by hand.
@@ -855,12 +1216,14 @@ export const Editor = (() => {
     function syncPageTabs() {
       const toEdit = body.querySelector('[data-page-to="edit"]');
       const toMotion = body.querySelector('[data-page-to="motion"]');
+      const back = body.querySelector(".ed-back");
       if (!toEdit || !toMotion) return;
       const here = scopeClip();
       toMotion.hidden = motionClips().length === 0;
       toMotion.textContent = here ? (here.title || "Motion").slice(0, 22) : "Motion";
       toEdit.setAttribute("aria-pressed", String(!here));
       toMotion.setAttribute("aria-pressed", String(Boolean(here)));
+      if (back) back.hidden = !here;
       body.dataset.page = here ? "motion" : "edit";
     }
 
@@ -889,8 +1252,8 @@ export const Editor = (() => {
     /**
      * Seconds to a percentage of the track, and back.
      *
-     * Everything on the timeline is positioned in one timebase — the finished
-     * cut — so a lane, a ruler tick and the playhead cannot disagree about
+     * Everything on the timeline is positioned in one timebase (the finished
+     * cut), so a lane, a ruler tick and the playhead cannot disagree about
      * where two seconds is. Zoom widens the track and the scroller takes the
      * overflow; nothing recomputes, because a percentage of a wider box is
      * still the same second.
@@ -1014,7 +1377,7 @@ export const Editor = (() => {
      * A1: the spine's own sound, on its own row.
      *
      * Drawn from the same segments as V1 rather than kept as a second list of
-     * them, because a cut is a cut — trimming the picture trims the sound, and
+     * them, because a cut is a cut: trimming the picture trims the sound, and
      * two lists of the same thing is how they come to disagree. Clicking a
      * block here selects the clip, so the mute is where the rest of the clip's
      * controls are.
@@ -1050,8 +1413,8 @@ export const Editor = (() => {
      * Stack things that overlap.
      *
      * Two graphics at the same second on one row draw on top of each other and
-     * neither label can be read. Packing them into sub-rows — the first row
-     * that is free at that moment — is what every editor does, and it costs
+     * neither label can be read. Packing them into sub-rows (the first row
+     * that is free at that moment) is what every editor does, and it costs
      * one pass over a list that is never long.
      */
     const MAX_ROWS = 4;
@@ -1135,8 +1498,12 @@ export const Editor = (() => {
      * there was no clip to put it in. They behave the same: one bar, open it
      * to work inside it.
      */
-    function motionLaneHtml() {
-      const clips = motionClips().filter((c) => c.kind === "loose" || c.kind === "float");
+    function motionLaneHtml(laneId = null) {
+      const clips = motionClips().filter((c) =>
+        laneId === null
+          ? c.kind === "loose" || (c.kind === "float" && !c.float.laneId)
+          : c.kind === "float" && c.float.laneId === laneId
+      );
       return clips.map((c) => {
         const els = layersIn(c);
         const waiting = els.filter((l) => l.status === "proposed").length;
@@ -1172,12 +1539,6 @@ export const Editor = (() => {
       const els = layersIn(c);
       const sounds = soundsIn(c);
       const rows = [];
-
-      rows.push(`<div class="tl-crumb">
-        <button class="btn btn-mini" data-act="scope-out">← Timeline</button>
-        <b>${Desk.esc(c.title)}</b>
-        <span class="tl-crumb-meta mono">${timecode(Math.max(0, c.end - c.start))} · ${els.length} element${els.length === 1 ? "" : "s"}</span>
-      </div>`);
 
       if (!els.length && !sounds.length) {
         rows.push(`<div class="tl-lane"><div class="tl-lane-body">
@@ -1239,7 +1600,7 @@ export const Editor = (() => {
       // clip. Drawing it here as well would be the same thing in two places,
       // which is the state where a person deletes one copy and is surprised.
       const clips = motionClips();
-      const held = (a) => clips.some((c) => holds(c, a.from / fps));
+      const held = (a) => clips.some((c) => holds(c, a));
       const packed = pack(liveAudio().filter((a) => !held(a)).map((a) => ({
         a, start: a.from / fps, length: Math.max(0.15, (a.durationInFrames || fps) / fps),
       })));
@@ -1396,7 +1757,7 @@ export const Editor = (() => {
      * A number, or the fallback.
      *
      * `Number(null)` is 0 and 0 is finite, so the obvious version of this
-     * quietly turned every unset field into zero — which for opacity meant a
+     * quietly turned every unset field into zero, which for opacity meant a
      * keyframed graphic animated perfectly and invisibly.
      */
     const num = (v, fallback) => {
@@ -1487,26 +1848,59 @@ export const Editor = (() => {
     /* Dragging on the picture. */
     let onFrame = null;
 
-    /** Only intercept clicks when there is something on the picture to grab. */
+    /** Every movable graphic actually on screen at the playhead, in the order
+     *  they draw -- last is topmost, so a click hits whichever one is really
+     *  on top rather than whichever was clicked last. */
+    function movableLayersAtPlayhead() {
+      const frame = Math.round(playhead * (composition().fps || 30));
+      return liveLayers().filter((l) =>
+        MOVABLE.has(l.component) && frame >= l.from && frame < l.from + Math.max(1, l.durationInFrames)
+      );
+    }
+
+    /** Only intercept clicks when there is something on the picture to grab.
+     *  A graphic sitting in frame is a target to click even before it is
+     *  selected -- the background reframe drag yields to it either way. */
     function armFrameGrabs() {
       const layer = selectedLayer();
-      gfx.style.pointerEvents = layer && MOVABLE.has(layer.component) ? "auto" : "none";
+      const clickable = movableLayersAtPlayhead().length > 0 || (layer && MOVABLE.has(layer.component));
+      gfx.style.pointerEvents = clickable ? "auto" : "none";
       gfx.style.cursor = layer && MOVABLE.has(layer.component) ? "move" : "";
     }
 
+    function hitLayer(x, y, r) {
+      const inBox = (l) => {
+        const b = layerBox(l, r.width, r.height);
+        const nearCorner = Math.abs(x - (b.x + b.w)) < 12 && Math.abs(y - (b.y + b.h)) < 12;
+        const inside = x >= b.x - 6 && x <= b.x + b.w + 6 && y >= b.y - 6 && y <= b.y + b.h + 6;
+        return (inside || nearCorner) ? { nearCorner } : null;
+      };
+
+      // The already-selected layer gets first refusal, so grabbing its resize
+      // corner still works even when another graphic overlaps it nearby.
+      const current = selectedLayer();
+      if (current && MOVABLE.has(current.component)) {
+        const hit = inBox(current);
+        if (hit) return { layer: current, ...hit };
+      }
+      const layers = movableLayersAtPlayhead();
+      for (let i = layers.length - 1; i >= 0; i--) {
+        const hit = inBox(layers[i]);
+        if (hit) return { layer: layers[i], ...hit };
+      }
+      return null;
+    }
+
     gfx.addEventListener("pointerdown", (e) => {
-      const layer = selectedLayer();
-      if (!layer || !MOVABLE.has(layer.component)) return;
       const r = gfx.getBoundingClientRect();
-      const b = layerBox(layer, r.width, r.height);
       const x = e.clientX - r.left;
       const y = e.clientY - r.top;
 
-      const nearCorner = Math.abs(x - (b.x + b.w)) < 12 && Math.abs(y - (b.y + b.h)) < 12;
-      const inside = x >= b.x - 6 && x <= b.x + b.w + 6 && y >= b.y - 6 && y <= b.y + b.h + 6;
-      if (!inside && !nearCorner) return;
+      const hit = hitLayer(x, y, r);
+      if (!hit) return;
+      if (hit.layer.id !== selected) select(hit.layer.id);
 
-      onFrame = { id: layer.id, mode: nearCorner ? "size" : "move", x, y, rect: r };
+      onFrame = { id: hit.layer.id, mode: hit.nearCorner ? "size" : "move", x, y, rect: r };
       gfx.setPointerCapture?.(e.pointerId);
       e.preventDefault();
     });
@@ -1602,6 +1996,7 @@ export const Editor = (() => {
     }
 
     function renderTrack() {
+      anchorMotion();
       empty.hidden = timeline.length > 0 || lanes.some((l) => l.items.length)
         || liveLayers().length > 0 || liveAudio().length > 0;
 
@@ -1650,7 +2045,7 @@ export const Editor = (() => {
         rows.push(`<div class="tl-lane" data-lane="${lane.id}"${laneStyle(lane.id)}>
           <span class="tl-lane-name mono">${lane.name}</span>
           <button class="tl-lane-x" data-drop-lane="${lane.id}" aria-label="Remove lane ${lane.name}">×</button>
-          <div class="tl-lane-body">${lane.items.map((it) => laneItemHtml(lane, it)).join("")}</div>
+          <div class="tl-lane-body">${lane.items.map((it) => laneItemHtml(lane, it)).join("")}${motionLaneHtml(lane.id)}</div>
           ${laneGrip(lane.id)}
         </div>`);
       }
@@ -1734,7 +2129,7 @@ export const Editor = (() => {
             <span class="gfx-type mono">${Desk.esc(g.type.replace(/_/g, " "))}</span>
             <span class="gfx-at mono">${timecode(g.start)} · ${g.duration.toFixed(1)}s</span>
           </div>
-          <p class="gfx-text">${Desk.esc(g.text || g.subtext || "—")}</p>
+          <p class="gfx-text">${Desk.esc(g.text || g.subtext || "no text")}</p>
           ${g.reason ? `<p class="gfx-reason">${Desk.esc(g.reason)}</p>` : ""}
           ${
             g.status === "proposed"
@@ -1785,14 +2180,14 @@ export const Editor = (() => {
       const formats = "";
       const reframe = doc.pendingFormat
         ? `<div class="cmp-reframe">
-             <p><b>${formatOf(doc.pendingFormat.format).label}</b> proposed — decide it above the picture.</p>
+             <p><b>${formatOf(doc.pendingFormat.format).label}</b> proposed: decide it above the picture.</p>
              ${doc.pendingFormat.reason ? `<p class="cmp-reframe-why">${Desk.esc(doc.pendingFormat.reason)}</p>` : ""}
            </div>`
         : "";
 
       const layerCard = (l) => {
         const label = l.component.replace(/_/g, " ");
-        const words = l.props?.text || l.props?.items?.[0] || l.props?.subtext || "—";
+        const words = l.props?.text || l.props?.items?.[0] || l.props?.subtext || "no text";
         return `
           <li class="cmp-item ${l.status}" data-layer="${l.id}">
             <div class="cmp-item-head">
@@ -1812,7 +2207,7 @@ export const Editor = (() => {
 
       const soundCard = (a) => {
         const what = a.kind === "sfx"
-          ? `${a.preset} — ${SFX_PRESETS[a.preset]?.blurb ?? ""}`
+          ? `${a.preset}: ${SFX_PRESETS[a.preset]?.blurb ?? ""}`
           : `music bed${a.duck ? ", ducked under speech" : ""}`;
         return `
           <li class="cmp-item ${a.status}" data-sound="${a.id}">
@@ -1839,12 +2234,13 @@ export const Editor = (() => {
         <div class="ed-head">
           <span>Composition</span>
           ${pending ? `<span class="gfx-count">${pending} to judge</span>` : ""}
+          ${pending ? `<button class="btn btn-mini btn-accent" data-act="accept-all">Accept all</button>` : ""}
         </div>
         <div class="cmp-formats">${formats}</div>
         ${reframe}
         ${layers.length
           ? `<ul class="cmp-list">${[...layers].sort(byPending).map(layerCard).join("")}</ul>`
-          : `<p class="cmp-empty">Nothing waiting on you. Accepted work is on the timeline — open a motion graphics clip to change or remove an element.</p>`}
+          : `<p class="cmp-empty">Nothing waiting on you. Accepted work is on the timeline: open a motion graphics clip to change or remove an element.</p>`}
         ${sounds.length
           ? `<ul class="cmp-list">${[...sounds].sort(byPending).map(soundCard).join("")}</ul>`
           : ""}`;
@@ -1993,8 +2389,8 @@ export const Editor = (() => {
     /**
      * Position, rotation and flip for one lane item.
      *
-     * The same normalised numbers the spine uses — x and y as fractions of the
-     * frame, scale as a multiplier, rotation in degrees — so one set of
+     * The same normalised numbers the spine uses (x and y as fractions of the
+     * frame, scale as a multiplier, rotation in degrees) so one set of
      * sliders drives the preview and the export through the same
      * `applyTransform`.
      */
@@ -2206,7 +2602,7 @@ export const Editor = (() => {
      * The second tab: how a clip arrives, how it leaves, and where it sits.
      *
      * These used to be the bottom half of the Clip panel, below the trim, the
-     * look, the speed and the volume — which meant the two things you reach
+     * look, the speed and the volume, which meant the two things you reach
      * for while watching the cut back were the two things furthest down a
      * scroll. They are their own column now.
      *
@@ -2246,16 +2642,16 @@ export const Editor = (() => {
     }
 
     /** A field worth protecting from a mid-keystroke repaint: text you could
-     *  still be typing into, inside the rail. Anything else focused there —
-     *  a button included — is not something a repaint could lose. */
+     *  still be typing into, inside the rail. Anything else focused there
+     *  (a button included) is not something a repaint could lose. */
     function isEditingField(el) {
       if (!el || !insp.contains(el)) return false;
       return el.matches?.("input, textarea") || el.isContentEditable === true;
     }
 
     function renderInspector() {
-      // "trans" no longer names a tab of this rail's own — transitions moved
-      // to the left panel — so it is not a case here. clipPaneHtml() is left
+      // "trans" no longer names a tab of this rail's own: transitions moved
+      // to the left panel, so it is not a case here. clipPaneHtml() is left
       // to answer for it, same as any other id it does not recognise.
       insp.innerHTML =
         inspTab === "gfx" ? graphicsHtml()
@@ -2375,35 +2771,36 @@ export const Editor = (() => {
     let nowEl = null;
     let wordEls = null;
     function highlightWord() {
-      if (tab !== "words" || !transcript?.words?.length) return;
+      if (libTab !== "words" || !transcript?.words?.length) return;
       const i = transcript.words.findIndex((w) => playhead >= w.start && playhead < w.end);
       if (i === nowWord) return;
       nowWord = i;
       // Two class writes, not one per word. A five-minute take is a thousand
       // buttons and this runs every time the spoken word advances.
-      if (!wordEls) wordEls = [...panes.words.querySelectorAll(".trx-word")];
+      if (!wordEls) wordEls = [...libPane("words").querySelectorAll(".trx-word")];
       nowEl?.classList.remove("now");
       nowEl = wordEls[i] ?? null;
       nowEl?.classList.add("now");
     }
 
     function renderWords() {
-      if (tab !== "words") return;
+      if (libTab !== "words") return;
+      const pane = libPane("words");
       // Anything half-typed into the key field survives a re-render. The pane
       // rebuilds on every transcript change and losing the key mid-paste is
       // the kind of thing that makes a feature feel broken.
-      const typed = panes.words.querySelector('[data-act="key"]')?.value ?? "";
+      const typed = pane.querySelector('[data-act="key"]')?.value ?? "";
       nowWord = -1;
       nowEl = null;
       wordEls = null;
 
       if (!transcript?.words?.length) {
-        panes.words.innerHTML = `
+        pane.innerHTML = `
           <div class="trx">
             <p class="cmp-empty">${
               !timeline.length
                 ? "Nothing on the timeline yet. Add a clip, and if it was recorded with the teleprompter its transcript is already waiting."
-                : "These clips were not recorded against a script, so there are no prompter timings to derive. Load a script into the Camera before recording and the transcript comes for free — or paste an OpenAI key below to transcribe with Whisper."
+                : "These clips were not recorded against a script, so there are no prompter timings to derive. Load a script into the Camera before recording and the transcript comes for free, or paste an OpenAI key below to transcribe with Whisper."
             }</p>
             ${timeline.length ? whisperHtml() : ""}
           </div>`;
@@ -2420,7 +2817,7 @@ export const Editor = (() => {
           (gap >= 1.1 ? `<span class="trx-gap">⟨${gap.toFixed(1)}s⟩</span>` : "");
       }).join(" ");
 
-      panes.words.innerHTML = `
+      pane.innerHTML = `
         <div class="trx">
           <div class="trx-meta">
             <span class="trx-tag${transcript.approximate ? " approx" : ""}">${
@@ -2434,7 +2831,7 @@ export const Editor = (() => {
           ${whisperHtml()}
         </div>`;
       if (typed) {
-        const field = panes.words.querySelector('[data-act="key"]');
+        const field = pane.querySelector('[data-act="key"]');
         if (field) field.value = typed;
       }
     }
@@ -2456,36 +2853,14 @@ export const Editor = (() => {
         <p class="trx-note">Kept in this browser's localStorage and sent only to api.openai.com. The teleprompter transcript needs no key and works offline.</p>`;
     }
 
-    /** The composition, printed as the TSX it compiles to. */
-    function renderCode() {
-      if (tab !== "code") return;
-      const code = generate(composition(), { cutSeconds: total() });
-      panes.code.innerHTML = `
-        <div class="tsx-view">
-          <div class="tsx-bar">
-            <span>Cut.tsx · generated from the composition · ${composition().fps}fps</span>
-            <button class="btn btn-mini" data-act="copy-code">Copy</button>
-          </div>
-          <pre class="tsx-code"><code>${Desk.esc(code)}</code></pre>
-        </div>`;
-    }
-
-    const TAB_ORDER = ["track", "words", "code"];
-
-    function showTab(next, { focus = false } = {}) {
-      tab = next;
-      for (const [name, pane] of Object.entries(panes)) pane.hidden = name !== next;
-      // Roving tabindex: one stop in the tab order for the whole strip, and
-      // the arrow keys move between the tabs. A tablist that does not do this
-      // announces itself as one and then behaves like three buttons.
-      body.querySelectorAll(".cmp-tab").forEach((t) => {
-        const on = t.dataset.tab === next;
-        t.setAttribute("aria-selected", String(on));
-        t.setAttribute("tabindex", on ? "0" : "-1");
-        if (on && focus) t.focus();
-      });
-      renderWords();
-      renderCode();
+    /** Switch the left rail to one of its own tabs (Library, Text,
+     *  Transitions, Transcript): the counterpart to clicking a `[data-lib]`
+     *  button, shared with the arrow-key cycling below. */
+    function selectLibTab(name, { focus = false } = {}) {
+      libTab = name;
+      renderLib();
+      if (name === "words") renderWords();
+      if (focus) libTabs.querySelector(`[data-lib="${name}"]`)?.focus({ preventScroll: true });
     }
 
     refresh = () => {
@@ -2494,7 +2869,6 @@ export const Editor = (() => {
       renderInspector();
       renderClock();
       renderCuts();
-      renderCode();
       // Not renderWords. The words pane is owned by rebuildTranscript's
       // callers and the onTranscripts subscription, because it is the
       // expensive one and the only one holding a text field.
@@ -2513,6 +2887,7 @@ export const Editor = (() => {
         video.pause();
         loaded = null;
         video.style.filter = "";
+        noPic.hidden = true;
         syncOverlays(playhead, { play });
         syncLaneAudio(playhead, { play });
         scheduler?.seek(playhead);
@@ -2524,6 +2899,11 @@ export const Editor = (() => {
 
       const clip = byId.get(at.seg.clipId);
       if (!clip) return;
+
+      // The picture is missing for a reason worth reading, and the frame it
+      // would have filled is the one place nobody can miss it.
+      noPic.hidden = !noPicture(clip);
+      if (noPicture(clip)) noPic.textContent = noPictureMessage(clip.name);
 
       if (loaded !== at.seg.clipId) {
         video.src = Clips.url(clip);
@@ -2537,7 +2917,7 @@ export const Editor = (() => {
       video.playbackRate = at.seg.speed;
       video.muted = at.seg.muted;
       // On the video element, not `.ed-screen`. A CSS filter on an ancestor
-      // rasterises and grades its whole subtree — the graphics canvas
+      // rasterises and grades its whole subtree: the graphics canvas
       // included, and no `filter: none` on the canvas can opt back out of
       // that, because it is the ancestor's composite being filtered, not
       // the canvas's own paint. The clip's look belongs on the clip.
@@ -2721,7 +3101,13 @@ export const Editor = (() => {
       if (audioCtx?.state === "suspended") await audioCtx.resume().catch(() => {});
       dest?.stream.getAudioTracks().forEach((t) => stream.addTrack(t));
 
-      const mime = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm"]
+      // MP4 first: it is what everything downstream of this app -- other
+      // editors, phones, whatever the export is actually for -- expects.
+      // A codec-qualified string ("avc1...") is refused on some builds that
+      // accept the bare type and pick the codec themselves, so it is left
+      // unqualified rather than pinned to one that only sometimes matches.
+      // WebM is still the fallback for a browser with no MP4 encoder.
+      const mime = ["video/mp4", "video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm"]
         .find((t) => MediaRecorder.isTypeSupported?.(t)) || "";
       const recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
       const chunks = [];
@@ -2748,16 +3134,23 @@ export const Editor = (() => {
           const at = segmentAt(playhead);
           if (!at) return resolve();
 
-          if (at.seg.blank) {
+          /* Past the last clip, with a floating motion graphics clip still
+             running. The loop used to stop the moment the spine ran out, which
+             is why a title sequence hung off the end was in the timeline and
+             not in the file. There is nothing to decode down here, so it runs
+             like a blank: ground, graphics, real time. */
+          const tail = playhead >= spine() - 0.001;
+
+          if (tail || at.seg.blank) {
             ctx.filter = "none";
-            ctx.fillStyle = at.seg.colour || exportPal.ink;
+            ctx.fillStyle = (tail ? null : at.seg.colour) || exportPal.ink;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
           } else {
           ctx.filter = FILTERS[at.seg.filter] || "none";
           try {
             // Cover, not stretch. A 16:9 take in a 9:16 frame with bars down
             // both sides is not a vertical video, it is a landscape video
-            // someone gave up on — and stretching every clip to the canvas
+            // someone gave up on, and stretching every clip to the canvas
             // distorted any footage that was not the first clip's shape.
             const fit = fitVideo(
               video.videoWidth || first?.width || canvas.width,
@@ -2800,7 +3193,7 @@ export const Editor = (() => {
           scheduler?.tick(playhead, liveAudio());
           syncLaneAudio(playhead, { play: true });
 
-          if (at.seg.blank) {
+          if (tail || at.seg.blank) {
             // Real time, like everything else here: the recorder is capturing
             // a live canvas, so a blank has to take up its real duration.
             playhead += 1 / 30;
@@ -2811,12 +3204,23 @@ export const Editor = (() => {
           fill.style.width = `${Math.min(100, (playhead / duration) * 100)}%`;
           title.textContent = `Exporting… ${timecode(playhead)} of ${timecode(duration)}`;
 
+          if (tail) {
+            if (playhead >= duration - 0.02) return resolve();
+            return void requestAnimationFrame(paint);
+          }
+
           const done = at.seg.blank
             ? playhead >= at.start + segDuration(at.seg) - 0.02
             : video.currentTime >= at.seg.out - 0.03 || video.ended;
           if (done) {
             const next = timeline[timeline.indexOf(at.seg) + 1];
-            if (!next) return resolve();
+            if (!next) {
+              // The spine is finished. Anything still running past it is a
+              // floating clip, and the next frame falls into the tail above.
+              if (playhead >= duration - 0.02) return resolve();
+              video.pause();
+              return void requestAnimationFrame(paint);
+            }
             seekTo(at.start + segDuration(at.seg) + 0.01, { play: true });
           }
           requestAnimationFrame(paint);
@@ -2897,8 +3301,8 @@ export const Editor = (() => {
         const clip = byId.get(bedTrack.clipId) ?? (await Clips.all()).find((c) => c.id === bedTrack.clipId);
         if (!clip) continue;
 
-        // A bed has a window, and it is the window the inspector shows and the
-        // Code tab prints. Honour it: start when the playhead reaches it, stop
+        // A bed has a window, and it is the window the inspector shows.
+        // Honour it: start when the playhead reaches it, stop
         // when it ends, and enter partway through if the playhead is already
         // inside.
         const from = bedTrack.from / fps;
@@ -2954,6 +3358,7 @@ export const Editor = (() => {
       if (!cut) return;
       if (!(gesture?.isTrusted || gesture?.nativeEvent?.isTrusted)) return;
 
+      mark();
       const result = applyCut(timeline, cut);
       timeline = result.timeline;
       if (!timeline.some((s) => s.uid === selected)) selected = null;
@@ -2961,7 +3366,7 @@ export const Editor = (() => {
 
       // Everything downstream of a removal has just moved. The cuts still
       // waiting are absolute ranges in the edit and the layers are absolute
-      // frames of it, so both have to slide back by what went — otherwise
+      // frames of it, so both have to slide back by what went, otherwise
       // accepting the first of a batch quietly aims the rest at the wrong
       // words, and propose_tidy stages a batch by design.
       settle(id);
@@ -3022,7 +3427,10 @@ export const Editor = (() => {
     function offerDownload(clip) {
       const a = document.createElement("a");
       a.href = Clips.url(clip);
-      a.download = `${clip.name.replace(/\s+/g, "-").toLowerCase()}.webm`;
+      // The extension follows what the recorder actually produced, not a
+      // fixed guess -- an .mp4 that is secretly WebM opens nowhere useful.
+      const ext = clip.blob.type.includes("mp4") ? "mp4" : "webm";
+      a.download = `${clip.name.replace(/\s+/g, "-").toLowerCase()}.${ext}`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -3051,7 +3459,7 @@ export const Editor = (() => {
       }
 
       const libTo = t.closest("[data-lib]")?.dataset.lib;
-      if (libTo) { libTab = libTo; return void renderLib(); }
+      if (libTo) return void selectLibTab(libTo);
 
       const addText = t.closest("[data-add-text]");
       if (addText) return void addElement(TEXT_KINDS[Number(addText.dataset.addText)], e);
@@ -3100,8 +3508,15 @@ export const Editor = (() => {
 
       /* ---- the composition ---- */
 
-      const tabBtn = t.closest("[data-tab]");
-      if (tabBtn) return showTab(tabBtn.dataset.tab);
+      // One click, the same guard as each single Accept: `e` is this click,
+      // so every accept it fans out still carries a trusted gesture. Nothing
+      // here can be reached without a real person pressing a real button.
+      if (t.closest('[data-act="accept-all"]')) {
+        pendingLayers().forEach((l) => acceptLayer(l.id, e));
+        pendingAudio().forEach((a) => acceptAudio(a.id, e));
+        if (composition().pendingFormat) acceptFormat(e);
+        return;
+      }
 
       const fmt = t.closest("[data-format]");
       if (fmt) return void setFormat(fmt.dataset.format, e);
@@ -3157,8 +3572,8 @@ export const Editor = (() => {
         const id = noCut.dataset.cutReject;
         const result = rejectCut(id, e);
         // Reject only reaches `onCuts`, which redraws the strip. If the same
-        // cut was open in the Clip tab — reachable from that panel's own
-        // "Keep it", not only the chip's — the rail never heard about it and
+        // cut was open in the Clip tab (reachable from that panel's own
+        // "Keep it", not only the chip's), the rail never heard about it and
         // sat there showing a decision that had already been made.
         if (result.ok) {
           if (selected === id) selected = null;
@@ -3190,12 +3605,6 @@ export const Editor = (() => {
         return refresh();
       }
       if (act === "transcribe") return runTranscribe();
-      if (act === "copy-code") {
-        navigator.clipboard?.writeText(generate(composition(), { cutSeconds: total() }))
-          .then(() => Desk.toast("Composition copied as TSX.", "good"))
-          .catch(() => Desk.toast("Could not reach the clipboard.", "bad"));
-        return;
-      }
 
       const zoomBtn = t.closest("[data-zoom]");
       if (zoomBtn) {
@@ -3208,6 +3617,15 @@ export const Editor = (() => {
 
       if (act === "play") return playing ? stop() : play();
       if (act === "import") return fileInput.click();
+      if (act === "import-audio") return libAudioInput.click();
+      if (act === "new-folder") {
+        const made = await Folders.add(`Folder ${libFolders.length + 1}`);
+        // Straight into the name field. A folder called "Folder 3" is a folder
+        // nobody uses, and the moment to name it is the moment it appears.
+        libFolder = made.id;
+        folderRenaming = made.id;
+        return void renderLibrary();
+      }
       if (act === "split") return splitAtPlayhead();
       if (act === "add-text") return addTextClip(e);
       if (act === "add-blank") {
@@ -3222,22 +3640,30 @@ export const Editor = (() => {
         // An overlay is graphics over a picture. With no cut under it there is
         // nothing to overlay, and the bar would be drawn wider than the track.
         if (total() < 0.5) {
-          return void Desk.toast("Add a clip first — an overlay goes over footage.", "bad");
+          return void Desk.toast("Add a clip first: an overlay goes over footage.", "bad");
         }
         const room = Math.max(1, total() - playhead);
-        const made = addFloatingClip({ at: playhead, seconds: Math.min(5, room) });
-        Desk.toast("Overlay added over the cut. Open it to build inside it.", "good");
+        const seconds = Math.min(5, room);
+        const lane = freeVideoLaneAt(playhead, playhead + seconds);
+        const made = addFloatingClip({ at: playhead, seconds, laneId: lane?.id ?? null });
+        Desk.toast(
+          lane ? `Overlay added on ${lane.name}. Open it to build inside it.` : "Overlay added over the cut. Open it to build inside it.",
+          "good"
+        );
         refresh();
         return void enterScope(made.id);
       }
       if (act === "scope-out") return void leaveScope();
       if (act === "scope-text") return void addInScope("text", e);
       if (act === "scope-shape") return void addInScope("shape", e);
-      if (act === "add-lane") { addLane("video"); Desk.toast("Video lane added. Drag a clip onto it.", "good"); return refresh(); }
-      if (act === "add-audio") { addLane("audio"); audioInput.click(); return refresh(); }
+      if (act === "add-lane") { mark(); addLane("video"); Desk.toast("Video lane added. Drag a clip onto it.", "good"); return refresh(); }
+      if (act === "add-audio") { mark(); addLane("audio"); audioInput.click(); return refresh(); }
       if (act === "export") return runExport();
       if (act === "cancel-export") { cancelled = true; return; }
+      if (act === "undo") return void undo(e);
+      if (act === "redo") return void redo(e);
       if (act === "clear") {
+        mark();
         timeline = [];
         lanes = [];
         floats = [];
@@ -3250,8 +3676,69 @@ export const Editor = (() => {
         return refresh();
       }
 
+      const chip = t.closest("[data-folder]");
+      if (chip) {
+        libFolder = chip.dataset.folder;
+        libFiling = null;
+        return void renderLibrary();
+      }
+
+      const filing = t.closest("[data-lib-file]");
+      if (filing) {
+        libFiling = libFiling === filing.dataset.libFile ? null : filing.dataset.libFile;
+        return void renderLibrary();
+      }
+
+      const fileTo = t.closest("[data-file-to]");
+      if (fileTo) {
+        libFiling = null;
+        await Folders.move(fileTo.dataset.fileClip, fileTo.dataset.fileTo);   // emits
+        return;
+      }
+
+      const fileNew = t.closest("[data-file-new]");
+      if (fileNew) {
+        const made = await Folders.add(`Folder ${libFolders.length + 1}`);
+        await Folders.move(fileNew.dataset.fileNew, made.id);
+        libFiling = null;
+        libFolder = made.id;
+        folderRenaming = made.id;
+        return void renderLibrary();
+      }
+
+      const foldRen = t.closest("[data-folder-rename]");
+      if (foldRen) {
+        folderRenaming = foldRen.dataset.folderRename;
+        return void renderLibrary();
+      }
+
+      const foldDel = t.closest("[data-folder-del]");
+      if (foldDel) {
+        // The clips come back out rather than going with it, so this needs no
+        // confirming: nothing here is lost, and the toast says as much.
+        const inside = (await Clips.all()).filter((c) => c.folder === foldDel.dataset.folderDel).length;
+        await Folders.remove(foldDel.dataset.folderDel);
+        libFolder = "all";
+        Desk.toast(
+          inside ? `Folder deleted. ${inside} clip${inside === 1 ? "" : "s"} back in the library.` : "Folder deleted.",
+          "good"
+        );
+        return void renderLibrary();
+      }
+
       const add = t.closest("[data-add]");
       if (add) {
+        const picked = byId.get(add.dataset.add);
+        // Sound has nowhere to be on the spine: put there it would be a
+        // segment with no picture and a duration nobody asked for. It lands on
+        // an audio lane at the playhead, which is where dragging it would have
+        // put it.
+        if (picked?.kind === "audio") {
+          mark();
+          const lane = addSoundAt(picked, playhead);
+          Desk.toast(`${picked.name} on ${lane.name}.`, "good");
+          return void refresh();
+        }
         await addClip(add.dataset.add);
         // The transcript is a property of the cut, not of the library, so
         // adding a clip changes it.
@@ -3274,6 +3761,7 @@ export const Editor = (() => {
       const dropLane = t.closest("[data-drop-lane]");
       if (dropLane) {
         lanes = lanes.filter((l) => l.id !== dropLane.dataset.dropLane);
+        floats = floats.map((f) => (f.laneId === dropLane.dataset.dropLane ? { ...f, laneId: null } : f));
         return refresh();
       }
 
@@ -3461,7 +3949,7 @@ export const Editor = (() => {
 
     body.addEventListener("click", (e) => {
       // The cross-reference at the bottom of a Clip panel. Transitions live
-      // in the left panel now, beside Library and Text — this used to point
+      // in the left panel now, beside Library and Text: this used to point
       // at a tab of its own on the right, which moved out from under it.
       const go = e.target.closest("[data-insp-go]");
       if (go) {
@@ -3584,7 +4072,7 @@ export const Editor = (() => {
      * Shortcuts belong to the window, not to whatever happens to have focus.
      *
      * Clicking a block rebuilds the track, which destroys the element that was
-     * clicked and hands focus back to the document — so a listener on the
+     * clicked and hands focus back to the document, so a listener on the
      * window body never saw the keypress that followed. Listening on the
      * document and checking which window is focused is what makes Backspace
      * work right after selecting something, which is the only time anyone
@@ -3595,6 +4083,22 @@ export const Editor = (() => {
     function onShortcut(e) {
       if (!editorFocused()) return;
       if (e.target.closest?.("input, textarea, select")) return;
+
+      /**
+       * Undo and redo, before the modifier guard below.
+       *
+       * Everything else here is a bare key, so the guard exists to keep the
+       * browser's own chords working. These two are chords by definition and
+       * have to be read first. Shift+Z and Ctrl+Y are both spelled, because
+       * half the editors in the world use one and half the other.
+       */
+      const chord = e.metaKey || e.ctrlKey;
+      if (chord && !e.altKey && (e.key === "z" || e.key === "Z" || e.key === "y" || e.key === "Y")) {
+        e.preventDefault();
+        const forward = e.key === "y" || e.key === "Y" || e.shiftKey;
+        return void (forward ? redo(e) : undo(e));
+      }
+
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const frame = 1 / (composition().fps || 30);
       const step = e.shiftKey ? 1 : frame;
@@ -3641,26 +4145,32 @@ export const Editor = (() => {
     document.addEventListener("keydown", onShortcut);
 
     body.addEventListener("keydown", (e) => {
-      // Scoped to this tablist. Both strips are built from `.cmp-tab`, so an
-      // unscoped match had the arrow keys on the inspector's tabs quietly
-      // switching the pane under the timeline instead.
+      // Scoped to this tablist. The inspector's tabs are built from the same
+      // `.cmp-tab` class, so an unscoped match had the arrow keys there
+      // quietly switching the left rail instead.
       const onTab = e.target.closest?.(".cmp-tabs:not(.insp-tabs) .cmp-tab");
       if (!onTab) return;
       const step = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
       if (step) {
         e.preventDefault();
-        const i = TAB_ORDER.indexOf(tab);
-        showTab(TAB_ORDER[(i + step + TAB_ORDER.length) % TAB_ORDER.length], { focus: true });
+        const i = LIB_TAB_ORDER.indexOf(libTab);
+        selectLibTab(LIB_TAB_ORDER[(i + step + LIB_TAB_ORDER.length) % LIB_TAB_ORDER.length], { focus: true });
       } else if (e.key === "Home" || e.key === "End") {
         e.preventDefault();
-        showTab(e.key === "Home" ? TAB_ORDER[0] : TAB_ORDER[TAB_ORDER.length - 1], { focus: true });
+        selectLibTab(e.key === "Home" ? LIB_TAB_ORDER[0] : LIB_TAB_ORDER[LIB_TAB_ORDER.length - 1], { focus: true });
       }
     });
 
     scrub.addEventListener("input", () => {
+      // Read where the drag put it before anything else touches the input.
+      // `stop()` below calls `renderClock()`, which writes `scrub.value` right
+      // back to wherever the playhead already was -- so reading it after stop
+      // read the position this drag was leaving, not the one it landed on,
+      // and the bar snapped back under your thumb on every scrub.
+      const target = (Number(scrub.value) / 1000) * total();
       const wasPlaying = playing;
       stop();
-      seekTo((Number(scrub.value) / 1000) * total()).then(() => wasPlaying && play());
+      seekTo(target).then(() => wasPlaying && play());
     });
 
     /* drag to reorder the spine */
@@ -3675,6 +4185,39 @@ export const Editor = (() => {
     libList.addEventListener("dragstart", (e) => {
       dragClipId = e.target.closest("[data-add]")?.dataset.add || null;
       if (dragClipId) e.dataTransfer.setData("text/plain", dragClipId);
+    });
+
+    /**
+     * Filing by dragging.
+     *
+     * The card is already draggable, for the timeline. A folder is the other
+     * place it makes sense to let go of one, and the chip lights up while the
+     * pointer is over it so the drop is not a guess. The row on the card does
+     * the same job from the keyboard, so this is a shortcut rather than the
+     * only way in.
+     */
+    libFolderBar.addEventListener("dragover", (e) => {
+      const target = e.target.closest?.("[data-folder-drop]");
+      if (!dragClipId || !target) return;
+      e.preventDefault();
+      libFolderBar.querySelectorAll(".is-drop-target").forEach((el) => el.classList.remove("is-drop-target"));
+      target.classList.add("is-drop-target");
+    });
+    libFolderBar.addEventListener("dragleave", (e) => {
+      if (!libFolderBar.contains(e.relatedTarget)) {
+        libFolderBar.querySelectorAll(".is-drop-target").forEach((el) => el.classList.remove("is-drop-target"));
+      }
+    });
+    libFolderBar.addEventListener("drop", async (e) => {
+      const target = e.target.closest?.("[data-folder-drop]");
+      if (!target) return;
+      e.preventDefault();
+      libFolderBar.querySelectorAll(".is-drop-target").forEach((el) => el.classList.remove("is-drop-target"));
+      const id = dragClipId || e.dataTransfer.getData("text/plain");
+      dragClipId = null;
+      if (!id) return;
+      const moved = await Folders.move(id, target.dataset.folderDrop);   // emits
+      if (moved) Desk.toast(target.dataset.folderDrop ? `Filed in ${target.querySelector(".lib-fold-name")?.textContent || "the folder"}.` : "Unfiled.", "good");
     });
     /**
      * Where the thing you are dragging will land.
@@ -3696,10 +4239,27 @@ export const Editor = (() => {
 
     /** The nearest cut between two clips, for a spine drop. */
     function nearestSeam(at) {
-      const seams = [0];
+      return seams(at).time;
+    }
+
+    /** Same search, but as a splice index into `timeline` rather than a time —
+     *  seam 0 is the very start, so dropping there inserts at index 0 instead
+     *  of always landing after the last clip. */
+    function nearestSeamIndex(at) {
+      return seams(at).index;
+    }
+
+    function seams(at) {
+      const marks = [0];
       let acc = 0;
-      for (const seg of timeline) { acc += segDuration(seg); seams.push(acc); }
-      return seams.reduce((best, sm) => (Math.abs(sm - at) < Math.abs(best - at) ? sm : best), 0);
+      for (const seg of timeline) { acc += segDuration(seg); marks.push(acc); }
+      let index = 0;
+      let best = Math.abs(marks[0] - at);
+      for (let i = 1; i < marks.length; i++) {
+        const d = Math.abs(marks[i] - at);
+        if (d < best) { best = d; index = i; }
+      }
+      return { time: marks[index], index };
     }
 
     function showDrop(e) {
@@ -3758,8 +4318,10 @@ export const Editor = (() => {
         }
       }
       if (dragClipId && (laneId === "spine" || !laneId)) {
+        const clipId = e.dataTransfer.getData("text/plain") || "";
+        const at = laneId === "spine" ? nearestSeamIndex(timeAtPointer(e)) : timeline.length;
         dragClipId = null;
-        await addClip(e.dataTransfer.getData("text/plain") || "");
+        await addClip(clipId, { at });
         await rebuildTranscript();
         return refresh();
       }
@@ -3788,9 +4350,11 @@ export const Editor = (() => {
 
     function beginGesture(e) {
       if (e.button !== 0) return;
+      // Taken before anything moves; discarded at the end if nothing did.
+      markGesture();
       // A real control inside the timeline is still a control. Swallowing its
-      // pointerdown here — which the scrub branch does, to stop the drag
-      // selecting text — also swallows its click.
+      // pointerdown here (which the scrub branch does, to stop the drag
+      // selecting text) also swallows its click.
       if (e.target.closest("button, input, select, a")) return;
 
       /**
@@ -3915,7 +4479,7 @@ export const Editor = (() => {
         if (frames === 0) return;
         gesture.from = now;
         const a = liveAudio().find((x) => x.id === gesture.soundId);
-        if (a) editAudio(a.id, { from: a.from + frames }, e);
+        if (a) editAudio(a.id, { from: clampToScope(a.from + frames) }, e);
         renderTrack();
         return;
       }
@@ -3940,9 +4504,10 @@ export const Editor = (() => {
     }
 
     function endGesture() {
-      if (!gesture) return;
+      if (!gesture) { gestureSnap = null; return; }
       const was = gesture;
       gesture = null;
+      settleGesture();
       if (was.type === "scrub" && wasPlaying) { wasPlaying = false; play(); return; }
       if (was.type === "trim" && was.segUid) rebuildTranscript().then(refresh);
       else refresh();
@@ -4052,11 +4617,145 @@ export const Editor = (() => {
     tl.addEventListener("pointerup", endGesture);
     tl.addEventListener("pointercancel", endGesture);
 
+    /* ---------------- right-click menu ---------------- */
+
+    let ctxMenuEl = null;
+
+    function closeCtxMenu() {
+      if (!ctxMenuEl) return;
+      ctxMenuEl.remove();
+      ctxMenuEl = null;
+      document.removeEventListener("pointerdown", onCtxOutside, true);
+      document.removeEventListener("keydown", onCtxEscape, true);
+    }
+    function onCtxOutside(e) {
+      if (ctxMenuEl && !ctxMenuEl.contains(e.target)) closeCtxMenu();
+    }
+    function onCtxEscape(e) {
+      if (e.key === "Escape") closeCtxMenu();
+    }
+
+    /** A small menu of actions for whatever was right-clicked, so split,
+     *  duplicate and delete do not require hunting down a keyboard shortcut
+     *  or scrolling the inspector to find the right button. */
+    function openCtxMenu(x, y, actions) {
+      closeCtxMenu();
+      const menu = document.createElement("div");
+      menu.className = "tl-ctx-menu";
+      menu.setAttribute("role", "menu");
+      menu.innerHTML = actions
+        .map((a, i) => `<button class="tl-ctx-item" role="menuitem" data-ctx="${i}" data-danger="${!!a.danger}">${Desk.esc(a.label)}</button>`)
+        .join("");
+      menu.style.left = `${x}px`;
+      menu.style.top = `${y}px`;
+      document.body.appendChild(menu);
+      ctxMenuEl = menu;
+
+      // Kept on screen: a menu opened near the right or bottom edge should
+      // open leftward/upward instead of spilling off, same as a native one.
+      const r = menu.getBoundingClientRect();
+      if (r.right > window.innerWidth) menu.style.left = `${Math.max(4, x - r.width)}px`;
+      if (r.bottom > window.innerHeight) menu.style.top = `${Math.max(4, y - r.height)}px`;
+
+      menu.addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-ctx]");
+        if (!btn) return;
+        const action = actions[Number(btn.dataset.ctx)];
+        closeCtxMenu();
+        action?.run(e);
+      });
+      menu.querySelector(".tl-ctx-item")?.focus({ preventScroll: true });
+      // Registered after this event finishes, or the contextmenu event
+      // itself -- still bubbling -- would close the menu it just opened.
+      setTimeout(() => {
+        document.addEventListener("pointerdown", onCtxOutside, true);
+        document.addEventListener("keydown", onCtxEscape, true);
+      }, 0);
+    }
+
+    tl.addEventListener("contextmenu", (e) => {
+      if (e.target.closest("[data-grip], button, input, select")) return;
+
+      const segEl = e.target.closest("[data-seg]");
+      const itemEl = !segEl && e.target.closest("[data-item]");
+      const layerEl = !segEl && !itemEl && e.target.closest("[data-layer]");
+      const soundEl = !segEl && !itemEl && !layerEl && e.target.closest("[data-sound]");
+
+      let actions = null;
+
+      if (segEl) {
+        const seg = timeline.find((s) => s.uid === segEl.dataset.seg);
+        if (seg) {
+          select(seg.uid);
+          const at = timeAtPointer(e);
+          actions = [
+            { label: "Split here", run: () => splitSegAt(seg, at) },
+            { label: "Duplicate", run: () => duplicateSeg(seg) },
+            { label: "Delete", danger: true, run: (ev) => deleteSelected(ev) },
+          ];
+        }
+      } else if (itemEl) {
+        const lane = laneById(itemEl.dataset.lane);
+        const it = lane?.items.find((x) => x.uid === itemEl.dataset.item);
+        if (lane && it) {
+          select(it.uid);
+          actions = [
+            { label: "Duplicate", run: () => duplicateItem(lane, it) },
+            { label: "Delete", danger: true, run: (ev) => deleteSelected(ev) },
+          ];
+        }
+      } else if (layerEl) {
+        const layer = liveLayers().find((l) => l.id === layerEl.dataset.layer);
+        if (layer) {
+          select(layer.id);
+          actions = [{ label: "Delete", danger: true, run: (ev) => deleteSelected(ev) }];
+        }
+      } else if (soundEl) {
+        const a = liveAudio().find((x) => x.id === soundEl.dataset.sound);
+        if (a) {
+          select(a.id);
+          actions = [{ label: "Delete", danger: true, run: (ev) => deleteSelected(ev) }];
+        }
+      }
+
+      if (!actions) return;
+      e.preventDefault();
+      openCtxMenu(e.clientX, e.clientY, actions);
+    });
+
     const layerById = (id) => liveLayers().find((l) => l.id === id) || null;
+
+    /**
+     * Where an element's start is allowed to land.
+     *
+     * Ownership of an element is decided by nothing but its start second
+     * (`holds()`, above): drag one far enough that its start crosses the clip
+     * boundary and it stops belonging to the clip it was dragged out of,
+     * mid-gesture, with no clip catching it on the other side. It used to
+     * reappear on the main timeline as a clip of its own. Scoped into a clip,
+     * a drag's start is clamped to stay inside it -- the sub-timeline that
+     * opened is the only place the gesture is allowed to end up.
+     */
+    function clampToScope(from) {
+      const c = scopeClip();
+      // A "loose" scope is a synthetic grouping drawn around whatever elements
+      // happen to sit near each other, not a real container: its bounds are
+      // read straight off the elements inside it, the one being dragged
+      // included. Clamping to that self-derived span pins the drag to
+      // wherever it already is, and dragging left -- which shrinks the
+      // bound at the same instant it is checked against it -- never moves at
+      // all. A loose element has no clip to escape, so it gets the same free
+      // range an unscoped drag does.
+      if (!c || c.kind === "loose") return Math.max(0, from);
+      const fps = composition().fps || 30;
+      const lo = Math.round(c.start * fps);
+      const hi = Math.max(lo, Math.round(c.end * fps) - 1);
+      return Math.max(lo, Math.min(hi, from));
+    }
 
     function nudgeLayer(id, frames, e) {
       const l = layerById(id);
-      if (l) editLayer(id, { from: l.from + frames }, e);
+      if (l) editLayer(id, { from: clampToScope(l.from + frames) }, e);
     }
 
     function stretchLayer(id, edge, frames, e) {
@@ -4064,7 +4763,7 @@ export const Editor = (() => {
       if (!l) return;
       if (edge === "in") {
         // Dragging the head moves the start and keeps the tail where it is.
-        const from = Math.max(0, l.from + frames);
+        const from = clampToScope(l.from + frames);
         editLayer(id, { from, durationInFrames: l.durationInFrames - (from - l.from) }, e);
       } else {
         editLayer(id, { durationInFrames: l.durationInFrames + frames }, e);
@@ -4075,7 +4774,7 @@ export const Editor = (() => {
      * A transition on a clip, by hand.
      *
      * It is an `effect` layer of kind `dip`, which is exactly what the agent
-     * would propose for the same thing — the person is not getting a second,
+     * would propose for the same thing: the person is not getting a second,
      * lesser mechanism. Because it is a layer it draws through the one
      * renderer, so it is in the export the moment it is on the timeline, and
      * it can be dragged, retimed and deleted like anything else.
@@ -4226,7 +4925,7 @@ export const Editor = (() => {
     function clipStatsHtml(seg, clip) {
       const shape = clip?.width && clip?.height ? `${clip.width}&times;${clip.height}` : "unknown";
       const bytes = clip?.blob?.size;
-      const mb = bytes ? `${(bytes / 1048576).toFixed(1)} MB` : "—";
+      const mb = bytes ? `${(bytes / 1048576).toFixed(1)} MB` : "unknown";
       const used = segDuration(seg);
       return `
         <dl class="insp-stats mono">
@@ -4271,6 +4970,7 @@ export const Editor = (() => {
      * composition are satisfied by it exactly as a button press would be.
      */
     function deleteSelected(e) {
+      mark();
       if (!selected) return;
 
       // A staged cut is a suggestion like any other, and it was the one kind
@@ -4317,6 +5017,18 @@ export const Editor = (() => {
         liveLayers()
           .filter((l) => String(l.props?.tag || "").startsWith(`${seg.uid}:`))
           .forEach((l) => removeLayer(l.id, e));
+        // A motion graphics clip owns what is inside it, same as a folder
+        // owns its files. Deleting the clip and leaving its elements behind
+        // at the same cut seconds is how they used to come back as a stray
+        // clip of their own the moment the timeline reflowed around the gap.
+        if (seg.blank) {
+          // By owner, not by clock: an element scrolled out of the clip's
+          // window is still the clip's, and leaving it behind is how a
+          // deleted clip used to come back as a stray.
+          const doc = composition();
+          doc.layers.filter((l) => l.owner === seg.uid).forEach((l) => removeLayer(l.id, e));
+          doc.audio.filter((a) => a.owner === seg.uid).forEach((a) => removeAudio(a.id, e));
+        }
         timeline = timeline.filter((x) => x.uid !== seg.uid);
         selected = null;
         Desk.toast("Clip removed", "good");
@@ -4334,17 +5046,58 @@ export const Editor = (() => {
     function splitAtPlayhead() {
       const at = segmentAt(playhead);
       if (!at || !at.seg) return Desk.toast("Nothing under the playhead.", "bad");
-      const seg = at.seg;
-      const source = seg.in + at.offset * (seg.speed || 1);
+      splitSegAt(at.seg, playhead);
+    }
+
+    /** Split a spine segment at a given second, rather than only ever at the
+     *  playhead -- what the right-click menu needs, since the clip a person
+     *  right-clicked is not always the one already playing. */
+    function splitSegAt(seg, seconds) {
+      const bounds = boundsOf(seg);
+      if (!bounds) return;
+      const source = seg.in + (seconds - bounds.start) * (seg.speed || 1);
       if (source <= seg.in + 0.08 || source >= seg.out - 0.08) {
         return Desk.toast("Too close to the edge of the clip to split.", "bad");
       }
+      mark();
       const tail = { ...seg, uid: `seg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, in: source };
+      // Two clips now, so who owns what has to be asked again. Releasing the
+      // contents lets each half adopt the elements that land in it on the next
+      // pass; without this everything past the cut stays owned by the head and
+      // is parked out of sight the moment the halves are trimmed apart.
+      if (seg.blank) disown(seg.uid);
+      delete tail.anchor;
+      delete seg.anchor;
       seg.out = source;
       timeline.splice(timeline.indexOf(seg) + 1, 0, tail);
       selected = tail.uid;
-      Desk.toast(`Split at ${timecode(playhead)}`, "good");
+      Desk.toast(`Split at ${timecode(seconds)}`, "good");
       rebuildTranscript().then(refresh);
+    }
+
+    /** A copy of a spine clip, right after the original. Its own contents --
+     *  the layers and sounds a motion graphics clip owns -- start empty
+     *  rather than half-copied; duplicating those exactly is a bigger claim
+     *  than "put another one of these here" ought to make. */
+    function duplicateSeg(seg) {
+      mark();
+      const copy = { ...seg, uid: `seg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}` };
+      delete copy.anchor;
+      timeline.splice(timeline.indexOf(seg) + 1, 0, copy);
+      selected = copy.uid;
+      Desk.toast("Clip duplicated", "good");
+      rebuildTranscript().then(refresh);
+    }
+
+    /** A copy of a lane item, placed right after the original so the two
+     *  never start out stacked on top of each other. */
+    function duplicateItem(lane, it) {
+      mark();
+      const copy = { ...it, uid: `it-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, at: itemEnd(it) };
+      lane.items.push(copy);
+      selected = copy.uid;
+      Desk.toast("Item duplicated", "good");
+      refresh();
     }
 
     /**
@@ -4353,7 +5106,7 @@ export const Editor = (() => {
      * It is a composition layer, not a new kind of object, which is what makes
      * it correct in the export the moment it exists: the same renderer draws
      * it in the preview and into the file. Created by a click, so it is
-     * accepted the moment it is made — a person does not propose to themselves.
+     * accepted the moment it is made: a person does not propose to themselves.
      */
     /**
      * What a person can put on the frame, and what to fill it with.
@@ -4366,7 +5119,7 @@ export const Editor = (() => {
       // `font` is seeded to each component's own default rather than left
       // unset. The draw functions fall back to the same value either way, but
       // a font menu with nothing selected shows its first entry regardless of
-      // what is actually on screen — seeding it is what keeps the menu
+      // what is actually on screen: seeding it is what keeps the menu
       // telling the truth from the moment the element lands.
       { component: "title_card", label: "Title card", props: { text: "Your title", subtext: "", font: "displayHeavy" }, position: "center" },
       { component: "lower_third", label: "Lower third", props: { text: "Their name", subtext: "What they do", font: "display" }, position: "lower_left" },
@@ -4450,7 +5203,7 @@ export const Editor = (() => {
       const onMotion = Boolean(scopeClip());
       // The motion page has its own palette and no use for the footage list.
       const want = onMotion ? "motion" : libTab;
-      for (const name of ["clips", "text", "trans", "motion"]) {
+      for (const name of ["clips", "text", "trans", "words", "motion"]) {
         const el = libPane(name);
         if (el) el.hidden = name !== want;
       }
@@ -4558,7 +5311,7 @@ export const Editor = (() => {
       renderTrack();
       renderInspector();
       // Transitions reads the same `selected`, but it lives in the left panel
-      // now and only `renderLib()` redraws it — without this, picking a
+      // now and only `renderLib()` redraws it: without this, picking a
       // different clip while that tab is open left it showing the last one.
       if (libTab === "trans") renderLib();
       armFrameGrabs();
@@ -4577,31 +5330,60 @@ export const Editor = (() => {
      * an audio item is the lane it lands on, not a different kind of record.
      */
     audioInput.addEventListener("change", async () => {
-      const lane = lanes.filter((l) => l.kind === "audio").at(-1) || addLane("audio");
       for (const file of audioInput.files) {
-        const clip = await Clips.save(file, { name: file.name.replace(/\.[^.]+$/, ""), kind: "audio" });
-        byId.set(clip.id, clip);
-        lane.items.push({
-          uid: `au-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-          clipId: clip.id,
-          name: clip.name,
-          at: playhead,
-          in: 0,
-          out: clip.duration || 10,
-          speed: 1,
-          gain: 1,
+        const clip = await Clips.save(file, {
+          name: file.name.replace(/\.[^.]+$/, ""),
+          kind: "audio",
+          folder: isFolder(libFolder) ? libFolder : null,
         });
+        byId.set(clip.id, clip);
+        addSoundAt(clip, playhead);
       }
       audioInput.value = "";
       refresh();
     });
 
+    /**
+     * Sound into the library, rather than onto a lane.
+     *
+     * The only way in used to be the timeline's own "+ Audio", which makes a
+     * lane, opens the picker and drops whatever you chose at the playhead. That
+     * is one thing to want. The other is a shelf of sound effects you keep
+     * around and reach for later, which is what a library is for, so the
+     * importer beside the clips leaves the timeline alone.
+     */
+    libAudioInput.addEventListener("change", async () => {
+      const files = [...libAudioInput.files];
+      for (const file of files) {
+        await Clips.save(file, {
+          name: file.name.replace(/\.[^.]+$/, ""),
+          kind: "audio",
+          folder: isFolder(libFolder) ? libFolder : null,
+        });
+      }
+      libAudioInput.value = "";
+      if (files.length) Desk.toast(`${files.length} sound${files.length === 1 ? "" : "s"} in the library.`, "good");
+    });
+
     fileInput.addEventListener("change", async () => {
+      const mute = [];
       for (const file of fileInput.files) {
-        await Clips.save(file, { name: file.name.replace(/\.[^.]+$/, ""), kind: "import" });
+        const clip = await Clips.save(file, {
+          name: file.name.replace(/\.[^.]+$/, ""),
+          kind: "import",
+          // Imported into whichever folder is open, because filing it
+          // afterwards is the step that never happens.
+          folder: isFolder(libFolder) ? libFolder : null,
+        });
+        if (clip.hasPicture === false) mute.push(clip.name);
       }
       fileInput.value = "";
-      Desk.toast("Imported.", "good");
+      // Said at the moment of import, because that is when it can still be
+      // acted on. Finding out later, from a black rectangle on the timeline,
+      // reads as the editor being broken rather than the file being one this
+      // browser cannot draw.
+      if (mute.length) Desk.toast(noPictureMessage(mute), "bad");
+      else Desk.toast("Imported.", "good");
     });
 
     /**
@@ -4625,8 +5407,13 @@ export const Editor = (() => {
       if (palAge++ % 20 === 0) pal = palette();
 
       const onBlank = segmentAt(playhead)?.seg?.blank === true;
+      // Past the last clip on the spine, with a floating clip still running.
+      // There is no picture down there to hold, so the canvas is the picture,
+      // exactly as it is on a blank.
+      const pastSpine = timeline.length > 0 && playhead >= spine() - 0.001;
+      const onGround = onBlank || pastSpine;
       const anything = liveGraphics().length || liveLayers().length || composition().pendingFormat
-        || hasOverlayPicture() || onBlank || selectedLayer();
+        || hasOverlayPicture() || onGround || selectedLayer();
       if (!anything) {
         // Clear once, then stop drawing. With nothing to paint this loop was
         // burning a frame budget forever, including while minimised.
@@ -4655,8 +5442,8 @@ export const Editor = (() => {
       gfxCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
       gfxCtx.clearRect(0, 0, w, h);
       // A blank has no picture under the canvas, so the canvas is the picture.
-      if (onBlank) {
-        gfxCtx.fillStyle = segmentAt(playhead).seg.colour || pal.ink;
+      if (onGround) {
+        gfxCtx.fillStyle = (onBlank ? segmentAt(playhead)?.seg?.colour : null) || pal.ink;
         gfxCtx.fillRect(0, 0, w, h);
       }
       // Pictures first, then graphics over them: the same order the export
@@ -4685,6 +5472,10 @@ export const Editor = (() => {
       // thing it is selecting.
       paintHandles(gfxCtx, w, h);
 
+      // Which graphics are on screen changes as the playhead moves, and so
+      // does whether the canvas should be catching clicks for them.
+      armFrameGrabs();
+
       gfxFrame = requestAnimationFrame(paintGraphics);
     }
     gfxFrame = requestAnimationFrame(paintGraphics);
@@ -4712,7 +5503,7 @@ export const Editor = (() => {
         // Narrowly: only an actual text field earns that protection. The
         // first version checked `insp.contains(document.activeElement)`,
         // which also matched a Reject button sitting there focused after its
-        // own click — nothing else ever nudges focus off a button, so the
+        // own click: nothing else ever nudges focus off a button, so the
         // card it belonged to stayed on screen, fully stale, until something
         // unrelated happened to move focus out of the rail. Rejecting a
         // proposal is not typing, and its card is gone from the store the
@@ -4723,14 +5514,13 @@ export const Editor = (() => {
         // has to reach the track too, not just the list.
         renderTrack();
         paintFrame();
-        renderCode();
       });
     });
     /**
      * Commit a rename.
      *
      * A lane item carries its own label, so renaming one is local. A spine
-     * clip has no name of its own — it points at a library record — so
+     * clip has no name of its own: it points at a library record, so
      * renaming it renames the clip, which is what makes the library
      * navigable and is almost always what was meant.
      */
@@ -4760,12 +5550,29 @@ export const Editor = (() => {
     }
 
     body.addEventListener("change", (e) => {
+      if (e.target.matches?.("[data-folder-rename-input]")) {
+        return void commitFolderRename(e.target.dataset.folderRenameInput, e.target.value);
+      }
       if (e.target.matches?.("[data-lib-rename-input]")) {
         return void commitLibRename(e.target.dataset.libRenameInput, e.target.value);
       }
       if (e.target.matches?.("[data-rename-input]")) commitRename(e.target.value);
     });
     body.addEventListener("keydown", (e) => {
+      if (e.target.matches?.("[data-folder-rename-input]")) {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          commitFolderRename(e.target.dataset.folderRenameInput, e.target.value);
+        }
+        if (e.key === "Escape") {
+          // The desktop closes the top window on Escape. Naming a folder is
+          // not a reason to lose the editor, so this one stops here.
+          e.stopPropagation();
+          folderRenaming = null;
+          renderLibrary();
+        }
+        return;
+      }
       if (e.target.matches?.("[data-lib-rename-input]")) {
         if (e.key === "Enter") {
           e.preventDefault();
@@ -4787,6 +5594,7 @@ export const Editor = (() => {
     const offCuts = onCuts(() => renderCuts());
     const offTranscripts = onTranscripts(() => renderWords());
     const off = Store.on("clips", renderLibrary);
+    const offFolders = Store.on("libfolders", renderLibrary);
 
     /**
      * Redraw what was measured, when the measurement changes.
@@ -4794,8 +5602,8 @@ export const Editor = (() => {
      * Tick spacing, the playhead and the viewer's fit are all computed from a
      * width read at render time, and nothing was watching that width. Resizing
      * the window or dragging a pane grip therefore left the ruler labelled for
-     * the old size — ticks bunched up or spread out, and the playhead sitting
-     * off the second it claimed — until something else happened to re-render.
+     * the old size: ticks bunched up or spread out, and the playhead sitting
+     * off the second it claimed, until something else happened to re-render.
      * Coalesced into one animation frame, because a drag fires this per pixel.
      */
     let resizeFrame = 0;
@@ -4816,6 +5624,7 @@ export const Editor = (() => {
       sizeWatch?.disconnect();
       cancelAnimationFrame(resizeFrame);
       off();
+      offFolders();
       offGraphics();
       offComposition();
       offCuts();
@@ -4832,6 +5641,7 @@ export const Editor = (() => {
       audioGraph = null;
       retimeTranscript = async () => {};
       refresh = () => {};
+      floatEnd = () => 0;
     });
 
     renderLibrary();
@@ -4846,6 +5656,7 @@ export const Editor = (() => {
     return Desk.openWindow({
       id: "editor",
       title: "Editor",
+      help: "editor",
       meta: "timeline",
       tint: TINT,
       size: "large",

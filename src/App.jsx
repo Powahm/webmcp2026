@@ -3,6 +3,7 @@ import Presence from "./agent/Presence.jsx";
 import Ghost from "./agent/Ghost.jsx";
 import DeskFolders from "./folders/DeskFolders.jsx";
 import GhostFolder from "./folders/GhostFolder.jsx";
+import Permissions from "./env/Permissions.jsx";
 import StatusBadge from "./webmcp/StatusBadge.jsx";
 
 /**
@@ -62,9 +63,18 @@ export default function App() {
 
         <div className="menubar-right">
           <StatusBadge />
+          {/* What the browser lets this page do, before it is found out the
+              hard way by pressing record and watching nothing happen. */}
+          <Permissions />
           <button className="chip" id="spotlight-open" aria-keyshortcuts="Meta+K Control+K">
             <span>Search</span>
             <kbd className="mono">⌘K</kbd>
+          </button>
+          {/* The way in for someone who has just arrived. It runs the same
+              tour as the question mark in a window's title bar, but for the
+              machine as a whole rather than for one window. */}
+          <button className="chip help-chip" id="help-open" title="How this works" aria-label="How this works">
+            ?
           </button>
           <button
             className="chip icon-chip"
@@ -147,34 +157,6 @@ export default function App() {
       {/* The agent, once it has actually used the page. */}
       <Ghost />
       <Presence />
-
-      {/* The teleprompter. Markup only: scripts-app.js resolves #prompter by id
-          and drives the scroll itself, so this must stay outside any window and
-          keep every class it targets. */}
-      <div className="prompter" id="prompter" hidden>
-        <div className="prompter-scrim" data-close-prompter />
-        <div className="prompter-panel" role="dialog" aria-modal="true" aria-label="Teleprompter">
-          <header className="prompter-head">
-            <span className="prompter-title" />
-            <button className="btn btn-mini" data-act="prompt-camera">Open Camera</button>
-            <button className="btn btn-mini" data-act="prompt-close" aria-label="Close teleprompter">Esc</button>
-          </header>
-          <div className="prompter-scroll" />
-          <footer className="prompter-foot">
-            <button className="btn btn-mini" data-act="prompt-slower" aria-label="Slower">−</button>
-            <span className="prompter-speed mono">1.0×</span>
-            <button className="btn btn-mini" data-act="prompt-faster" aria-label="Faster">+</button>
-            <button className="btn btn-play" data-act="prompt-play" data-playing="true" aria-label="Pause">
-              <svg className="ico-play" viewBox="0 0 16 16" aria-hidden="true">
-                <path d="M4 2.5v11l9-5.5z" />
-              </svg>
-              <svg className="ico-pause" viewBox="0 0 16 16" aria-hidden="true">
-                <path d="M4.5 2.5h3v11h-3zM8.5 2.5h3v11h-3z" />
-              </svg>
-            </button>
-          </footer>
-        </div>
-      </div>
 
       <div className="spotlight" id="spotlight" hidden>
         <div className="spotlight-scrim" data-close-spotlight />

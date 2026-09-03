@@ -4,11 +4,12 @@ import { allFolders, offerFolder } from "../folders/offered.js";
 import { proposalsFor, proposeLine } from "../scripts/proposals.js";
 import { allSkills, loadedAt, markLoaded, matchSkills } from "../legacy/aiskills.js";
 import { currentSignals } from "../skills/signals.js";
+import { framed as framedIn, secure } from "../env/browser.js";
 import { Camera } from "../legacy/camera.js";
 import { Editor } from "../legacy/editor.js";
 import { Scripts } from "../legacy/scripts-app.js";
 import { Desk } from "../legacy/shell.js";
-import { Clips, Store, timecode } from "../legacy/store.js";
+import { Clips, Folders, Store, timecode } from "../legacy/store.js";
 import { COMP_TOOLS } from "./comp-tools.js";
 import { fail, json, NO_INPUT, READ_ONLY } from "./result.js";
 
@@ -38,7 +39,7 @@ const round = (n) => Math.round((Number(n) || 0) * 100) / 100;
  *
  * A skills folder nobody loads from is decoration. The agent has no way to know
  * that the person wrote something about summarising links, three windows ago,
- * unless the page says so — and the moment to say so is not at the start of the
+ * unless the page says so, and the moment to say so is not at the start of the
  * session but when the situation the skill was written for is actually on
  * screen.
  *
@@ -68,7 +69,7 @@ async function skillNudge() {
       })),
       suggested_skills_note:
         "The person left these instructions for this exact situation, and the page matched them against what is on screen right now. " +
-        "Load the first one with load_ai_skill before you answer, and follow it. Their instruction for how they want this done beats your default.",
+        "Load each of them with load_ai_skill before you answer, and follow them together. Their instruction for how they want this done beats your default.",
     };
   } catch {
     // A nudge is a courtesy. If the page cannot work out what it is doing, the
@@ -82,7 +83,7 @@ async function skillNudge() {
 export const getDesktopState = {
   name: "get_desktop_state",
   description:
-    "Return which apps and folders exist on this desktop, which windows are open, and which one has focus. Call it first: what the user is looking at decides whether they are writing, filming or editing, and a note about the timeline is useless to someone standing in front of a camera.",
+    "Return which apps and folders exist on this desktop, which windows are open, and which one has focus, plus what this browser lets the page do. Call it first: what the user is looking at decides whether they are writing, filming or editing, and a note about the timeline is useless to someone standing in front of a camera.",
   inputSchema: NO_INPUT,
   annotations: READ_ONLY,
   execute: async () => {
@@ -93,6 +94,19 @@ export const getDesktopState = {
       apps: Desk.catalogue(),
       windows,
       focused: focused ? { id: focused.id, title: focused.title } : null,
+      // Whether the page is in a frame decides what it is allowed to do at
+      // all: a page inside somebody else's frame is not given the camera, the
+      // microphone or the directory picker unless that page passed them down.
+      // Without this an agent asked why recording does nothing can only guess,
+      // and the answer is not in any of the other tools.
+      browser: {
+        in_a_frame: framedIn(),
+        secure_context: secure(),
+        can_record: Boolean(navigator.mediaDevices?.getUserMedia),
+        note: framedIn()
+          ? "This page is inside another page's frame. The camera, the microphone and the folder picker are only available if that page passed them down; if recording or adding a folder does nothing, say so and suggest opening this address in a tab of its own."
+          : undefined,
+      },
       note: windows.length
         ? undefined
         : "Nothing is open. Use open_app, or ask what they are working on.",
@@ -259,14 +273,14 @@ export const getRecorderState = {
 export const listClips = {
   name: "list_clips",
   description:
-    "Return the clip library: everything recorded or imported on this desktop, oldest first. Clips are held in this browser and have never been uploaded anywhere, so this is the only place they can be listed.",
+    "Return the clip library: everything recorded or imported on this desktop, oldest first, including sound files, which have kind \"audio\". Each clip says which of the person's own library folders it is in, if any. Clips are held in this browser and have never been uploaded anywhere, so this is the only place they can be listed.",
   inputSchema: {
     type: "object",
     properties: {
       kind: {
         type: "string",
-        enum: ["recording", "import", "export", "screen"],
-        description: "Optional. Restrict to one kind of clip.",
+        enum: ["recording", "import", "export", "screen", "audio"],
+        description: "Optional. Restrict to one kind of clip. Sound files are \"audio\".",
       },
     },
     additionalProperties: false,
@@ -274,7 +288,11 @@ export const listClips = {
   annotations: READ_ONLY,
   execute: async (args) => {
     const kind = args.kind ? String(args.kind) : null;
-    const clips = await Clips.all();
+    const [clips, folders] = await Promise.all([Clips.all(), Folders.all()]);
+    // The folder's name rather than its id. The id means nothing to an agent
+    // and cannot be used for anything: there is no tool that files a clip,
+    // because filing is the person's own housekeeping.
+    const named = new Map(folders.map((f) => [f.id, f.name]));
     return json({
       clips: clips
         .filter((c) => !kind || c.kind === kind)
@@ -282,6 +300,7 @@ export const listClips = {
           id: c.id,
           name: c.name,
           kind: c.kind,
+          folder: named.get(c.folder) || null,
           duration_seconds: round(c.duration),
           duration: timecode(c.duration),
           width: c.width,

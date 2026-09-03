@@ -1,10 +1,10 @@
 import { Store, Clips, timecode } from "./store.js";
-import { announce, trapFocus } from "../a11y/focus-work.js";
+import { announce } from "../a11y/focus-work.js";
 import { drop, onProposals, proposalsFor, take } from "../scripts/proposals.js";
 import { Desk } from "./shell.js";
 
 /* ============================================================
-   Scripts — what you are going to say, on camera.
+   Scripts: what you are going to say, on camera.
    A script is a title and a list of lines. Each line is one
    spoken beat plus an optional shot direction. Runtime is
    estimated from word count, and the teleprompter scrolls it
@@ -24,7 +24,7 @@ export const Scripts = (() => {
       name: "WebMCP Challenge demo",
       lines: [
         { text: "This is Deskmate. A whole editing workstation, living in one browser tab.", note: "Straight to camera. Desktop visible behind you." },
-        { text: "You write the script here, read it off the teleprompter while you record, and cut what you shot.", note: "Screen: Scripts, then Camera, then Editor. Keep it moving — three seconds each." },
+        { text: "You write the script here, read it off the teleprompter while you record, and cut what you shot.", note: "Screen: Scripts, then Camera, then Editor. Keep it moving, three seconds each." },
         { text: "The interesting part is what the agent sitting next to me can see.", note: "Back to camera. Beat before the next line." },
         { text: "Which line of the prompter I am on, mid-take. Whether the camera is rolling. What I have selected on the timeline.", note: "Screen: the ghost reading the page. Let the tool names show." },
         { text: "None of that is on a server. It is a Blob in IndexedDB and an array in a closure.", note: "Hold on the Editor. Slow down here." },
@@ -32,7 +32,7 @@ export const Scripts = (() => {
         { text: "Twenty-eight tools, registered straight onto the page.", note: "Screen: the badge in the menu bar, then the tool list." },
         { text: "Watch. I ask for a title card over the bit where I stumbled.", note: "Type the ask on camera. Do not cut away." },
         { text: "It composes the graphic, times it against the transcript, and puts it on the timeline dashed.", note: "Hold on the dashed proposal previewing live." },
-        { text: "Dashed means proposed. There is no tool that accepts one — that click is mine.", note: "Accept it on camera. Beat after." },
+        { text: "Dashed means proposed. There is no tool that accepts one: that click is mine.", note: "Accept it on camera. Beat after." },
         { text: "Nothing uploaded. No backend. Everything you just watched happened in this tab.", note: "Back to camera." },
         { text: "Link is below. Go and break it.", note: "Point down. Hold two seconds for the outro." }
       ]
@@ -41,7 +41,7 @@ export const Scripts = (() => {
       id: "example-intro",
       name: "Channel intro",
       lines: [
-        { text: "Right — so this thing has been sitting on my desk for about three weeks now.", note: "Hold it up. Straight to camera." },
+        { text: "Right, so this thing has been sitting on my desk for about three weeks now.", note: "Hold it up. Straight to camera." },
         { text: "And I genuinely did not expect to like it as much as I do.", note: "Beat. Small smile." },
         { text: "Three things I want to show you, and the third one is the reason I kept it.", note: "Count on fingers." },
         { text: "Let's get into it.", note: "Cut to title card." }
@@ -52,7 +52,7 @@ export const Scripts = (() => {
       name: "Product demo, 60s",
       lines: [
         { text: "Here's the problem. Every clip you shoot ends up in a different folder, and by Friday you can't find any of them.", note: "Screen recording of a messy folder." },
-        { text: "So — record here, and it lands in the library automatically.", note: "Cut to Camera app. Press record." },
+        { text: "So, record here, and it lands in the library automatically.", note: "Cut to Camera app. Press record." },
         { text: "Drop it on the timeline, drag the ends to trim, pick a look.", note: "Screen capture of the editor. Keep it moving." },
         { text: "That's it. No accounts, no upload, nothing leaves your machine.", note: "Back to camera. Slow down here." },
         { text: "Link's below if you want to try it.", note: "Point down. Hold two seconds for the outro." }
@@ -95,7 +95,7 @@ export const Scripts = (() => {
      * Seed per example, not all-or-nothing.
      *
      * The old check was `if (existing.length) return`, which meant an example
-     * added later never reached anybody who had already opened the app once —
+     * added later never reached anybody who had already opened the app once,
      * and the people who have opened it are exactly the ones a new example is
      * written for. Offered ids are remembered instead, so a fresh one arrives
      * and one you deleted stays deleted.
@@ -130,48 +130,88 @@ export const Scripts = (() => {
 
   /* ---------------- teleprompter ---------------- */
 
-  const prompter = document.getElementById("prompter");
   let promptTimer = 0;
   /** The running prompter session, or null. Read by prompterState(). */
   let prompting = null;
-  /** Undoes the prompter's focus trap and hands focus back to the script. */
-  let releasePrompter = null;
+
+  /** A real window, like Camera or the Editor, so the two can sit open side
+   *  by side instead of one blocking modal swallowing the whole desktop. */
+  function prompterFocused() {
+    return document.querySelector('.win[data-win="prompter"]')?.dataset.focused === "true";
+  }
 
   function openPrompter(script) {
-    const body = prompter.querySelector(".prompter-scroll");
-    const title = prompter.querySelector(".prompter-title");
-    title.textContent = script.name;
+    if (Desk.isOpen("prompter")) {
+      const body = document.querySelector('.win[data-win="prompter"] .win-body');
+      if (body) return paintPrompter(body, script);
+    }
+    Desk.openWindow({
+      id: "prompter",
+      title: "Teleprompter",
+      meta: script.name,
+      tint: TINT,
+      size: { w: 860, h: 640 },
+      centered: true,
+      build: (body, win) => {
+        paintPrompter(body, script);
+        win.onCleanup(() => {
+          cancelAnimationFrame(promptTimer);
+          prompting = null;
+        });
+      }
+    });
+  }
 
-    body.innerHTML = script.lines
-      .map((l, i) => `<p class="prompter-line" data-i="${i}">${Desk.esc(l.text)}</p>`)
-      .join("");
+  function paintPrompter(body, script) {
+    cancelAnimationFrame(promptTimer);
 
-    prompter.hidden = false;
-    body.scrollTop = 0;
+    body.innerHTML = `
+      <div class="prompter-scroll">
+        ${script.lines.map((l, i) => `<p class="prompter-line" data-i="${i}">${Desk.esc(l.text)}</p>`).join("")}
+      </div>
+      <footer class="prompter-foot">
+        <button class="btn btn-mini" data-act="prompt-camera">Open camera</button>
+        <button class="btn btn-mini" data-act="prompt-slower" aria-label="Slower">−</button>
+        <span class="prompter-speed mono">1.0×</span>
+        <button class="btn btn-mini" data-act="prompt-faster" aria-label="Faster">+</button>
+        <button class="btn btn-play" data-act="prompt-play" data-playing="true" aria-label="Pause">
+          <svg class="ico-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9-5.5z" /></svg>
+          <svg class="ico-pause" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 2.5h3v11h-3zM8.5 2.5h3v11h-3z" /></svg>
+        </button>
+      </footer>`;
 
+    const scroll = body.querySelector(".prompter-scroll");
     let running = true;
     let speed = 1;
-    const playBtn = prompter.querySelector('[data-act="prompt-play"]');
-    const speedOut = prompter.querySelector(".prompter-speed");
+    const playBtn = body.querySelector('[data-act="prompt-play"]');
+    const speedOut = body.querySelector(".prompter-speed");
+
+    // scrollTop only stores whole pixels, so accumulating straight into it
+    // rounds every sub-pixel step back down to nothing: at typical reading
+    // pace that is under a pixel a frame, and the scroll — and the
+    // highlight riding on it — never moves. Keep the true position here
+    // instead and let scrollTop just follow it.
+    let scrollF = 0;
 
     /* pace the scroll so the whole script takes about its estimated runtime */
     const step = () => {
       if (!running) return;
-      const spread = body.scrollHeight - body.clientHeight;
+      const spread = scroll.scrollHeight - scroll.clientHeight;
       const perTick = spread > 0 ? (spread / Math.max(runtime(script), 1)) / 60 : 0;
-      body.scrollTop += perTick * speed;
+      scrollF = Math.min(spread, scrollF + perTick * speed);
+      scroll.scrollTop = scrollF;
 
-      const focus = body.scrollTop + body.clientHeight * 0.42;
+      const focus = scrollF + scroll.clientHeight * 0.42;
       let best = null;
       let shortest = Infinity;
-      [...body.children].forEach((el) => {
+      [...scroll.children].forEach((el) => {
         el.dataset.now = "false";
         const gap = Math.abs(el.offsetTop + el.offsetHeight / 2 - focus);
         if (gap < shortest) { shortest = gap; best = el; }
       });
       if (best) best.dataset.now = "true";
 
-      if (body.scrollTop < spread) promptTimer = requestAnimationFrame(step);
+      if (scrollF < spread) promptTimer = requestAnimationFrame(step);
       else { running = false; playBtn.dataset.playing = "false"; }
     };
 
@@ -183,12 +223,13 @@ export const Scripts = (() => {
       if (v) promptTimer = requestAnimationFrame(step);
     };
 
-    prompter.onclick = (e) => {
+    body.onclick = (e) => {
       const act = e.target.closest("[data-act]")?.dataset.act;
-      if (act === "prompt-close" || e.target.hasAttribute("data-close-prompter")) return closePrompter();
       if (act === "prompt-play") return setRunning(!running);
       if (act === "prompt-slower") { speed = Math.max(0.4, speed - 0.2); speedOut.textContent = `${speed.toFixed(1)}×`; }
       if (act === "prompt-faster") { speed = Math.min(2.5, speed + 0.2); speedOut.textContent = `${speed.toFixed(1)}×`; }
+      // Camera already exists as its own window: this just brings it up
+      // alongside the prompter rather than replacing it.
       if (act === "prompt-camera") Desk.launch("camera");
     };
 
@@ -196,19 +237,11 @@ export const Scripts = (() => {
     prompting = { script, isRunning: () => running, getSpeed: () => speed, setRunning };
     setRunning(true);
 
-    // The prompter covers the whole machine, so focus has to come with it and
-    // stay inside: Tab behind a modal scrim lands on controls nobody can see.
-    releasePrompter = trapFocus(prompter.querySelector(".prompter-panel"), { initial: playBtn });
-    announce(`Teleprompter running: ${script.name}. Space pauses, Escape leaves.`);
+    announce(`Teleprompter running: ${script.name}. Space pauses.`);
   }
 
   function closePrompter() {
-    cancelAnimationFrame(promptTimer);
-    prompter.hidden = true;
-    prompter.onclick = null;
-    prompting = null;
-    releasePrompter?.();
-    releasePrompter = null;
+    if (Desk.isOpen("prompter")) Desk.closeWindow("prompter");
   }
 
   /**
@@ -220,8 +253,9 @@ export const Scripts = (() => {
    * on while a take is running.
    */
   function prompterState() {
-    if (!prompting || prompter.hidden) return null;
-    const body = prompter.querySelector(".prompter-scroll");
+    if (!prompting) return null;
+    const body = document.querySelector('.win[data-win="prompter"] .prompter-scroll');
+    if (!body) return null;
     const now = body.querySelector('.prompter-line[data-now="true"]');
     const index = now ? Number(now.dataset.i) : 0;
     const spread = body.scrollHeight - body.clientHeight;
@@ -239,21 +273,16 @@ export const Scripts = (() => {
     };
   }
 
+  // Scoped to whichever window the user last touched, so Space doesn't
+  // steal a beat from Camera's own shortcuts when both are open together.
   document.addEventListener("keydown", (e) => {
-    if (prompter.hidden) return;
+    if (!prompting || !prompterFocused()) return;
 
-    if (e.key === "Escape") {
-      e.stopPropagation();
-      return closePrompter();
-    }
-
-    // Space is what a performer reaches for when they need to stop, and they
-    // are looking at the lens rather than at the pause button.
     if (e.key === " " && !e.target.closest("input, textarea, [contenteditable]")) {
       e.preventDefault();
       e.stopPropagation();
-      const next = !prompting?.isRunning();
-      prompting?.setRunning(next);
+      const next = !prompting.isRunning();
+      prompting.setRunning(next);
       announce(next ? "Prompter running." : "Prompter paused.");
     }
   }, true);
@@ -285,6 +314,7 @@ export const Scripts = (() => {
     Desk.openWindow({
       id: `script:${script.id}`,
       title: script.name,
+      help: "script",
       meta: timecode(runtime(script)),
       tint: TINT,
       size: "large",
@@ -392,7 +422,7 @@ export const Scripts = (() => {
                 <textarea class="line-text" rows="2" data-field="text"
                   placeholder="What you say out loud…">${Desk.esc(line.text)}</textarea>
                 <input class="line-note" data-field="note" value="${Desk.esc(line.note || "")}"
-                  placeholder="Shot direction — camera, b-roll, tone">
+                  placeholder="Shot direction: camera, b-roll, tone">
               </div>
               <div class="line-acts">
                 <button class="line-btn" data-move="-1" aria-label="Move line ${i + 1} up">↑</button>
@@ -686,6 +716,7 @@ export const Scripts = (() => {
     Desk.openWindow({
       id: "scripts",
       title: "Scripts",
+      help: "scripts",
       meta: "",
       tint: TINT,
       size: "large",

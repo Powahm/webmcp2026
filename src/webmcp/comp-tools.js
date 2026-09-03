@@ -14,7 +14,7 @@
  * them can promote one, because the store guards every accept path behind a
  * trusted user event. The agent can compose an eight-second animated title
  * card, a sound effect under it, a reframe to vertical and a list of every
- * hesitation in the take — four calls — and it still cannot put one frame into
+ * hesitation in the take (four calls) and it still cannot put one frame into
  * the video.
  */
 
@@ -33,6 +33,7 @@ import { Editor } from "../legacy/editor.js";
 import { Clips, timecode } from "../legacy/store.js";
 import { findDeadWeight, findWords, toCutTime } from "../transcript/transcript.js";
 import { hasApiKey, transcriptsFor } from "../transcript/store.js";
+import { skillNudge } from "./nudge.js";
 import { fail, json, NO_INPUT, READ_ONLY } from "./result.js";
 
 const round = (n) => Math.round((Number(n) || 0) * 100) / 100;
@@ -68,12 +69,17 @@ export const getComposition = {
     "Return the motion graphics, sound and format layered over the cut, with every timing in both seconds and frames. Call it before proposing anything so you build on what is there instead of stacking a second title card on the first, and so you know the format: a graphic laid out for 16:9 reads differently once the same composition is reframed to 9:16.",
   inputSchema: NO_INPUT,
   annotations: READ_ONLY,
-  execute: () => {
+  execute: async () => {
     const doc = composition();
     const { fps } = doc;
     const format = formatOf(doc.format);
 
     return json({
+      // The skill that fits what is on screen rides along here too: this is
+      // the read every graphics proposal is told to make first, so a skill
+      // about motion design that only surfaced on get_timeline would be
+      // missed by an agent that went straight to the composition.
+      ...(await skillNudge()),
       format: doc.format,
       aspect: format.label,
       width: format.width,
@@ -232,7 +238,7 @@ export const getTranscript = {
 export const getCompositionCode = {
   name: "get_composition_code",
   description:
-    "Return the composition as the TSX file it compiles to: one Sequence per graphic, with the exact frame it starts on and how many frames it runs for. This is the same code the editor sees in the Code tab. Read it when you need to reason about the composition as a whole rather than one layer at a time, or to quote a specific line back to the person you are helping.",
+    "Return the composition as the TSX file it compiles to: one Sequence per graphic, with the exact frame it starts on and how many frames it runs for. Read it when you need to reason about the composition as a whole rather than one layer at a time, or to quote a specific line back to the person you are helping.",
   inputSchema: NO_INPUT,
   annotations: READ_ONLY,
   execute: () =>
@@ -251,7 +257,7 @@ export const getCompositionCode = {
  * The layer schema, generated from the components themselves.
  *
  * This used to be typed out by hand, which meant a component could declare a
- * field and the tool would still refuse it — `additionalProperties: false` and
+ * field and the tool would still refuse it: `additionalProperties: false` and
  * a stale property list is a silent way to make a feature unreachable. The
  * component library is the single description of what a graphic takes, so the
  * schema is built from it and adding a field to a component is the whole job.
@@ -427,7 +433,7 @@ export const proposeLayerChangeTool = {
 export const proposeSound = {
   name: "propose_sound",
   description:
-    `Propose sound: a one-shot effect on a moment, or a music bed under a stretch of the cut. Effects are synthesised in the browser, so there is nothing to load and nothing to license — pick one of: ${SFX_NAMES.map((n) => `${n} (${SFX_PRESETS[n].blurb})`).join(" ")} A music bed takes an existing clip from the library and ducks itself under speech automatically, using the transcript's word boundaries, so you do not need to shape the volume yourself.`,
+    `Propose sound: a one-shot effect on a moment, or a music bed under a stretch of the cut. Effects are synthesised in the browser, so there is nothing to load and nothing to license; pick one of: ${SFX_NAMES.map((n) => `${n} (${SFX_PRESETS[n].blurb})`).join(" ")} A music bed takes an existing clip from the library and ducks itself under speech automatically, using the transcript's word boundaries, so you do not need to shape the volume yourself.`,
   inputSchema: {
     type: "object",
     properties: {
@@ -467,7 +473,7 @@ export const proposeSound = {
 export const proposeFormatTool = {
   name: "propose_format",
   description:
-    "Propose reframing the whole composition to a different aspect ratio. Every graphic is laid out as fractions of the frame, so this moves nothing and rewrites nothing — the same composition simply becomes 16:9, 9:16 or 1:1, with the safe margins that format needs. Use it when they mention shorts, reels, vertical or a square post.",
+    "Propose reframing the whole composition to a different aspect ratio. Every graphic is laid out as fractions of the frame, so this moves nothing and rewrites nothing: the same composition simply becomes 16:9, 9:16 or 1:1, with the safe margins that format needs. Use it when they mention shorts, reels, vertical or a square post.",
   inputSchema: {
     type: "object",
     properties: {

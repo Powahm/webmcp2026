@@ -55,9 +55,8 @@ export const toSeconds = (frames, fps = FPS) => (Number(frames) || 0) / fps;
 export function frameCode(frame, fps = FPS) {
   const f = Math.max(0, Math.round(Number(frame) || 0));
   const total = Math.floor(f / fps);
-  const mins = Math.floor(total / 60);
-  const secs = total % 60;
-  return `${mins}:${String(secs).padStart(2, "0")}.${String(f % fps).padStart(2, "0")}`;
+  const pad = (n) => String(Math.floor(Math.max(0, n))).padStart(2, "0");
+  return `${pad(total / 3600)}:${pad((total % 3600) / 60)}:${pad(total % 60)}.${pad(f % fps)}`;
 }
 
 /* ----------------------------------------------------------------- easings */
@@ -220,24 +219,42 @@ export function resolve(layers, { from = 0, until = Infinity, depth = 0 } = {}) 
       : until;
     if (end <= start) continue;
 
+    /**
+     * A window, for a layer that lives inside a container shorter than it is.
+     *
+     * `start` stays the layer's own origin whatever the window says, because
+     * that is what its animation is measured from: a title that has been
+     * scrolled half out of its clip has to come in half-animated, not restart
+     * at the clip's edge. The window only decides which frames are allowed to
+     * draw. Without the split, clamping the origin was the only way to keep a
+     * layer inside its clip, and it replayed the entrance every trim.
+     */
+    const win = node.window;
+    const showFrom = Number.isFinite(win?.from) ? Math.max(start, win.from) : start;
+    const showTo = Number.isFinite(win?.to) ? Math.min(end, win.to) : end;
+    if (showTo <= showFrom) continue;
+
     if (node.children?.length) {
       out.push(...resolve(node.children, { from: start, until: end, depth: depth + 1 }));
     }
     if (node.component) {
-      out.push({ node, from: start, to: end, durationInFrames: end - start });
+      out.push({ node, from: start, to: end, showFrom, showTo, durationInFrames: end - start });
     }
   }
   return out;
 }
 
-/** The resolved entries covering a frame, in draw order. */
+/** The resolved entries covering a frame, in draw order. Measured against the
+ *  window a layer is allowed to draw in, which is its own span unless a clip
+ *  is holding it to something shorter. */
 export const activeAt = (resolved, frame) =>
-  resolved.filter((r) => frame >= r.from && frame < r.to);
+  resolved.filter((r) => frame >= (r.showFrom ?? r.from) && frame < (r.showTo ?? r.to));
 
 /** How long a resolved composition runs. Zero layers is zero frames, and the
- *  caller decides whether that means "empty" or "just the video". */
+ *  caller decides whether that means "empty" or "just the video". A layer that
+ *  stops drawing at its clip's edge does not extend the composition past it. */
 export const durationOf = (resolved) =>
-  resolved.reduce((max, r) => Math.max(max, r.to), 0);
+  resolved.reduce((max, r) => Math.max(max, r.showTo ?? r.to), 0);
 
 /**
  * Lay nodes end to end, each starting where the last finished.
@@ -295,7 +312,7 @@ export const clamp01 = (n) => Math.max(0, Math.min(1, Number(n) || 0));
  *
  * This is deliberately not a general animation system. It moves, sizes, turns
  * and fades what is already there, which is what a person means when they say
- * "make it slide in and settle" — and it stays a pure function of the frame,
+ * "make it slide in and settle", and it stays a pure function of the frame,
  * so the export can still render frame 512 without having rendered 511.
  */
 export const KEYABLE = ["x", "y", "width", "height", "opacity", "rotation"];

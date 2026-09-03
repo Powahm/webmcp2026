@@ -1,5 +1,5 @@
 /* ============================================================
-   Shell — desktop, window manager, dock, launcher, theme.
+   Shell: desktop, window manager, dock, launcher, theme.
    Apps register themselves with Desk.register() and are handed
    a body element to fill when they open.
    ============================================================ */
@@ -96,7 +96,57 @@ export const Desk = (() => {
     };
   }
 
-  function openWindow({ id, title, meta = "", tint, size = { w: 560, h: 440 }, centered = false, origin, build, onClose }) {
+  /**
+   * The desktop's edges are a hard border.
+   *
+   * A window used to be allowed to hang off them, the way a real desktop lets
+   * you push one half off the side of the screen. That is fine on a real
+   * desktop, where the screen is the whole world. Here the desktop is a box on
+   * a page, and a window pushed past the bottom of it is not parked, it is
+   * gone: the part hanging off is clipped, so there is nothing left to grab to
+   * drag it back, and in an embedded browser -- the site opened inside
+   * ChatGPT, say -- the overhang can push the page itself open into empty
+   * space below the wallpaper.
+   *
+   * So every geometry change goes through here, and nothing may end up outside
+   * the frame: not by dragging, not by resizing, and not by the desktop
+   * getting smaller underneath a window that fitted a moment ago.
+   */
+  function fitToDesktop({ left, top, width, height }) {
+    const bounds = desktop.getBoundingClientRect();
+    // A window wider than the desktop is pinned to it rather than clipped: on
+    // a narrow panel, fitting the screen beats holding a minimum size.
+    const w = Math.min(width, bounds.width);
+    const h = Math.min(height, bounds.height);
+    return {
+      width: w,
+      height: h,
+      left: Math.max(0, Math.min(left, bounds.width - w)),
+      top: Math.max(0, Math.min(top, bounds.height - h))
+    };
+  }
+
+  /** The same, read straight off an element. The inline style rather than
+   *  offsetWidth, because a minimised window is display:none and measures
+   *  zero, and clamping it to nothing is how it would come back from the
+   *  dock as a 0×0 sliver. */
+  function geometryOf(el) {
+    return {
+      left: parseFloat(el.style.left) || 0,
+      top: parseFloat(el.style.top) || 0,
+      width: parseFloat(el.style.width) || el.offsetWidth,
+      height: parseFloat(el.style.height) || el.offsetHeight
+    };
+  }
+
+  function applyGeometry(el, box) {
+    el.style.left = box.left + "px";
+    el.style.top = box.top + "px";
+    el.style.width = box.width + "px";
+    el.style.height = box.height + "px";
+  }
+
+  function openWindow({ id, title, meta = "", tint, size = { w: 560, h: 440 }, minSize, centered = false, origin, help = "", build, onClose }) {
     const existing = windows.get(id);
     if (existing) {
       setWindowState(existing, "open");
@@ -109,6 +159,10 @@ export const Desk = (() => {
     const w = Math.min(wanted.w, Math.max(300, desktop.clientWidth - 28));
     const h = Math.min(wanted.h, Math.max(220, desktop.clientHeight - 28));
     const pos = placement(w, h, { centered: centered || large });
+    // Through the same clamp everything else goes through: on a desktop
+    // narrower than the smallest window the placement floors allow, a window
+    // would otherwise open already hanging off the edge.
+    const box = fitToDesktop({ left: pos.left, top: pos.top, width: w, height: h });
 
     const el = document.createElement("section");
     el.className = "win";
@@ -117,7 +171,8 @@ export const Desk = (() => {
     el.setAttribute("role", "dialog");
     el.setAttribute("aria-label", title);
     Object.assign(el.style, {
-      width: w + "px", height: h + "px", left: pos.left + "px", top: pos.top + "px"
+      width: box.width + "px", height: box.height + "px",
+      left: box.left + "px", top: box.top + "px"
     });
     if (tint) el.style.setProperty("--w-tint", tint);
 
@@ -136,13 +191,24 @@ export const Desk = (() => {
         </span>
         <h2 class="win-title">${esc(title)}</h2>
         <span class="win-meta mono">${esc(meta)}</span>
+        ${help
+          ? `<button class="win-help" data-act="help" aria-label="How ${esc(title)} works"
+                     title="How this works">?</button>`
+          : ""}
       </header>
       <div class="win-body"></div>
-      <span class="win-resize" aria-hidden="true"></span>`;
+      <span class="win-resize" aria-hidden="true"></span>
+      <span class="win-edge" data-edge="n" aria-hidden="true"></span>
+      <span class="win-edge" data-edge="s" aria-hidden="true"></span>
+      <span class="win-edge" data-edge="e" aria-hidden="true"></span>
+      <span class="win-edge" data-edge="w" aria-hidden="true"></span>
+      <span class="win-edge" data-edge="ne" aria-hidden="true"></span>
+      <span class="win-edge" data-edge="nw" aria-hidden="true"></span>
+      <span class="win-edge" data-edge="sw" aria-hidden="true"></span>`;
 
     desktop.appendChild(el);
 
-    const rec = { el, id, title, tint, restore: null, onClose, cleanups: [], visibility: [] };
+    const rec = { el, id, title, tint, minSize, help, restore: null, onClose, cleanups: [], visibility: [] };
     windows.set(id, rec);
 
     const body = $(".win-body", el);
@@ -258,6 +324,12 @@ export const Desk = (() => {
           ?.focus({ preventScroll: true });
       }
       if (act === "max") toggleMax(rec);
+      // Loaded when it is asked for. The tour knows about every window in the
+      // app, so importing it from the window manager at module scope would
+      // pull the whole desktop into the file that draws the desktop.
+      if (act === "help") {
+        import("../help/tours.js").then((m) => m.startHelp(rec.help));
+      }
     });
 
     bar.addEventListener("dblclick", (e) => {
@@ -265,30 +337,113 @@ export const Desk = (() => {
     });
 
     drag(bar, el, (dx, dy, start) => {
-      const bounds = desktop.getBoundingClientRect();
-      el.style.left = Math.min(Math.max(start.x + dx, -start.w + 90), bounds.width - 90) + "px";
-      el.style.top = Math.min(Math.max(start.y + dy, 0), bounds.height - 44) + "px";
+      const box = fitToDesktop({
+        left: start.x + dx, top: start.y + dy, width: start.w, height: start.h
+      });
+      el.style.left = box.left + "px";
+      el.style.top = box.top + "px";
     });
 
+    // A window can ask for a floor bigger than the desktop default — Camera
+    // does, so the whole feed always has room to fit rather than resizing
+    // down into a sliver of itself.
+    const MIN_W = rec.minSize?.w ?? 320;
+    const MIN_H = rec.minSize?.h ?? 220;
+
+    /* Between the floor the window asked for and the edge of the desktop. */
+    const span = (want, min, room) => Math.max(min, Math.min(want, room));
+
     drag($(".win-resize", el), el, (dx, dy, start) => {
-      el.style.width = Math.max(320, start.w + dx) + "px";
-      el.style.height = Math.max(220, start.h + dy) + "px";
+      const bounds = desktop.getBoundingClientRect();
+      el.style.width = span(start.w + dx, MIN_W, bounds.width - start.x) + "px";
+      el.style.height = span(start.h + dy, MIN_H, bounds.height - start.y) + "px";
     });
+
+    // Every edge and corner resizes, not only the bottom-right grip. Pulling
+    // the top or left edge moves the window by as much as it shrinks, so the
+    // opposite edge stays put, which is what makes it read as resizing rather
+    // than dragging. The minimum sizes are the ones the corner grip uses, and
+    // the far edge of the desktop is the maximum: growing west stops at the
+    // left edge, growing east at the right one.
+    for (const grip of el.querySelectorAll(".win-edge")) {
+      const edge = grip.dataset.edge;
+      drag(grip, el, (dx, dy, start) => {
+        const bounds = desktop.getBoundingClientRect();
+        if (edge.includes("e")) el.style.width = span(start.w + dx, MIN_W, bounds.width - start.x) + "px";
+        if (edge.includes("s")) el.style.height = span(start.h + dy, MIN_H, bounds.height - start.y) + "px";
+        if (edge.includes("w")) {
+          // start.x + start.w is where the right edge is, so it is also how
+          // wide this window can get before its left edge passes zero.
+          const w = span(start.w - dx, MIN_W, start.x + start.w);
+          el.style.width = w + "px";
+          el.style.left = Math.max(0, start.x + (start.w - w)) + "px";
+        }
+        if (edge.includes("n")) {
+          const h = span(start.h - dy, MIN_H, start.y + start.h);
+          el.style.height = h + "px";
+          el.style.top = Math.max(0, start.y + (start.h - h)) + "px";
+        }
+      });
+    }
+  }
+
+  /** Maximised is the desktop, less a hairline of wallpaper on every side. */
+  function maxGeometry() {
+    return {
+      left: 10,
+      top: 10,
+      width: Math.max(0, desktop.clientWidth - 20),
+      height: Math.max(0, desktop.clientHeight - 20)
+    };
   }
 
   function toggleMax(rec) {
     const { el } = rec;
     if (rec.restore) {
-      Object.assign(el.style, rec.restore);
+      // Clamped on the way back out, because the desktop can have shrunk
+      // while the window was maximised and the size it had before is not
+      // always a size that still fits.
+      applyGeometry(el, fitToDesktop(rec.restore));
       rec.restore = null;
     } else {
-      rec.restore = { left: el.style.left, top: el.style.top, width: el.style.width, height: el.style.height };
-      Object.assign(el.style, {
-        left: "10px", top: "10px",
-        width: desktop.clientWidth - 20 + "px",
-        height: desktop.clientHeight - 20 + "px"
-      });
+      rec.restore = geometryOf(el);
+      applyGeometry(el, maxGeometry());
     }
+  }
+
+  /**
+   * Put every window back inside the desktop after the desktop changes size.
+   *
+   * This is the case that actually bites: a window that fitted perfectly well
+   * is left hanging off the edge by something that happens while you are
+   * working rather than while you are watching -- the browser window resized,
+   * or the panel the site is embedded in dragged narrower. A maximised window
+   * is re-maximised rather than clamped, because it should still fill the
+   * desktop it is on now.
+   */
+  function keepWindowsInside() {
+    windows.forEach((rec) => {
+      if (rec.restore) {
+        rec.restore = fitToDesktop(rec.restore);
+        applyGeometry(rec.el, maxGeometry());
+        return;
+      }
+      applyGeometry(rec.el, fitToDesktop(geometryOf(rec.el)));
+    });
+  }
+
+  // A ResizeObserver on the desktop itself, not a window resize listener: the
+  // embedded cases -- the site running inside another browser's panel, an
+  // iframe being given a new size -- do not always come with a resize event on
+  // the window, and they are exactly the ones this is here for.
+  if (typeof ResizeObserver === "function") {
+    let queued = 0;
+    new ResizeObserver(() => {
+      cancelAnimationFrame(queued);
+      queued = requestAnimationFrame(keepWindowsInside);
+    }).observe(desktop);
+  } else {
+    addEventListener("resize", keepWindowsInside);
   }
 
   function drag(handle, el, onMove) {
@@ -334,7 +489,7 @@ export const Desk = (() => {
    *
    * The dock used to be a coloured square and a word, which is fine until four
    * windows are open and three of them are documents. Window ids are already
-   * namespaced by what opened them — `doc:`, `script:`, `skill:`, `folder:` —
+   * namespaced by what opened them (`doc:`, `script:`, `skill:`, `folder:`),
    * so the prefix picks the glyph and an app supplies its own.
    */
   const DOCK_GLYPHS = {
@@ -371,7 +526,7 @@ export const Desk = (() => {
       const minimised = rec.el.dataset.state === "minimised";
       btn.dataset.minimised = String(minimised);
       btn.setAttribute("aria-current", String(rec.el.dataset.focused === "true" && !minimised));
-      // The glyph is decorative — the label beside it already names the window,
+      // The glyph is decorative: the label beside it already names the window,
       // so a second reading of the same word would be noise.
       btn.innerHTML =
         `<span class="dock-glyph" aria-hidden="true">${dockGlyph(rec.id)}</span>` +
@@ -506,6 +661,9 @@ export const Desk = (() => {
   }
 
   $("#spotlight-open").addEventListener("click", openSpotlight);
+  $("#help-open")?.addEventListener("click", () => {
+    import("../help/tours.js").then((m) => m.startHelp("system"));
+  });
   spotInput.addEventListener("input", (e) => renderSpotlight(e.target.value));
   spotResults.addEventListener("click", (e) => {
     const li = e.target.closest(".sp-item");

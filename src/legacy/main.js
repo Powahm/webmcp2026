@@ -24,26 +24,28 @@ export const Readme = (() => {
         { t: "lede", v: "Three folders and two apps. Write what you are going to say, record it, cut it." },
         { t: "h", v: "The five things on the desktop" },
         { t: "ul", v: [
-          "**Readme** — this folder. What everything does.",
-          "**Scripts** — what you are going to say on camera, with a teleprompter.",
-          "**Skills** — craft notes on cutting, pacing and looks.",
-          "**Camera** — live preview, one button to record.",
-          "**Editor** — a timeline. Trim, grade, reorder, export."
+          "**Readme**: this folder. What everything does.",
+          "**Scripts**: what you are going to say on camera, with a teleprompter.",
+          "**Skills**: craft notes on cutting, pacing and looks.",
+          "**Camera**: live preview, one button to record.",
+          "**Editor**: a timeline. Trim, grade, reorder, export."
         ] },
         { t: "h", v: "A first run" },
         { t: "ul", v: [
           "Open Scripts, write a couple of lines, and hit Teleprompter.",
           "Open Camera and press the red button. Press it again to stop.",
-          "Open Editor. Your clip is in the library on the left — click it to add it to the timeline.",
+          "Open Editor. Your clip is in the library on the left: click it to add it to the timeline.",
           "Drag the Start and End sliders to trim, pick a look, press Export."
         ] },
         { t: "note", v: "No camera? Every app has an Import video button. The editor works the same on a file you already have." },
+        { t: "h", v: "Being shown around" },
+        { t: "p", v: "The **?** in the menubar walks the whole machine: it dims the screen, lights up each thing in turn and says what it is for. Every window's title bar has its own **?** for that window alone, in more detail. Arrow keys move through a tour, Escape leaves it." },
         { t: "h", v: "Keyboard" },
         { t: "ul", v: [
-          "⌘K / Ctrl+K — search docs, skills, scripts and clips.",
-          "Escape — close the top window, or leave the teleprompter.",
-          "F6 — cycle through the open windows.",
-          "⌘S inside a script — save it.",
+          "⌘K / Ctrl+K: search docs, skills, scripts and clips.",
+          "Escape: close the top window, or leave the teleprompter.",
+          "F6: cycle through the open windows.",
+          "⌘S inside a script: save it.",
           "Everything here works from the keyboard. See **Accessibility** for the rest."
         ] }
       ]
@@ -59,13 +61,14 @@ export const Readme = (() => {
         { t: "p", v: "Recording uses MediaRecorder against the live camera stream, which produces WebM. Clips are written straight to the library, where the editor and any script can reach them." },
         { t: "h", v: "Controls" },
         { t: "ul", v: [
-          "**Shutter** — starts recording, and turns into a stop button with a running timer.",
-          "**Camera picker** — appears when the machine has more than one.",
-          "**Mic** — toggles audio capture. It restarts the stream, so the preview blinks.",
-          "**Import video** — pulls a file into the library without a camera."
+          "**Shutter**: starts recording, and turns into a stop button with a running timer.",
+          "**Camera picker**: appears when the machine has more than one.",
+          "**Mic**: toggles audio capture. It restarts the stream, so the preview blinks.",
+          "**Import video**: pulls a file into the library without a camera."
         ] },
         { t: "h", v: "If the camera will not start" },
-        { t: "p", v: "The app tells you which of the three it is: permission was refused, no device exists, or another program holds it. Camera access also needs a secure context, so this works on https and on localhost, and an embedded preview frame may refuse it outright." }
+        { t: "p", v: "The app tells you which of the three it is: permission was refused, no device exists, or another program holds it. Camera access also needs a secure context, so this works on https and on localhost, and an embedded preview frame may refuse it outright." },
+        { t: "p", v: "**Ask for camera and mic** on that panel puts the question to the browser deliberately, which matters in an agent's browser: a prompt that appears on its own, that nobody pressed anything for, is one some browsers answer for you. The **Permissions** chip in the menubar shows the same thing for everything at once." }
       ]
     },
     {
@@ -78,16 +81,24 @@ export const Readme = (() => {
         { t: "lede", v: "A timeline of trimmed clips, each with its own look and speed." },
         { t: "h", v: "Layout" },
         { t: "ul", v: [
-          "**Library**, left — every clip you have recorded or imported.",
-          "**Preview**, centre — plays the timeline as one piece, not clip by clip.",
-          "**Clip inspector**, right — trim, look, speed and sound for whatever is selected.",
-          "**Timeline**, bottom — click to select, drag to reorder."
+          "**Library**, left: every clip you have recorded or imported, and every sound.",
+          "**Preview**, centre: plays the timeline as one piece, not clip by clip.",
+          "**Clip inspector**, right: trim, look, speed and sound for whatever is selected.",
+          "**Timeline**, bottom: click to select, drag to reorder."
+        ] },
+        { t: "h", v: "The library" },
+        { t: "ul", v: [
+          "**Video** and **Audio** at the top bring files in. Sound lands in the library like anything else rather than going straight onto the timeline, so a shelf of effects can sit there until you want one.",
+          "**Folders** are the row of chips underneath. Press **+** to make one and name it on the spot; click one to show only what is in it.",
+          "Put a clip in a folder by dragging its card onto the chip, or with the folder button on the card itself.",
+          "Deleting a folder does not delete what was in it. The clips come back out into the library unfiled.",
+          "Clicking a video adds it to the end of the cut. Clicking a sound puts it on an audio lane at the playhead, because sound on the spine would be a clip with no picture."
         ] },
         { t: "h", v: "Looks" },
-        { t: "p", v: "Six grades — none, mono, warm, cool, punch, faded. They are CSS filter strings in preview and the identical string on the canvas at export, so what you see is what is written." },
+        { t: "p", v: "Six grades: none, mono, warm, cool, punch, faded. They are CSS filter strings in preview and the identical string on the canvas at export, so what you see is what is written." },
         { t: "h", v: "Export" },
         { t: "p", v: "There is no encoder dependency here. Export replays the timeline into a canvas, captures that canvas as a stream, mixes the audio back in through a Web Audio graph, and records the result. That has one consequence worth knowing: **rendering happens in real time**, so a forty-second cut takes forty seconds." },
-        { t: "note", v: "Exports are saved back into your library as a new clip, and offered as a download. The library copy is the reliable one — some embedded frames block downloads that a page starts itself." }
+        { t: "note", v: "Exports are saved back into your library as a new clip, and offered as a download. The library copy is the reliable one: some embedded frames block downloads that a page starts itself." }
       ]
     },
     {
@@ -98,9 +109,9 @@ export const Readme = (() => {
       title: "Writing a script",
       blocks: [
         { t: "lede", v: "A script here is what you are going to say out loud, broken into lines you can actually deliver." },
-        { t: "p", v: "Each line has two parts: the **spoken text**, and a **shot direction** — where the camera is, what the b-roll is, what the tone should be. The direction is for you while filming; it never appears in the teleprompter." },
+        { t: "p", v: "Each line has two parts: the **spoken text**, and a **shot direction**: where the camera is, what the b-roll is, what the tone should be. The direction is for you while filming; it never appears in the teleprompter." },
         { t: "h", v: "Runtime" },
-        { t: "p", v: "Every line shows an estimated duration, and the script totals them. The estimate assumes about 150 words a minute, which is an unhurried speaking pace — if you read fast, treat it as an upper bound." },
+        { t: "p", v: "Every line shows an estimated duration, and the script totals them. The estimate assumes about 150 words a minute, which is an unhurried speaking pace; if you read fast, treat it as an upper bound." },
         { t: "h", v: "The teleprompter" },
         { t: "ul", v: [
           "Scrolls the whole script across roughly its estimated runtime.",
@@ -124,9 +135,12 @@ export const Readme = (() => {
         { t: "ul", v: [
           "Clearing site data clears your clips. There is no copy anywhere else.",
           "A private window starts empty and forgets everything on close.",
-          "If IndexedDB is unavailable, the apps fall back to memory for the session so nothing breaks — but a refresh loses the library.",
+          "If IndexedDB is unavailable, the apps fall back to memory for the session so nothing breaks, but a refresh loses the library.",
           "Export a cut you want to keep, and save the file."
         ] },
+        { t: "h", v: "Permissions" },
+        { t: "p", v: "The **Permissions** chip in the menubar is five lights: camera, microphone, screen capture, folders, and whether the browser will keep your clips when it is short of space. Green is allowed, amber means nobody has asked yet, and the accent colour means refused. Press one to ask for it." },
+        { t: "note", v: "A refusal cannot be undone from in here. Once a browser has been told no for a site it stops asking and starts refusing instantly, so the way back is that browser's own site settings, and the panel says so rather than offering a button that would do nothing. **Storage** is the odd one out: it is not about access at all, it is asking the browser to keep your clips rather than clear them when space runs short." },
         { t: "h", v: "The theme" },
         { t: "p", v: "Light and dark are both designed. The page follows your system until you press the toggle, which stores an explicit choice." }
       ]
@@ -141,28 +155,28 @@ export const Readme = (() => {
         { t: "lede", v: "A desktop is a pointing metaphor by default. Everything here exists so the same machine can be driven from the keyboard, and so the things that happen on their own get said out loud." },
 
         { t: "h", v: "Focus work" },
-        { t: "p", v: "**Focus work** is the name for how Tab moves through this page and how it shows you where it has got to. Every control on the desktop is a real button, so Tab reaches all of them in the order they are drawn — menubar, then the desktop icons, then any open window, then the dock." },
+        { t: "p", v: "**Focus work** is the name for how Tab moves through this page and how it shows you where it has got to. Every control on the desktop is a real button, so Tab reaches all of them in the order they are drawn: menubar, then the desktop icons, then any open window, then the dock." },
         { t: "ul", v: [
-          "**Tab / Shift+Tab** — step forward and back through everything you can use.",
-          "**A visible ring** — 3px of blue with a halo of the page's own ground colour behind it, so it stays readable over the wallpaper as well as over a window.",
-          "**Skip to the desktop** — the first thing Tab reaches on a fresh page, so you can jump the menubar and land on the icons.",
-          "**Arrow keys, Home and End** — move along the row of desktop icons without tabbing through every one. Tab still reaches them individually; the arrows are in addition.",
-          "**Enter or Space** — open whatever the ring is on."
+          "**Tab / Shift+Tab**: step forward and back through everything you can use.",
+          "**A visible ring**: 3px of blue with a halo of the page's own ground colour behind it, so it stays readable over the wallpaper as well as over a window.",
+          "**Skip to the desktop**: the first thing Tab reaches on a fresh page, so you can jump the menubar and land on the icons.",
+          "**Arrow keys, Home and End**: move along the row of desktop icons without tabbing through every one. Tab still reaches them individually; the arrows are in addition.",
+          "**Enter or Space**: open whatever the ring is on."
         ] },
         { t: "note", v: "Focus is never dropped on the floor. Close a window and focus returns to the icon that opened it, or to the window underneath if one is still up. Minimise a window and focus moves to the dock button that brings it back." },
 
         { t: "h", v: "Windows from the keyboard" },
         { t: "ul", v: [
-          "**F6 / Shift+F6** — cycle through the open windows, front to back. It is the only way to reach a window sitting behind another one without dragging.",
-          "**Escape** — close the top window.",
-          "**⌘K / Ctrl+K** — the launcher. Type, arrow through the results, Enter to open."
+          "**F6 / Shift+F6**: cycle through the open windows, front to back. It is the only way to reach a window sitting behind another one without dragging.",
+          "**Escape**: close the top window.",
+          "**⌘K / Ctrl+K**: the launcher. Type, arrow through the results, Enter to open."
         ] },
         { t: "p", v: "The launcher is a combobox: focus stays in the field while the arrows move the highlight, and the highlighted row is reported as you go rather than only when you pick it. Both it and the teleprompter hold focus inside themselves while they are up, and hand it back to whatever opened them when they close." },
 
         { t: "h", v: "The teleprompter" },
         { t: "ul", v: [
           "Opening it moves focus onto the play button, not into the page behind it.",
-          "**Space** pauses and restarts the scroll — the thing you reach for when you are looking at the lens and not at the screen.",
+          "**Space** pauses and restarts the scroll: the thing you reach for when you are looking at the lens and not at the screen.",
           "**Escape** leaves, and focus goes back to the script you started from."
         ] },
 
@@ -173,11 +187,11 @@ export const Readme = (() => {
         { t: "p", v: "Turn on **Reduce motion** in your system settings and this page listens. The window-open flight, the folder lids, the dock's entrance and the wallpaper's drift under the pointer all stop; windows simply appear and disappear. Nothing is lost but the animation." },
 
         { t: "h", v: "Contrast, and the wallpaper" },
-        { t: "p", v: "The wallpaper is a photograph, which means text has to sit on top of a picture nobody designed for text. Three things keep it legible: a wash of the ground colour across the band where the icons sit, a halo in the same colour behind every desktop label, and a solid plate under the hint along the bottom. Each theme has its own photograph rather than one image dimmed — dark is the same valley at last light, not the light one turned down." },
+        { t: "p", v: "The wallpaper is a photograph, which means text has to sit on top of a picture nobody designed for text. Three things keep it legible: a wash of the ground colour across the band where the icons sit, a halo in the same colour behind every desktop label, and a solid plate under the hint along the bottom. Each theme has its own photograph rather than one image dimmed: dark is the same valley at last light, not the light one turned down." },
 
         { t: "h", v: "What is still not there" },
         { t: "ul", v: [
-          "Reordering clips on the timeline is drag-and-drop only. Everything else in the Editor has keys — J K L, Space, arrows, S to split — but reordering needs a pointer.",
+          "Reordering clips on the timeline is drag-and-drop only. Everything else in the Editor has keys (J K L, Space, arrows, S to split), but reordering needs a pointer.",
           "Exported video has no caption track. The transcript exists in the Editor; it does not yet travel with the file.",
           "The desktop has not been tested against a screen magnifier at high zoom."
         ] },
@@ -227,6 +241,7 @@ export const Readme = (() => {
     Desk.openWindow({
       id: "readme",
       title: "Readme",
+      help: "readme",
       meta: `${DOCS.length} documents`,
       tint: TINT,
       size: { w: 660, h: 460 },
@@ -265,7 +280,7 @@ export const Readme = (() => {
  * The glyphs.
  *
  * Camera and Editor draw theirs on the 92×100 desktop tile. The three folders
- * draw a hinged folder out there instead — but the dock has room for one small
+ * draw a hinged folder out there instead, but the dock has room for one small
  * square and nothing else, so every registered thing needs a glyph that reads
  * at 14 pixels, folders included.
  */
@@ -323,6 +338,14 @@ export function boot() {
   Desk.renderIcons();
 
   /* launcher sources: docs, scripts, clips */
+
+  Desk.addSearchSource(() => [
+    {
+      name: "How this works", where: "Guided tour", tint: "#F54E00",
+      text: "help tour tutorial guide walkthrough what is this getting started",
+      run: () => import("../help/tours.js").then((m) => m.startHelp("system")),
+    },
+  ]);
 
   Desk.addSearchSource(() =>
     Readme.DOCS.map((d) => ({

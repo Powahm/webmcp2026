@@ -1,0 +1,371 @@
+/*
+ * The inside of the Camera and the Editor.
+ *
+ * The desktop keeps its posture: 2px ink borders, hard offset shadows, the
+ * pastel title bars, the dock. Those are the shell, and the shell is the joke
+ * the whole app tells. But the two windows you spend an hour inside are tools,
+ * and a tool wants the quieter grammar of a modern editor: hairline borders,
+ * one soft shadow, translucent bars the picture scrolls under, a segmented
+ * control instead of a row of stamped buttons, tabular numerals on anything
+ * that counts, and motion that responds on the press rather than the release.
+ *
+ * Everything here is scoped under `.win-body.ed` and `.win-body.cam`, so the
+ * window chrome around them and every other app are untouched. It is colour,
+ * type, radius, shadow and transition only: no layout, no markup, nothing the
+ * gesture guards or the tests depend on.
+ *
+ * Tokens are derived from the theme's own variables with color-mix, so the
+ * dark theme gets the same treatment without a second block.
+ */
+
+.win-body.ed,
+.win-body.cam {
+  --m-hair: color-mix(in srgb, var(--line) 14%, transparent);
+  --m-hair-strong: color-mix(in srgb, var(--line) 26%, transparent);
+  --m-tint: color-mix(in srgb, var(--line) 4%, transparent);
+  --m-glass: color-mix(in srgb, var(--surface) 78%, transparent);
+  --m-raise: color-mix(in srgb, var(--surface) 100%, transparent);
+  --m-shadow: 0 1px 1.5px rgba(0, 0, 0, .05), 0 2px 8px rgba(0, 0, 0, .05);
+  --m-shadow-raise: 0 1px 2px rgba(0, 0, 0, .07), 0 8px 20px rgba(0, 0, 0, .09);
+  --m-ring: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
+  --m-radius: 9px;
+  --m-radius-s: 7px;
+  --m-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --m-press: 120ms;
+  --m-viewfinder: #0b0c10;
+}
+
+/* ------------------------------------------------------------- controls */
+
+.win-body.ed .btn,
+.win-body.cam .btn,
+.win-body.ed .select,
+.win-body.cam .select {
+  border-width: 1px;
+  border-color: var(--m-hair-strong);
+  border-radius: var(--m-radius-s);
+  background: var(--m-raise);
+  box-shadow: var(--m-shadow);
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  transition: transform var(--m-press) var(--m-ease), box-shadow 180ms var(--m-ease),
+    background 180ms var(--m-ease), border-color 180ms var(--m-ease);
+}
+.win-body.ed .btn:hover,
+.win-body.cam .btn:hover {
+  background: var(--m-raise);
+  border-color: color-mix(in srgb, var(--line) 40%, transparent);
+  box-shadow: var(--m-shadow-raise);
+}
+/* Feedback lives on the press. The whole thing dips, nothing slides. */
+.win-body.ed .btn:active,
+.win-body.cam .btn:active,
+.win-body.ed .shutter:active {
+  transform: scale(.96);
+  box-shadow: var(--m-shadow);
+}
+.win-body.ed .btn:focus-visible,
+.win-body.cam .btn:focus-visible,
+.win-body.ed .select:focus-visible,
+.win-body.cam .select:focus-visible {
+  outline: none;
+  box-shadow: var(--m-shadow), var(--m-ring);
+}
+.win-body.ed .btn-ghost,
+.win-body.cam .btn-ghost { background: transparent; box-shadow: none; }
+.win-body.ed .btn-ghost:hover,
+.win-body.cam .btn-ghost:hover { background: var(--m-tint); box-shadow: none; }
+
+.win-body.ed .btn-accent,
+.win-body.cam .btn-accent {
+  background: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 70%, var(--line));
+  color: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .14);
+}
+.win-body.ed .btn-accent:hover,
+.win-body.cam .btn-accent:hover {
+  background: var(--accent);
+  filter: brightness(1.05);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .18);
+}
+.win-body.ed .btn-mini { padding: 4px 10px; font-size: 12px; }
+.win-body.ed .btn:disabled,
+.win-body.cam .btn:disabled { box-shadow: none; opacity: .38; }
+
+.win-body.ed .select,
+.win-body.cam .select { padding: 6px 10px; font-size: 12.5px; }
+
+.win-body.ed input[type="text"],
+.win-body.ed input[type="number"],
+.win-body.ed textarea {
+  border-width: 1px;
+  border-color: var(--m-hair-strong);
+  border-radius: var(--m-radius-s);
+  background: var(--m-raise);
+  transition: border-color 180ms var(--m-ease), box-shadow 180ms var(--m-ease);
+}
+.win-body.ed input[type="text"]:focus-visible,
+.win-body.ed input[type="number"]:focus-visible,
+.win-body.ed textarea:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--m-ring);
+}
+
+/* The page switch (Edit / Motion) is a pressed state on a plain button, and
+   it outranks the resting style above on purpose. */
+.win-body.ed .ed-page[aria-pressed="true"] {
+  background: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 70%, var(--line));
+  color: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .14);
+}
+.win-body.ed .ed-page[aria-pressed="true"]:hover { background: var(--accent); filter: brightness(1.05); }
+
+/* Icon-only buttons: undo and redo. Square, the glyph drawn as a stroke. */
+.win-body.ed .btn-icon { width: 28px; height: 26px; padding: 0; }
+.win-body.ed .btn-icon svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ------------------------------------------------------ segmented tabs */
+
+/* A segmented control: one recessed track, and the selected segment is a
+   raised white pill that the eye reads as "this one", the way a Finder
+   toolbar does it. The mono small-caps labels stay; they are the app's voice. */
+.win-body.ed .cmp-tabs {
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--m-radius);
+  background: var(--m-tint);
+  box-shadow: inset 0 0 0 1px var(--m-hair);
+}
+.win-body.ed .cmp-tab {
+  border: 0;
+  border-radius: var(--m-radius-s);
+  padding: 5px 10px;
+  transition: background 160ms var(--m-ease), color 160ms var(--m-ease), box-shadow 160ms var(--m-ease);
+}
+.win-body.ed .cmp-tab:hover { background: color-mix(in srgb, var(--surface) 60%, transparent); color: var(--text); }
+.win-body.ed .cmp-tab[aria-selected="true"] {
+  background: var(--m-raise);
+  color: var(--text);
+  box-shadow: var(--m-shadow);
+}
+
+/* Four tabs in a sidebar wrap into a ragged pair of rows. A two-by-two grid
+   is the same segmented control, just admitting that it has two rows. */
+.win-body.ed .lib-tabs { display: grid; grid-template-columns: 1fr 1fr; }
+.win-body.ed .lib-tabs .cmp-tab { text-align: center; overflow: hidden; text-overflow: ellipsis; }
+
+/* ------------------------------------------------------- bars and heads */
+
+/* Translucent chrome. The picture and the track scroll under these, so they
+   are a material laid on top of the work rather than a strip that eats it. */
+.win-body.ed .ed-head,
+.win-body.ed .ed-transport,
+.win-body.ed .ed-formats,
+.win-body.ed .tl-tools,
+.win-body.ed .ed-lib-bar,
+.win-body.cam .cam-bar,
+.win-body.cam .cam-strip {
+  background: var(--m-glass);
+  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  border-color: var(--m-hair);
+  border-width: 1px;
+}
+.win-body.ed .ed-head { border-bottom-width: 1px; }
+.win-body.ed .ed-transport,
+.win-body.cam .cam-bar { border-top-width: 1px; padding: 10px 12px; }
+.win-body.ed .ed-lib,
+.win-body.ed .ed-insp { border-color: var(--m-hair); border-width: 1px; }
+.win-body.ed .ed-timeline { border-top: 1px solid var(--m-hair); }
+
+.win-body.ed .ed-clock,
+.win-body.cam .cam-time,
+.win-body.ed .ed-zoom-read,
+.win-body.ed .tl-item-time,
+.win-body.ed .lib-time {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+/* ---------------------------------------------------------- the picture */
+
+/* A viewfinder, not a black box: the frame sits in a soft well, with a
+   hairline of light on its edge and a shadow with real depth under it. */
+.win-body.ed .ed-screen,
+.win-body.cam .cam-stage {
+  background:
+    radial-gradient(120% 90% at 50% 40%, rgba(255, 255, 255, .06), transparent 70%),
+    var(--m-viewfinder);
+}
+.win-body.ed .ed-frame {
+  border-radius: 10px;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, .08),
+    0 24px 60px rgba(0, 0, 0, .55),
+    0 2px 6px rgba(0, 0, 0, .4);
+  transition: aspect-ratio .28s var(--m-ease), border-radius .28s var(--m-ease);
+}
+.win-body.ed .ed-empty { color: rgba(255, 255, 255, .45); letter-spacing: -0.005em; }
+
+.win-body.cam .cam-blocked {
+  background:
+    radial-gradient(120% 90% at 50% 40%, rgba(255, 255, 255, .05), transparent 70%),
+    var(--m-viewfinder);
+  color: #fff;
+}
+.win-body.cam .cam-blocked-title { letter-spacing: -0.015em; font-size: 18px; }
+.win-body.cam .cam-blocked-msg { color: rgba(255, 255, 255, .55); }
+.win-body.cam .cam-blocked-env { color: rgba(255, 255, 255, .38); }
+.win-body.cam .cam-blocked .btn-accent {
+  background: var(--accent);
+  border-color: transparent;
+  color: #fff;
+}
+.win-body.cam .cam-blocked .btn-accent:hover { background: var(--accent); filter: brightness(1.08); }
+.win-body.cam .cam-blocked .btn {
+  background: rgba(255, 255, 255, .1);
+  border-color: rgba(255, 255, 255, .18);
+  color: #fff;
+  box-shadow: none;
+  backdrop-filter: blur(10px);
+}
+.win-body.cam .cam-blocked .btn:hover { background: rgba(255, 255, 255, .16); }
+
+.win-body.cam .cam-rec {
+  padding: 5px 12px 5px 9px;
+  background: rgba(11, 12, 16, .6);
+  backdrop-filter: blur(12px) saturate(160%);
+  -webkit-backdrop-filter: blur(12px) saturate(160%);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, .1), 0 4px 14px rgba(0, 0, 0, .35);
+  letter-spacing: 0.01em;
+}
+.win-body.cam .cam-dot {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
+  animation: m-pulse 1.2s var(--m-ease) infinite;
+}
+@keyframes m-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 45%, transparent); }
+  60% { opacity: .55; box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 0%, transparent); }
+}
+
+/* The shutter. A ring with a disc, the way every camera has drawn it since
+   the first one; the disc squares off while recording, which it already did. */
+.win-body.cam .shutter {
+  width: 54px; height: 54px;
+  background: var(--m-raise);
+  border: 2px solid var(--m-hair-strong);
+  box-shadow: var(--m-shadow), inset 0 0 0 2px var(--m-raise);
+  transition: transform 160ms var(--m-ease), box-shadow 180ms var(--m-ease), border-color 180ms var(--m-ease);
+}
+.win-body.cam .shutter:hover { transform: scale(1.04); border-color: color-mix(in srgb, var(--accent) 55%, var(--m-hair-strong)); box-shadow: var(--m-shadow-raise); }
+.win-body.cam .shutter:active { transform: scale(.94); }
+.win-body.cam .shutter[data-recording="true"] { border-color: var(--accent); box-shadow: var(--m-shadow), 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent); }
+
+/* ------------------------------------------------------------- formats */
+
+.win-body.ed .ed-formats-list { gap: 2px; padding: 3px; border-radius: var(--m-radius); background: var(--m-tint); box-shadow: inset 0 0 0 1px var(--m-hair); }
+.win-body.ed .cmp-format {
+  border: 0;
+  border-radius: var(--m-radius-s);
+  background: transparent;
+  box-shadow: none;
+  transition: background 160ms var(--m-ease), color 160ms var(--m-ease), transform var(--m-press) var(--m-ease);
+}
+.win-body.ed .cmp-format:hover { background: color-mix(in srgb, var(--surface) 60%, transparent); color: var(--text); }
+.win-body.ed .cmp-format:active { transform: scale(.96); box-shadow: none; }
+.win-body.ed .cmp-format[aria-pressed="true"] { background: var(--m-raise); color: var(--text); box-shadow: var(--m-shadow); }
+.win-body.ed .cmp-format[aria-pressed="true"] .cmp-format-box { border-color: var(--accent); }
+
+/* --------------------------------------------------------------- track */
+
+.win-body.ed .tl-scroll { background: var(--m-tint); }
+.win-body.ed .tl-ruler {
+  background: var(--m-glass);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--m-hair);
+  height: 20px;
+}
+.win-body.ed .tl-tick { opacity: .22; }
+.win-body.ed .tl-tick i { font-variant-numeric: tabular-nums; opacity: 1; color: var(--text-muted); font-size: 9.5px; }
+
+.win-body.ed .tl-lane {
+  border: 1px solid var(--m-hair);
+  border-radius: var(--m-radius);
+  background: var(--m-raise);
+  box-shadow: var(--m-shadow);
+}
+.win-body.ed .tl-lane--spine { border-color: var(--m-hair-strong); }
+.win-body.ed .tl-lane-name { font-variant-numeric: tabular-nums; letter-spacing: .08em; }
+
+.win-body.ed .tl-item {
+  border: 1px solid rgba(255, 255, 255, .22);
+  border-radius: var(--m-radius-s);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .18), inset 0 1px 0 rgba(255, 255, 255, .12);
+  transition: box-shadow 160ms var(--m-ease), filter 160ms var(--m-ease);
+}
+.win-body.ed .tl-item:hover { filter: brightness(1.06); }
+.win-body.ed .tl-item[aria-pressed="true"] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.win-body.ed .tl-item--gfx.is-proposed,
+.win-body.ed .tl-item--sfx.is-proposed,
+.win-body.ed .tl-item--spine.is-proposed { border-width: 1.5px; box-shadow: none; }
+.win-body.ed .tl-item-name { letter-spacing: -0.005em; }
+.win-body.ed .tl-item:hover .tl-grip { border-radius: 4px; }
+
+.win-body.ed .tl-playhead {
+  width: 2px;
+  background: var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+.win-body.ed .tl-playhead-grab { border-radius: 4px 4px 6px 6px; }
+
+/* ------------------------------------------------------ side panels */
+
+.win-body.ed .insp-name { letter-spacing: -0.015em; }
+.win-body.ed .field > span { letter-spacing: 0.01em; }
+.win-body.ed .palette-btn,
+.win-body.ed .lib-add {
+  border-width: 1px;
+  border-color: var(--m-hair-strong);
+  border-radius: var(--m-radius-s);
+  box-shadow: var(--m-shadow);
+  transition: transform var(--m-press) var(--m-ease), box-shadow 180ms var(--m-ease);
+}
+.win-body.ed .palette-btn:hover,
+.win-body.ed .lib-add:hover { box-shadow: var(--m-shadow-raise); }
+.win-body.ed .palette-btn:active,
+.win-body.ed .lib-add:active { transform: scale(.97); box-shadow: var(--m-shadow); }
+.win-body.ed .ed-export-card {
+  border-width: 1px;
+  border-color: var(--m-hair-strong);
+  border-radius: 14px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, .28), 0 2px 6px rgba(0, 0, 0, .1);
+}
+
+/* ------------------------------------------------------- quiet modes */
+
+@media (prefers-reduced-motion: reduce) {
+  .win-body.ed *,
+  .win-body.cam * { transition: none !important; animation: none !important; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .win-body.ed .ed-head,
+  .win-body.ed .ed-transport,
+  .win-body.ed .ed-formats,
+  .win-body.ed .tl-tools,
+  .win-body.ed .ed-lib-bar,
+  .win-body.ed .tl-ruler,
+  .win-body.cam .cam-bar,
+  .win-body.cam .cam-strip,
+  .win-body.cam .cam-rec {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: var(--surface);
+  }
+}

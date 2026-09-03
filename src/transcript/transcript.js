@@ -2,7 +2,7 @@
  * Word-level timing, from the teleprompter.
  *
  * The Camera has been quietly recording the useful thing all along. Every take
- * driven by the prompter writes `clip.beats`, an array of `{ line, at }` — the
+ * driven by the prompter writes `clip.beats`, an array of `{ line, at }`: the
  * script line that was on screen and the second of the take it appeared. It is
  * saved onto the clip in IndexedDB and, until now, read by nothing.
  *

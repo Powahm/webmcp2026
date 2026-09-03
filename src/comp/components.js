@@ -349,7 +349,7 @@ const ComparisonCards = {
     items: {
       type: "string[]",
       max: 3,
-      note: "One entry per card. Write each as 'Heading — the line under it'; the em dash or a colon splits them.",
+      note: "One entry per card. Write each as 'Heading: the line under it'; a colon, en dash, or pipe splits them.",
     },
   },
   draw(ctx, f) {
@@ -373,8 +373,8 @@ const ComparisonCards = {
     }
 
     list.forEach((entry, i) => {
-      const [head, ...restParts] = entry.split(/\s*[—–:|]\s*/);
-      const rest = restParts.join(" — ");
+      const [head, ...restParts] = entry.split(/\s*[–:|]\s*/);
+      const rest = restParts.join(": ");
       const k = clamp01(spring({ frame, fps, delay: i * 6, config: { damping: 15, stiffness: 160 } })) * exit;
       if (k <= 0.01) return;
 
@@ -762,7 +762,7 @@ const QuoteCard = {
     });
 
     if (props.subtext) {
-      label(ctx, `— ${props.subtext}`, W / 2, top + lines.length * lh + 40 * s, {
+      label(ctx, `by ${props.subtext}`, W / 2, top + lines.length * lh + 40 * s, {
         family: "mono", size: 26, colour, align: "center", baseline: "middle",
         tracking: 0.07, alpha, scale: s,
       });
@@ -782,8 +782,8 @@ const QuoteCard = {
  * them can express.
  *
  * These three are the escape hatch. They take the parameters a motion designer
- * expects — typeface, size, weight, colour, placement, rotation, an in and out
- * animation — and they draw exactly what they are told. The trade is that the
+ * expects (typeface, size, weight, colour, placement, rotation, an in and out
+ * animation) and they draw exactly what they are told. The trade is that the
  * caller now has to have taste; the point is that the tool no longer decides
  * on their behalf.
  */
@@ -1028,7 +1028,7 @@ const Shape = {
  * Only effects that are *drawn over* the picture, never ones that claim to
  * change it. A layer sits on a canvas above the video in the preview and is
  * composited over it in the export, so a vignette or a flash is identical in
- * both, and a blur of the footage would not be — it would look right in the
+ * both, and a blur of the footage would not be: it would look right in the
  * file and wrong on screen, which is the one failure this app is built to
  * avoid.
  */
@@ -1142,6 +1142,12 @@ const Effect = {
 
 /** A number, kept inside its range, with a default for anything unusable. */
 function clampNum(v, lo, hi, fallback) {
+  // `Number(null)` is `0`, a perfectly finite number, so a field the caller
+  // left unset used to clamp to its floor (0 width, 0 opacity, ...) instead
+  // of falling back to the component's default. An element added with only
+  // its required fields -- the common case, from the palette buttons -- came
+  // out a fully transparent sliver: technically drawn, invisible either way.
+  if (v == null) return fallback;
   const n = Number(v);
   if (!Number.isFinite(n)) return fallback;
   return Math.max(lo, Math.min(hi, n));

@@ -3,7 +3,7 @@
  *
  * One function, called from two places: the preview loop in the Composition
  * tab and the export loop that writes the file. That is deliberate and it is
- * the reason the preview cannot quietly stop matching the output — there is no
+ * the reason the preview cannot quietly stop matching the output: there is no
  * second renderer to drift. The editor already proved the pattern with its six
  * looks, which are a CSS filter string in the preview and the identical string
  * on the canvas at export.

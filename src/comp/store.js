@@ -8,7 +8,7 @@
  * rather than a move between two stores that can disagree.
  *
  * **Nothing here can be accepted by an agent.** `accept` and its siblings
- * refuse without a trusted user event — the same bit a browser uses to tell a
+ * refuse without a trusted user event: the same bit a browser uses to tell a
  * real click from a synthetic one. So the agent can compose an eight-second
  * animated title card, a sound effect under it and a reframe to vertical in
  * three calls, and it still cannot put one frame of any of it into the video.
@@ -36,13 +36,28 @@ export const composition = () => doc;
 
 const notRejected = (x) => x.status !== "rejected";
 
-export const liveLayers = () => doc.layers.filter(notRejected);
-export const acceptedLayers = () => doc.layers.filter((l) => l.status === "accepted");
-export const pendingLayers = () => doc.layers.filter((l) => l.status === "proposed");
+/**
+ * Scrolled out of its own clip.
+ *
+ * An element that belongs to a motion graphics clip and has been pushed
+ * outside that clip's window -- by trimming the clip's head, or by shortening
+ * its tail -- is not deleted, it is parked. It keeps its frame, so widening
+ * the clip again brings it back exactly where it was, and every reader below
+ * skips it, so it cannot draw over the clip next door. That leak is the whole
+ * reason this flag exists: absolute position used to be the only thing saying
+ * which clip an element was in, so shortening one handed its contents to its
+ * neighbour.
+ */
+const onScreen = (x) => x.clipped !== true;
+const live = (x) => notRejected(x) && onScreen(x);
 
-export const liveAudio = () => doc.audio.filter(notRejected);
-export const acceptedAudio = () => doc.audio.filter((a) => a.status === "accepted");
-export const pendingAudio = () => doc.audio.filter((a) => a.status === "proposed");
+export const liveLayers = () => doc.layers.filter(live);
+export const acceptedLayers = () => doc.layers.filter((l) => l.status === "accepted" && onScreen(l));
+export const pendingLayers = () => doc.layers.filter((l) => l.status === "proposed" && onScreen(l));
+
+export const liveAudio = () => doc.audio.filter(live);
+export const acceptedAudio = () => doc.audio.filter((a) => a.status === "accepted" && onScreen(a));
+export const pendingAudio = () => doc.audio.filter((a) => a.status === "proposed" && onScreen(a));
 
 /** Everything waiting on a decision, layers and audio and the format, so the
  *  tab can badge a single number. */
@@ -272,6 +287,10 @@ export function editLayer(layerId, patch, gesture) {
 
   const from = Math.max(0, Math.round(patch.from ?? target.from));
   const durationInFrames = Math.max(3, Math.round(patch.durationInFrames ?? target.durationInFrames));
+  // A resize by hand is a new intent, so it becomes the length the element
+  // wants to be. `reseat` shortens `durationInFrames` to fit a clip that is
+  // currently too small; `span` is what it goes back to when there is room.
+  const span = patch.durationInFrames != null ? durationInFrames : (target.span ?? durationInFrames);
   // Words and placement change in place. A component change does not: the
   // fields differ per component, so that one goes back through validateLayer
   // rather than being merged blind.
@@ -279,6 +298,7 @@ export function editLayer(layerId, patch, gesture) {
     ...target,
     from,
     durationInFrames,
+    span,
     component: patch.component ?? target.component,
     easing: patch.easing ?? target.easing,
     position: patch.position ?? target.position,
@@ -311,9 +331,11 @@ export function editAudio(trackId, patch, gesture) {
   if (!target) return { ok: false, error: "No sound with that id." };
   const from = Math.max(0, Math.round(patch.from ?? target.from));
   const durationInFrames = Math.max(2, Math.round(patch.durationInFrames ?? target.durationInFrames));
+  const span = patch.durationInFrames != null ? durationInFrames : (target.span ?? durationInFrames);
   doc = {
     ...doc,
-    audio: doc.audio.map((a) => (a.id === trackId ? { ...a, from, durationInFrames, gain: patch.gain ?? a.gain } : a)),
+    audio: doc.audio.map((a) =>
+      (a.id === trackId ? { ...a, from, durationInFrames, span, gain: patch.gain ?? a.gain } : a)),
   };
   emit();
   return { ok: true };
@@ -341,6 +363,9 @@ export function shiftAfter(atFrame, removedFrames) {
   if (!(removedFrames > 0)) return;
 
   const move = (item) => {
+    // An element inside a motion graphics clip is positioned by that clip, so
+    // moving it here as well would move it twice for the same removal.
+    if (item.owner) return item;
     const end = item.from + item.durationInFrames;
     if (item.from >= atFrame) {
       return { ...item, from: Math.max(0, item.from - removedFrames) };
@@ -354,6 +379,148 @@ export function shiftAfter(atFrame, removedFrames) {
   };
 
   doc = { ...doc, layers: doc.layers.map(move), audio: doc.audio.map(move) };
+  emit();
+}
+
+/* ------------------------------------------------- motion graphics clips */
+
+/**
+ * Which clip an element is in, held as a field rather than read off the clock.
+ *
+ * Before this, an element belonged to whichever motion graphics clip its start
+ * second happened to land in. That is fine until a clip changes length: drag
+ * one clip's tail in and half its contents are suddenly sitting in the clip
+ * after it, still drawing, now over somebody else's frames. Trim its head and
+ * the window slid right while the contents stayed put, so the far end of the
+ * animation went missing instead of the near one.
+ *
+ * `owner` is the fix. Membership is decided once, when an element first lands
+ * in a clip, and after that the clip carries its contents around: `reseat`
+ * moves them when the clip moves, shortens them to fit when it shrinks, and
+ * parks the ones that no longer fit rather than letting them escape.
+ */
+export function adoptInside(owner, startFrame, endFrame) {
+  let touched = false;
+  const take = (item) => {
+    if (item.owner != null || item.clipped) return item;
+    if (!(item.from >= startFrame && item.from < endFrame)) return item;
+    touched = true;
+    return { ...item, owner, span: item.span ?? item.durationInFrames };
+  };
+  const layers = doc.layers.map(take);
+  const audio = doc.audio.map(take);
+  if (!touched) return;
+  doc = { ...doc, layers, audio };
+  emit();
+}
+
+/**
+ * Put a clip's contents back where the clip now is.
+ *
+ * `shiftFrames` is how far the clip's own origin moved, so everything it owns
+ * moves by the same amount and the animation keeps its shape.
+ *
+ * Three things can happen to an element when its clip changes length:
+ *
+ *   - it still fits, and nothing happens to it;
+ *   - it overlaps the clip only partly, because the head was trimmed past its
+ *     start or the tail past its end. It keeps its own origin and gets a
+ *     `window`, so the part still inside the clip draws and the rest does
+ *     not. The origin is what its animation is measured from, so a title
+ *     half-scrolled off the front comes in half-animated instead of replaying
+ *     its entrance against the clip's edge;
+ *   - it no longer overlaps at all, and is parked. Parked, not deleted: it
+ *     keeps its frame, so widening the clip brings it back exactly where it
+ *     was.
+ *
+ * `settled` is true when the clip's geometry did not change, which means an
+ * element sitting outside it was dragged out by hand rather than left behind.
+ * That one is released instead of parked, or it would vanish with no way back.
+ */
+export function reseat(owner, { shiftFrames = 0, startFrame = 0, endFrame = 0, settled = false } = {}) {
+  let touched = false;
+  const seat = (item) => {
+    if (item.owner !== owner) return item;
+    // Not clamped to zero. Trimming a clip's head scrolls its contents off the
+    // front, and an element that has gone past the start has to keep going, or
+    // widening the clip again would not bring it back where it was.
+    const from = item.from + shiftFrames;
+    const span = Math.max(1, item.span ?? item.durationInFrames);
+    const overlaps = from + span > startFrame && from < endFrame;
+
+    const next = overlaps
+      ? {
+          ...item,
+          from,
+          span,
+          clipped: false,
+          // The bar on the track is the length that plays, so the tail is
+          // shortened here rather than left to the window. The head is not:
+          // shortening it there would move the origin and take the animation
+          // with it.
+          durationInFrames: Math.max(1, Math.min(span, endFrame - from)),
+          window: { from: startFrame, to: endFrame },
+        }
+      : settled
+        ? {
+            ...item,
+            from: Math.max(0, from),
+            span,
+            clipped: false,
+            owner: null,
+            window: null,
+            durationInFrames: span,
+          }
+        : { ...item, from, span, clipped: true, window: { from: startFrame, to: endFrame } };
+
+    if (next.from !== item.from
+      || next.clipped !== (item.clipped === true)
+      || (next.owner === null && item.owner != null)
+      || next.durationInFrames !== item.durationInFrames
+      || next.span !== item.span
+      || next.window?.from !== item.window?.from
+      || next.window?.to !== item.window?.to) touched = true;
+    return next;
+  };
+  const layers = doc.layers.map(seat);
+  const audio = doc.audio.map(seat);
+  if (!touched) return;
+  doc = { ...doc, layers, audio };
+  emit();
+}
+
+/**
+ * Put the whole composition back to a state the person was in before.
+ *
+ * The Editor's undo has to restore what a timeline edit took with it -- the
+ * elements that went when their motion graphics clip was deleted, the frames a
+ * cut shifted -- and that state lives here, not there. It takes the same
+ * trusted gesture every other decision in this file takes, so undo is a
+ * person's click like accepting is, and there is still no route from a tool to
+ * a state the person did not click their way into.
+ */
+export function restoreComposition(next, gesture) {
+  if (!trusted(gesture)) return denied("undo an edit");
+  if (!next || !Array.isArray(next.layers) || !Array.isArray(next.audio)) {
+    return { ok: false, error: "That is not a composition." };
+  }
+  doc = { ...emptyComposition(), ...next, layers: next.layers.slice(), audio: next.audio.slice() };
+  emit();
+  return { ok: true };
+}
+
+/** The clip is gone. Anything it still owns goes back to standing on its own. */
+export function disown(owner) {
+  let touched = false;
+  const free = (item) => {
+    if (item.owner !== owner) return item;
+    touched = true;
+    return { ...item, owner: null, clipped: false, window: null };
+  };
+  const layers = doc.layers.map(free);
+  const audio = doc.audio.map(free);
+  if (!touched) return;
+  doc = { ...doc, layers, audio };
   emit();
 }
 
