@@ -1100,3 +1100,39 @@
   color: #fff;
   background: var(--accent);
 }
+
+/* ---- the viewer ----
+   The frame is a box of the composition's shape with air around it, so you can
+   see where the picture ends and where the panel begins. Above 100% the
+   viewport scrolls rather than the frame shrinking, which is what every editor
+   does and the reason zooming is useful at all. */
+.ed-screen {
+  padding: 18px;
+  overflow: auto;
+  place-items: center;
+  background: repeating-conic-gradient(#14161f 0% 25%, #10121a 0% 50%) 50% / 22px 22px;
+}
+.ed-frame {
+  height: calc(100% * var(--zoom, 1));
+  max-height: calc(100% * var(--zoom, 1));
+  max-width: calc(100% * var(--zoom, 1));
+  flex: none;
+  box-shadow: 0 0 0 1px rgb(255 255 255 / .12), 0 10px 34px rgb(0 0 0 / .45);
+}
+
+.ed-zoom { margin-left: auto; display: flex; align-items: center; gap: 5px; }
+.ed-zoom-read { font-size: 10.5px; color: var(--text-muted); min-width: 38px; text-align: right; }
+
+/* A1: the spine's sound. The cut is made on V1, so this row shows rather than
+   edits — one cut, not two that can disagree. */
+.tl-lane--a1 .tl-item { background-color: var(--teal, #30ABC6); background-image: none; }
+.tl-lane--a1 .tl-item.is-muted { opacity: .45; }
+.tl-lane--a1 { min-height: 40px; }
+.tl-lane--a1 .tl-lane-body { min-height: 38px; }
+
+.insp-stats { display: grid; gap: 3px; margin: 0; font-size: 10.5px; }
+.insp-stats > div { display: flex; justify-content: space-between; gap: 10px; }
+.insp-stats dt { color: var(--text-muted); }
+.insp-stats dd { margin: 0; color: var(--text); }
+
+.ed-formats-list { display: flex; align-items: center; gap: 6px; }

@@ -242,7 +242,15 @@ export const Editor = (() => {
         </div>
         <!-- The format lives where the picture is, because it is a thing you
              look at and change, not a setting you go and find. -->
-        <div class="ed-formats" role="group" aria-label="Frame shape"></div>
+        <div class="ed-formats">
+          <span class="ed-formats-list" role="group" aria-label="Frame shape"></span>
+          <span class="ed-zoom">
+            <button class="btn btn-mini" data-zoom="out" aria-label="Zoom out">&minus;</button>
+            <button class="btn btn-mini" data-zoom="fit" title="Fit the frame in the viewer">Fit</button>
+            <button class="btn btn-mini" data-zoom="in" aria-label="Zoom in">+</button>
+            <span class="ed-zoom-read mono">100%</span>
+          </span>
+        </div>
         <div class="ed-transport">
           <button class="btn btn-play" data-act="play" aria-label="Play">
             <svg class="ico-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9-5.5z"/></svg>
@@ -330,7 +338,7 @@ export const Editor = (() => {
     const gfxCtx = gfx.getContext("2d");
     const screen = body.querySelector(".ed-screen");
     const frameBox = body.querySelector(".ed-frame");
-    const formatBar = body.querySelector(".ed-formats");
+    const formatBar = body.querySelector(".ed-formats-list");
     const empty = body.querySelector(".ed-empty");
     const libList = body.querySelector(".ed-lib-list");
     const tl = body.querySelector(".tl");
@@ -630,6 +638,54 @@ export const Editor = (() => {
           </div>`;
         at += dur;
         return html;
+      }).join("");
+    }
+
+    /** The spine's own sound, as its own row. Linked, not separate. */
+    function a1Html() {
+      let at = 0;
+      return timeline.map((seg) => {
+        const dur = segDuration(seg);
+        const clip = byId.get(seg.clipId);
+        const start = at;
+        at += dur;
+        if (seg.blank) return "";
+        return `
+          <div class="tl-item tl-item--a1 ${seg.muted ? "is-muted" : ""}" data-seg="${seg.uid}"
+               style="left:${pctOf(start)}%; width:${pctOf(dur)}%"
+               role="button" tabindex="0" aria-pressed="${seg.uid === selected}"
+               aria-label="${Desk.esc(clip?.name || "audio")}, ${seg.muted ? "muted" : "sound on"}">
+            <span class="tl-item-name">${Desk.esc(clip?.name || "audio")}</span>
+            <span class="tl-item-time mono">${seg.muted ? "muted" : "sound"}</span>
+          </div>`;
+      }).join("");
+    }
+
+    /**
+     * A1: the spine's own sound, on its own row.
+     *
+     * Drawn from the same segments as V1 rather than kept as a second list of
+     * them, because a cut is a cut — trimming the picture trims the sound, and
+     * two lists of the same thing is how they come to disagree. Clicking a
+     * block here selects the clip, so the mute is where the rest of the clip's
+     * controls are.
+     */
+    function a1Html() {
+      let at = 0;
+      return timeline.map((seg) => {
+        const dur = segDuration(seg);
+        const clip = byId.get(seg.clipId);
+        const start = at;
+        at += dur;
+        if (seg.blank) return "";
+        return `
+          <div class="tl-item tl-item--a1 ${seg.muted ? "is-muted" : ""}" data-seg="${seg.uid}"
+               style="left:${pctOf(start)}%; width:${pctOf(dur)}%"
+               role="button" tabindex="0" aria-pressed="${seg.uid === selected}"
+               aria-label="${Desk.esc(clip?.name || "audio")}, ${seg.muted ? "muted" : "sound on"}">
+            <span class="tl-item-name">${Desk.esc(clip?.name || "audio")}</span>
+            <span class="tl-item-time mono">${seg.muted ? "muted" : "sound"}</span>
+          </div>`;
       }).join("");
     }
 
@@ -1019,6 +1075,24 @@ export const Editor = (() => {
     gfx.addEventListener("pointerup", endFrameDrag);
     gfx.addEventListener("pointercancel", endFrameDrag);
 
+    /**
+     * Zooming the viewer.
+     *
+     * The frame is a box of the composition's aspect ratio inside a padded
+     * viewport, so at 100% it fits with air around it and you can see where
+     * the picture actually ends. Above that the viewport scrolls, which is
+     * what makes it possible to work on the corner of a graphic.
+     */
+    let zoomLevel = 1;
+    const ZOOM_STEPS = [0.5, 0.75, 1, 1.5, 2, 3, 4];
+
+    function setZoom(next) {
+      zoomLevel = Math.max(0.25, Math.min(6, next));
+      screen.style.setProperty("--zoom", String(zoomLevel));
+      const read = body.querySelector(".ed-zoom-read");
+      if (read) read.textContent = `${Math.round(zoomLevel * 100)}%`;
+    }
+
     /** The preview frame takes the composition's aspect ratio. */
     function paintFrame() {
       const doc = composition();
@@ -1053,7 +1127,7 @@ export const Editor = (() => {
       // top, the spine at the bottom, graphics above the pictures.
       const gfxLane = graphicsLaneHtml();
       rows.push(`<div class="tl-lane tl-lane--gfx" data-lane="gfx" style="--rows:${gfxLane.rows}">
-        <span class="tl-lane-name mono">GFX</span>
+        <span class="tl-lane-name mono">VFX</span>
         <div class="tl-lane-body">${gfxLane.html}</div>
       </div>`);
 
@@ -1071,6 +1145,13 @@ export const Editor = (() => {
           timeline.length ? spineHtml() : `<p class="track-empty">Drag a clip here, or add one from the library.</p>`
         }</div>
       </div>`);
+
+      if (timeline.some((sg) => !sg.blank)) {
+        rows.push(`<div class="tl-lane tl-lane--a1" data-lane="a1">
+          <span class="tl-lane-name mono">A1</span>
+          <div class="tl-lane-body">${a1Html()}</div>
+        </div>`);
+      }
 
       const sfxLane = sfxLaneHtml();
       rows.push(`<div class="tl-lane tl-lane--sfx" data-lane="sfx" style="--rows:${sfxLane.rows}">
@@ -1362,6 +1443,9 @@ export const Editor = (() => {
       const layer = liveLayers().find((l) => l.id === selected);
       if (layer) return layerPanelHtml(layer);
 
+      const sound = liveAudio().find((a) => a.id === selected);
+      if (sound) return soundPanelHtml(sound);
+
       const seg = timeline.find((s) => s.uid === selected);
       if (!seg) {
         return `<p class="insp-empty">Select a clip or a graphic on the timeline.</p>`;
@@ -1391,6 +1475,7 @@ export const Editor = (() => {
         <div class="ed-head"><span>Clip</span></div>
         <div class="insp-body">
           <p class="insp-name">${Desk.esc(clip?.name || "Missing clip")}</p>
+          ${clipStatsHtml(seg, clip)}
 
           <label class="field">
             <span>Start <b class="mono">${timecode(seg.in)}</b></span>
@@ -2276,6 +2361,15 @@ export const Editor = (() => {
         return;
       }
 
+      const zoomBtn = t.closest("[data-zoom]");
+      if (zoomBtn) {
+        const how = zoomBtn.dataset.zoom;
+        if (how === "fit") return setZoom(1);
+        const i = ZOOM_STEPS.findIndex((z) => z >= zoomLevel - 0.001);
+        const at = i === -1 ? ZOOM_STEPS.length - 1 : i;
+        return setZoom(ZOOM_STEPS[Math.max(0, Math.min(ZOOM_STEPS.length - 1, how === "in" ? at + 1 : at - 1))]);
+      }
+
       if (act === "play") return playing ? stop() : play();
       if (act === "import") return fileInput.click();
       if (act === "split") return splitAtPlayhead();
@@ -2404,6 +2498,21 @@ export const Editor = (() => {
         return void seekTo(playhead);
       }
 
+      const snd = e.target.dataset.snd;
+      if (snd) {
+        const a = liveAudio().find((x) => x.id === selected);
+        if (!a) return;
+        const fps = composition().fps || 30;
+        const v = Number(e.target.value);
+        if (snd === "gain") editAudio(a.id, { gain: v }, e);
+        if (snd === "from") editAudio(a.id, { from: Math.round(v * fps) }, e);
+        if (snd === "dur") editAudio(a.id, { durationInFrames: Math.round(v * fps) }, e);
+        const label = e.target.closest(".field")?.querySelector("b");
+        if (label) label.textContent = snd === "gain" ? `${Math.round(v * 100)}%`
+          : snd === "from" ? timecode(v) : `${v.toFixed(1)}s`;
+        return void renderTrack();
+      }
+
       const tf = e.target.dataset.tf;
       if (tf) {
         const tseg = timeline.find((x) => x.uid === selected);
@@ -2466,6 +2575,13 @@ export const Editor = (() => {
         selected = null;
         return refresh();
       }
+      const sndDrop = e.target.closest("[data-snd-drop]");
+      if (sndDrop) {
+        removeAudio(sndDrop.dataset.sndDrop, e);
+        selected = null;
+        return void refresh();
+      }
+
       const flip = e.target.closest("[data-tflip]");
       if (flip) {
         const fseg = timeline.find((x) => x.uid === selected);
@@ -2508,8 +2624,21 @@ export const Editor = (() => {
      * shuttle every NLE has had for thirty years. Ignored while a field has
      * focus, because S in a text box means the letter S.
      */
-    body.addEventListener("keydown", (e) => {
-      if (e.target.closest("input, textarea, select")) return;
+    /**
+     * Shortcuts belong to the window, not to whatever happens to have focus.
+     *
+     * Clicking a block rebuilds the track, which destroys the element that was
+     * clicked and hands focus back to the document — so a listener on the
+     * window body never saw the keypress that followed. Listening on the
+     * document and checking which window is focused is what makes Backspace
+     * work right after selecting something, which is the only time anyone
+     * presses it.
+     */
+    const editorFocused = () => body.closest(".win")?.dataset.focused === "true";
+
+    function onShortcut(e) {
+      if (!editorFocused()) return;
+      if (e.target.closest?.("input, textarea, select")) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const frame = 1 / (composition().fps || 30);
       const step = e.shiftKey ? 1 : frame;
@@ -2545,10 +2674,15 @@ export const Editor = (() => {
           e.preventDefault();
           addBlank({ seconds: 5 });
           return void rebuildTranscript().then(refresh);
+        case "Backspace": case "Delete":
+          e.preventDefault();
+          return deleteSelected(e);
         default:
           break;
       }
-    });
+    }
+
+    document.addEventListener("keydown", onShortcut);
 
     body.addEventListener("keydown", (e) => {
       const onTab = e.target.closest?.(".cmp-tab");
@@ -2937,6 +3071,55 @@ export const Editor = (() => {
       refresh();
     }
 
+    /**
+     * A sound, when one is selected on the SFX lane.
+     *
+     * Deliberately short: what you want from a sound effect is louder, quieter,
+     * later, gone. Everything else is the agent's to propose.
+     */
+    function soundPanelHtml(a) {
+      const fps = composition().fps || 30;
+      return `
+        <div class="ed-head"><span>Sound</span></div>
+        <div class="insp-body">
+          <p class="insp-name">${Desk.esc(String(a.kind === "sfx" ? a.preset : a.name || "music bed"))}</p>
+          <p class="insp-hint">${a.kind === "sfx" ? "A synthesised effect." : "A bed under the whole cut."}${a.duck ? " Ducks under speech." : ""}</p>
+          <label class="field">
+            <span>Volume <b class="mono">${Math.round((a.gain ?? 1) * 100)}%</b></span>
+            <input type="range" data-snd="gain" min="0" max="1.5" step="0.05" value="${a.gain ?? 1}">
+          </label>
+          <label class="field">
+            <span>Starts <b class="mono">${timecode(a.from / fps)}</b></span>
+            <input type="range" data-snd="from" min="0" max="${Math.max(1, Math.round(total()))}" step="0.05" value="${(a.from / fps).toFixed(2)}">
+          </label>
+          <label class="field">
+            <span>Lasts <b class="mono">${(a.durationInFrames / fps).toFixed(1)}s</b></span>
+            <input type="range" data-snd="dur" min="0.1" max="30" step="0.1" value="${(a.durationInFrames / fps).toFixed(1)}">
+          </label>
+          <div class="insp-row">
+            <button class="btn btn-mini" data-sound-play="${a.id}">Hear it</button>
+            <button class="btn btn-mini btn-danger" data-snd-drop="${a.id}">Delete</button>
+          </div>
+        </div>`;
+    }
+
+    /** What the footage actually is, for the clip panel. */
+    function clipStatsHtml(seg, clip) {
+      const shape = clip?.width && clip?.height ? `${clip.width}&times;${clip.height}` : "unknown";
+      const bytes = clip?.blob?.size;
+      const mb = bytes ? `${(bytes / 1048576).toFixed(1)} MB` : "—";
+      const used = segDuration(seg);
+      return `
+        <dl class="insp-stats mono">
+          <div><dt>Source</dt><dd>${shape}</dd></div>
+          <div><dt>Full length</dt><dd>${timecode(clip?.duration || 0)}</dd></div>
+          <div><dt>Using</dt><dd>${timecode(used)}</dd></div>
+          <div><dt>In / out</dt><dd>${timecode(seg.in)} &rarr; ${timecode(seg.out)}</dd></div>
+          <div><dt>Speed</dt><dd>${seg.speed}&times;</dd></div>
+          <div><dt>Size</dt><dd>${mb}</dd></div>
+        </dl>`;
+    }
+
     /** The two transition pickers, for whatever kind of clip is selected. */
     function transitionFields(seg) {
       const pick = (edge) => `
@@ -2958,6 +3141,57 @@ export const Editor = (() => {
         ([, v]) => v && v.role === l.palette_role && (v.effect || "dip") === l.props?.effect
       );
       return found ? found[0] : "none";
+    }
+
+    /**
+     * Remove whatever is selected.
+     *
+     * One key for four kinds of thing, because from where the person is
+     * standing there is only one kind of thing: the block they clicked. The
+     * keypress is a real event, so the trusted-gesture guards on the
+     * composition are satisfied by it exactly as a button press would be.
+     */
+    function deleteSelected(e) {
+      if (!selected) return;
+
+      const layer = liveLayers().find((l) => l.id === selected);
+      if (layer) {
+        removeLayer(layer.id, e);
+        selected = null;
+        Desk.toast("Graphic deleted", "good");
+        return void refresh();
+      }
+
+      const sound = liveAudio().find((a) => a.id === selected);
+      if (sound) {
+        removeAudio(sound.id, e);
+        selected = null;
+        Desk.toast("Sound deleted", "good");
+        return void refresh();
+      }
+
+      for (const lane of lanes) {
+        const i = lane.items.findIndex((it) => it.uid === selected);
+        if (i >= 0) {
+          lane.items.splice(i, 1);
+          selected = null;
+          Desk.toast("Removed from the lane", "good");
+          return void refresh();
+        }
+      }
+
+      const seg = timeline.find((x) => x.uid === selected);
+      if (seg) {
+        // A clip's own transitions go with it. A dip left hanging over a cut
+        // that no longer exists is worse than no transition at all.
+        liveLayers()
+          .filter((l) => String(l.props?.tag || "").startsWith(`${seg.uid}:`))
+          .forEach((l) => removeLayer(l.id, e));
+        timeline = timeline.filter((x) => x.uid !== seg.uid);
+        selected = null;
+        Desk.toast("Clip removed", "good");
+        return void rebuildTranscript().then(refresh);
+      }
     }
 
     /**
@@ -3215,6 +3449,7 @@ export const Editor = (() => {
     const off = Store.on("clips", renderLibrary);
 
     win.onCleanup(() => {
+      document.removeEventListener("keydown", onShortcut);
       off();
       offGraphics();
       offComposition();
