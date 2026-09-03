@@ -1602,6 +1602,29 @@ export const Editor = (() => {
       const onLane = findItem(selected);
       if (onLane) return itemPanelHtml(onLane.lane, onLane.it);
 
+      // A staged cut, so selecting a chip does not leave the rail claiming
+      // nothing is selected while a marker is clearly highlighted.
+      const staged = pendingCuts().find((c) => c.id === selected);
+      if (staged) {
+        return `
+          <div class="ed-head"><span>Suggested cut</span></div>
+          <div class="insp-body">
+            <p class="insp-name">Remove ${(staged.end - staged.start).toFixed(2)}s</p>
+            <dl class="insp-stats mono">
+              <div><dt>From</dt><dd>${timecode(staged.start)}</dd></div>
+              <div><dt>To</dt><dd>${timecode(staged.end)}</dd></div>
+              <div><dt>Asked by</dt><dd>${staged.origin === "agent" ? "the agent" : "you"}</dd></div>
+            </dl>
+            ${staged.text ? `<p class="insp-hint">&ldquo;${Desk.esc(staged.text)}&rdquo;</p>` : ""}
+            ${staged.reason ? `<p class="insp-hint">${Desk.esc(staged.reason)}</p>` : ""}
+            <div class="insp-row">
+              <button class="btn btn-mini btn-accent" data-cut-accept="${staged.id}">Cut it</button>
+              <button class="btn btn-mini btn-danger" data-cut-reject="${staged.id}">Keep it</button>
+            </div>
+            <p class="insp-hint">Backspace dismisses it.</p>
+          </div>`;
+      }
+
       const seg = timeline.find((s) => s.uid === selected);
       if (!seg) {
         return `<p class="insp-empty">Select a clip or a graphic on the timeline.</p>`;
@@ -1745,7 +1768,7 @@ export const Editor = (() => {
       const cuts = pendingCuts();
       cutStrip.innerHTML = cuts.length
         ? cuts.map((c) => `
-            <span class="cut-chip" data-cut="${c.id}">
+            <span class="cut-chip ${c.id === selected ? "is-selected" : ""}" data-cut="${c.id}">
               <b>−${(c.end - c.start).toFixed(2)}s</b>
               <span>${timecode(c.start)}</span>
               <span class="cut-chip-why">${Desk.esc(c.text || c.reason || "")}</span>

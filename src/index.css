@@ -1322,3 +1322,9 @@
 .insp-name-row { display: flex; align-items: center; gap: 6px; }
 .insp-name-row .insp-name { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .insp-name-row .btn { flex: none; }
+
+/* The staged cut you are looking at, so the chip and the rail agree. */
+.cut-chip.is-selected {
+  border-style: solid;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
+}
