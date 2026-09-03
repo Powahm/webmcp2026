@@ -1474,12 +1474,19 @@
    Blue rather than the accent on purpose. Orange is what the
    page uses for things you can press; this is not a control
    and must not read as one.
+
+   The rectangle starts below the menubar, not at the very top
+   of the viewport. `body::after` is unpositioned relative to
+   the menubar -- it is a sibling, not a descendant -- so an
+   inset of 0 put the glow's own top edge directly behind the
+   menubar's opaque background, and the one edge of the effect
+   anyone would see first was the one edge always hidden.
    ============================================================ */
 
 body::after {
   content: "";
   position: fixed;
-  inset: 0;
+  inset: var(--menubar-h, 48px) 0 0 0;
   z-index: 300;
   pointer-events: none;
   border-radius: 2px;
