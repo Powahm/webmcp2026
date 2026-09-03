@@ -1,4 +1,4 @@
-# Desk Two
+# Deskmate
 
 A creator's workstation in a browser tab, presented as a small computer, built so an
 AI agent can work inside it through **WebMCP**.
@@ -7,7 +7,7 @@ Write the script, read it off the teleprompter while you record, cut what you sh
 have an agent working the same surface with you the whole way. The take comes back with a
 transcript, because the prompter was already watching.
 
-**Live:** _(deployment URL)_ · **Submission:** [The WebMCP Challenge](https://webmcp.devpost.com)
+**Live:** <https://deskmate-cc.vercel.app> · **Submission:** [The WebMCP Challenge](https://webmcp.devpost.com)
 
 ---
 
