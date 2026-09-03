@@ -96,7 +96,7 @@ export const Desk = (() => {
     };
   }
 
-  function openWindow({ id, title, meta = "", tint, size = { w: 560, h: 440 }, centered = false, origin, help = "", build, onClose }) {
+  function openWindow({ id, title, meta = "", tint, size = { w: 560, h: 440 }, minSize, centered = false, origin, help = "", build, onClose }) {
     const existing = windows.get(id);
     if (existing) {
       setWindowState(existing, "open");
@@ -153,7 +153,7 @@ export const Desk = (() => {
 
     desktop.appendChild(el);
 
-    const rec = { el, id, title, tint, help, restore: null, onClose, cleanups: [], visibility: [] };
+    const rec = { el, id, title, tint, minSize, help, restore: null, onClose, cleanups: [], visibility: [] };
     windows.set(id, rec);
 
     const body = $(".win-body", el);
@@ -287,16 +287,21 @@ export const Desk = (() => {
       el.style.top = Math.min(Math.max(start.y + dy, 0), bounds.height - 44) + "px";
     });
 
+    // A window can ask for a floor bigger than the desktop default — Camera
+    // does, so the whole feed always has room to fit rather than resizing
+    // down into a sliver of itself.
+    const MIN_W = rec.minSize?.w ?? 320;
+    const MIN_H = rec.minSize?.h ?? 220;
+
     drag($(".win-resize", el), el, (dx, dy, start) => {
-      el.style.width = Math.max(320, start.w + dx) + "px";
-      el.style.height = Math.max(220, start.h + dy) + "px";
+      el.style.width = Math.max(MIN_W, start.w + dx) + "px";
+      el.style.height = Math.max(MIN_H, start.h + dy) + "px";
     });
 
     // Every edge and corner resizes, not only the bottom-right grip. Pulling
     // the top or left edge moves the window by as much as it shrinks, so the
     // opposite edge stays put, which is what makes it read as resizing rather
     // than dragging. The minimum sizes are the ones the corner grip uses.
-    const MIN_W = 320, MIN_H = 220;
     for (const grip of el.querySelectorAll(".win-edge")) {
       const edge = grip.dataset.edge;
       drag(grip, el, (dx, dy, start) => {

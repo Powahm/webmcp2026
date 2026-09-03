@@ -225,6 +225,12 @@ export const Camera = (() => {
   /* ---------------- window UI ---------------- */
 
   function build(body, win) {
+    // `source` outlives one window: it is module state, not per-window state,
+    // so closing the window while on Screen and reopening it left the select
+    // showing its default "Camera" option while acquire() still reached for
+    // getDisplayMedia underneath. A fresh window always starts on Camera.
+    source = "camera";
+
     body.className = "win-body cam";
     body.innerHTML = `
       <div class="cam-stage">
@@ -480,26 +486,20 @@ export const Camera = (() => {
     });
 
     /**
-     * Switching to Screen does not open the picker.
+     * Switching to Screen opens the picker right away.
      *
-     * getDisplayMedia needs a user gesture, and a `change` event on a select is
-     * one, but the picker would then appear before the person has decided
-     * anything. Worse, cancelling it leaves the app with no stream and a dead
-     * preview. So the switch only arms the source; pressing record opens the
-     * picker, which is the moment they actually meant to choose a window.
+     * A `change` event on a select is a real user gesture, same as a click, so
+     * getDisplayMedia can be called straight from it. Cancelling the picker
+     * just lands on the same "camera unavailable" state any other refusal
+     * does, with its own Try again — no reason to make the person press
+     * record first just to get the prompt they were already asking for.
      */
     sourceSelect.addEventListener("change", () => {
       source = sourceSelect.value;
       release();
       video.srcObject = null;
       select.hidden = source === "screen";
-      if (source === "screen") {
-        blocked.hidden = false;
-        blockedMsg.textContent = "Press record and pick a window or a screen. Your mic is mixed in if it is on.";
-        shutter.disabled = false;
-      } else {
-        connect();
-      }
+      connect();
     });
 
     fileInput.addEventListener("change", async () => {
@@ -554,6 +554,7 @@ export const Camera = (() => {
       meta: "live",
       tint: TINT,
       size: { w: 760, h: 700 },
+      minSize: { w: 480, h: 420 },
       origin,
       build
     });
