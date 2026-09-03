@@ -908,9 +908,10 @@
 .tl-tick { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--line); opacity: .55; }
 .tl-tick i { position: absolute; left: 4px; top: 2px; font-size: 9.5px; font-style: normal; color: var(--text-muted); white-space: nowrap; }
 
-/* The lanes take the leftover height rather than leaving a gap under them:
-   `1fr` rows stretch, and each lane keeps its own minimum. */
-.tl-lanes { flex: 1 1 auto; display: grid; grid-auto-rows: minmax(min-content, 1fr); gap: 4px; padding-top: 5px; }
+/* Rows take their own height, not a share of the leftover. Tracks are
+   resizable by the handle on their bottom edge, so a lane's height is now
+   something someone decided rather than something the grid worked out. */
+.tl-lanes { flex: 1 1 auto; display: grid; grid-auto-rows: min-content; gap: 4px; padding-top: 5px; }
 
 .tl-lane {
   position: relative;
@@ -1370,19 +1371,26 @@
 
 .tl-lane--motion .tl-lane-body { min-height: 46px; }
 
+/* Black, and the only black thing on the track. A motion graphics clip is a
+   container rather than a picture, and reading as a hole in the timeline is
+   exactly right for something whose contents live on another page. */
 .tl-item--mclip {
-  background-color: var(--purple, #B62AD9);
+  background-color: #101014;
   background-image: none;
+  color: #fff;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .18);
   cursor: pointer;
 }
-.tl-item--spine.tl-item--mclip { background-color: var(--purple, #B62AD9); }
+.tl-item--spine.tl-item--mclip { background-color: #101014; }
+.tl-item--mclip .tl-item-name { color: #fff; }
+.tl-item--mclip .tl-item-time { color: rgba(255, 255, 255, .72); }
 
 /* The map of what the clip holds. Bars, not labels: at this size a label is
    unreadable and a bar still tells you the shape of the animation. */
 .tl-mini {
   position: absolute;
-  left: 6px; right: 6px; bottom: 4px;
-  height: 15px;
+  left: 6px; right: 6px; bottom: 3px;
+  height: 5px;
   pointer-events: none;
 }
 .tl-mini i {
@@ -1397,7 +1405,7 @@
   display: flex;
   align-items: center;
   gap: 9px;
-  padding: 6px 8px;
+  padding: 4px 8px;
   margin-bottom: 2px;
   border: var(--bw) solid var(--line);
   border-radius: var(--radius-s);
@@ -1414,6 +1422,8 @@
 
 /* Inside a clip the library and the clip inspector are about the cut, not
    about the animation, so they get out of the way. */
+.ed.is-scoped .tl-tools [data-act="add-text"],
+.ed.is-scoped .tl-tools [data-act="add-overlay"],
 .ed.is-scoped .tl-tools [data-act="split"],
 .ed.is-scoped .tl-tools [data-act="add-blank"],
 .ed.is-scoped .tl-tools [data-act="add-lane"],
@@ -1450,92 +1460,50 @@
 .tl-open:focus-visible { opacity: 1; outline: 2px solid var(--blue); outline-offset: 1px; }
 
 /* ============================================================
-   The agent's cursor, and the glow that says it is working
+   The page, while the agent is working
 
-   WebMCP moves a page with nothing on screen to say so. The
-   ghost names the tool; this shows where the tool landed, and
-   the border says the agent has not finished yet. Both are
-   driven only by real calls — nothing here runs on a timer.
+   The consuming agent draws its own cursor, so the page does
+   not draw a second one. What it does instead is light its own
+   edge for as long as a tool call is actually running, which
+   is the one thing the agent's cursor cannot say: that this
+   page, the whole of it, is being worked on right now.
+
+   Blue rather than the accent on purpose. Orange is what the
+   page uses for things you can press; this is not a control
+   and must not read as one.
    ============================================================ */
 
-.agent-cursor {
-  position: fixed;
-  left: 0; top: 0;
-  z-index: 240;
-  pointer-events: none;
-  display: flex;
-  align-items: flex-start;
-  gap: 5px;
-  opacity: 0;
-  transition: opacity .22s var(--ease-out, ease);
-  will-change: transform;
-}
-.agent-cursor[data-here="true"] { opacity: 1; }
-
-.agent-cursor-arrow {
-  flex: none;
-  fill: var(--accent);
-  stroke: #fff;
-  stroke-width: 1.4;
-  stroke-linejoin: round;
-  filter: drop-shadow(2px 2px 0 rgba(0, 0, 0, .35));
-}
-.agent-cursor[data-kind="failed"] .agent-cursor-arrow { fill: var(--red, #D9432A); }
-
-.agent-cursor-chip {
-  margin-top: 13px;
-  max-width: 220px;
-  padding: 3px 7px;
-  font-size: 10px;
-  letter-spacing: .04em;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: #fff;
-  background: var(--ink, #1A1A17);
-  border-radius: 5px;
-  box-shadow: 2px 2px 0 rgba(0, 0, 0, .3);
-}
-
-/* The press. A ring that leaves from under the point, so the cursor looks like
-   it did something rather than merely arrived. */
-.agent-cursor::after {
+body::after {
   content: "";
-  position: absolute;
-  left: 1px; top: 1px;
-  width: 12px; height: 12px;
-  margin: -6px 0 0 -6px;
-  border: 2px solid var(--accent);
-  border-radius: 50%;
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  pointer-events: none;
+  border-radius: 2px;
   opacity: 0;
-}
-.agent-cursor.is-pressing::after { animation: agent-press .5s var(--ease-out, ease); }
-
-@keyframes agent-press {
-  0%   { opacity: .9; transform: scale(.5); }
-  100% { opacity: 0;  transform: scale(3.6); }
-}
-
-/* The window the agent is working in. A moving border rather than a static
-   one, so it reads as "in progress" and not as "selected". */
-.win.is-agent-lit {
-  border-color: var(--accent);
+  transition: opacity .28s var(--ease-out, ease);
   box-shadow:
-    6px 6px 0 var(--shadow),
-    0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent),
-    0 0 22px color-mix(in srgb, var(--accent) 45%, transparent);
+    inset 0 0 0 3px var(--blue, #1D4AFF),
+    inset 0 0 26px color-mix(in srgb, var(--blue, #1D4AFF) 45%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--blue, #1D4AFF) 60%, transparent);
 }
-body.agent-working .win.is-agent-lit { animation: agent-breathe 1.5s ease-in-out infinite; }
+body.agent-working::after { opacity: 1; animation: agent-edge 1.9s ease-in-out infinite; }
 
-@keyframes agent-breathe {
-  0%, 100% { box-shadow: 6px 6px 0 var(--shadow), 0 0 0 2px color-mix(in srgb, var(--accent) 40%, transparent), 0 0 14px color-mix(in srgb, var(--accent) 30%, transparent); }
-  50%      { box-shadow: 6px 6px 0 var(--shadow), 0 0 0 3px color-mix(in srgb, var(--accent) 75%, transparent), 0 0 30px color-mix(in srgb, var(--accent) 55%, transparent); }
+@keyframes agent-edge {
+  0%, 100% {
+    box-shadow:
+      inset 0 0 0 2px color-mix(in srgb, var(--blue, #1D4AFF) 70%, transparent),
+      inset 0 0 18px color-mix(in srgb, var(--blue, #1D4AFF) 30%, transparent);
+  }
+  50% {
+    box-shadow:
+      inset 0 0 0 4px var(--blue, #1D4AFF),
+      inset 0 0 38px color-mix(in srgb, var(--blue, #1D4AFF) 55%, transparent);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .agent-cursor { transition: none; }
-  .agent-cursor.is-pressing::after { animation: none; }
-  body.agent-working .win.is-agent-lit { animation: none; }
+  body.agent-working::after { animation: none; }
 }
 
 /* ---- where a dragged clip will land ---- */
@@ -1587,4 +1555,154 @@ body.agent-working .win.is-agent-lit { animation: agent-breathe 1.5s ease-in-out
 .cut-chip.is-selected {
   border-style: solid;
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+/* ============================================================
+   The left rail, the motion page, and tracks you can size
+
+   Three tabs on the left because the things you reach for
+   while cutting - footage, words, transitions - are not
+   properties of whatever is selected on the right. Opening a
+   motion graphics clip swaps the whole set of panels rather
+   than squeezing a second editor into one of them.
+   ============================================================ */
+
+.ed-lib { display: flex; flex-direction: column; min-height: 0; }
+
+/* Three labels in a 152px rail. They share a row while it is wide enough and
+   fold when it is not, rather than the third one sliding out under the
+   viewer, which is what an unwrapped flex row does here. */
+.lib-tabs {
+  flex: none;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-right: 0;
+  width: 100%;
+  min-width: 0;
+  padding: 6px;
+  border-bottom: var(--bw) solid var(--line);
+  background: var(--surface-2);
+}
+.lib-tabs .cmp-tab {
+  flex: 1 1 60px;
+  min-width: 0;
+  padding: 4px 2px;
+  font-size: 9.5px;
+  letter-spacing: .04em;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border: var(--bw) solid var(--line);
+  border-radius: var(--radius-s);
+  background: var(--surface);
+  box-shadow: none;
+}
+.lib-tabs .cmp-tab[aria-selected="true"] {
+  background: var(--accent);
+  border-color: var(--line);
+  color: #fff;
+}
+/* An author `display` beats the user agent's rule for [hidden], so the motion
+   page could set the attribute and still show the strip. */
+.lib-tabs[hidden] { display: none; }
+.lib-pane { flex: 1 1 auto; min-height: 0; overflow: auto; display: flex; flex-direction: column; }
+.lib-pane[hidden] { display: none; }
+.ed-lib-bar { flex: none; display: flex; padding: 7px 8px; border-bottom: var(--bw) solid var(--line); }
+.ed-lib-bar .btn { width: 100%; }
+
+/* ---- the palette: what you can put on a frame ---- */
+
+.palette { padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+.palette-head {
+  margin: 4px 0 0;
+  font-size: 9.5px;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.palette-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+.palette-btn {
+  padding: 7px 6px;
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.2;
+  text-align: left;
+  color: var(--text);
+  background: var(--surface-2);
+  border: var(--bw) solid var(--line);
+  border-radius: var(--radius-s);
+  box-shadow: 2px 2px 0 var(--shadow);
+  cursor: pointer;
+}
+.palette-btn:hover { background: var(--accent-soft); }
+.palette-btn:active { transform: translate(2px, 2px); box-shadow: none; }
+.palette-btn--shape { text-transform: capitalize; font-family: var(--font-mono); font-size: 10px; }
+.palette-hint { margin: 6px 0 0; font-size: 10.5px; color: var(--text-muted); }
+
+/* ---- which page you are on ---- */
+
+.ed-pages { display: flex; gap: 5px; margin-right: 4px; }
+.ed-page[aria-pressed="true"] {
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--line);
+}
+.ed-page[hidden] { display: none; }
+
+/* On the motion page the cut's own views are not the job. */
+.ed[data-page="motion"] .cmp-tabs [data-tab="words"],
+.ed[data-page="motion"] .cmp-tabs [data-tab="code"] { display: none; }
+
+/* ---- tracks you can size ---- */
+
+.tl-lane { height: var(--lane-h, auto); }
+.tl-lane-resize {
+  position: absolute;
+  left: 0; right: 0; bottom: -3px;
+  height: 7px;
+  z-index: 6;
+  cursor: row-resize;
+  background: transparent;
+  transition: background .12s;
+}
+.tl-lane-resize:hover { background: color-mix(in srgb, var(--accent) 55%, transparent); }
+
+/* Inside a clip the rows are short on purpose: an animation is twenty
+   elements, and seeing all of them at once beats reading any one of them
+   comfortably. Drag a row's edge if you disagree. */
+.tl-lane--el { min-height: 26px; }
+.tl-lane--el:not(.tl-lane--spine) .tl-lane-body { min-height: 24px; }
+.tl-lane--el .tl-item-name { font-size: 10.5px; }
+.tl-lane--el .tl-item-time { font-size: 9px; }
+.tl-lane--el .tl-lane-name { top: 3px; font-size: 9px; }
+
+/* ---- renaming a clip in the library ---- */
+
+.lib-ren {
+  position: absolute;
+  top: 4px; left: 4px;
+  width: 19px; height: 19px;
+  display: grid; place-items: center;
+  font-size: 11px; line-height: 1;
+  color: var(--text);
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity .12s;
+}
+.lib-item:hover .lib-ren, .lib-ren:focus-visible { opacity: 1; }
+.lib-rename {
+  position: absolute;
+  left: 4px; right: 4px; bottom: 4px;
+  z-index: 3;
+  padding: 4px 6px;
+  font: inherit;
+  font-size: 11.5px;
+  color: var(--text);
+  background: var(--surface);
+  border: var(--bw) solid var(--accent);
+  border-radius: var(--radius-s);
 }

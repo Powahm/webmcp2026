@@ -30,6 +30,7 @@ import {
   composition,
   liveAudio,
   liveLayers,
+  layerFrames,
   onComposition,
   pendingAudio,
   pendingCount,
@@ -218,13 +219,25 @@ export const Editor = (() => {
   function build(body, win) {
     body.className = "win-body ed";
     body.innerHTML = `
+      <!-- Three tabs on the left, because the things you reach for while
+           cutting are footage, words and transitions, and none of them is a
+           property of whatever happens to be selected on the right. -->
       <aside class="ed-lib">
-        <div class="ed-head">
-          <span>Library</span>
-          <button class="btn btn-mini" data-act="import">Import</button>
-          <input type="file" accept="video/*" multiple hidden data-act="file">
+        <div class="cmp-tabs lib-tabs" role="tablist" aria-label="Left panel">
+          <button class="cmp-tab" role="tab" data-lib="clips" aria-selected="true" tabindex="0">Library</button>
+          <button class="cmp-tab" role="tab" data-lib="text" aria-selected="false" tabindex="-1">Text</button>
+          <button class="cmp-tab" role="tab" data-lib="trans" aria-selected="false" tabindex="-1">Transitions</button>
         </div>
-        <div class="ed-lib-list"></div>
+        <div class="lib-pane" data-libpane="clips">
+          <div class="ed-lib-bar">
+            <button class="btn btn-mini" data-act="import">Import</button>
+            <input type="file" accept="video/*" multiple hidden data-act="file">
+          </div>
+          <div class="ed-lib-list"></div>
+        </div>
+        <div class="lib-pane" data-libpane="text" hidden></div>
+        <div class="lib-pane" data-libpane="trans" hidden></div>
+        <div class="lib-pane" data-libpane="motion" hidden></div>
       </aside>
 
       <section class="ed-stage">
@@ -269,13 +282,11 @@ export const Editor = (() => {
       <div class="ed-grip ed-grip--insp" data-grip-pane="insp" role="separator"
            aria-label="Resize the inspector" tabindex="0"></div>
       <aside class="ed-insp">
-        <!-- Four columns of the same right-hand rail. Clip, transitions,
-             graphics and the composition were stacked in one scroll, which
-             meant reaching the composition took a scroll past whatever else
-             happened to be selected. -->
+        <!-- Three columns of the same right-hand rail. Transitions moved to
+             the left, beside the library, because a transition is a thing you
+             go and fetch rather than a property of the selection. -->
         <div class="cmp-tabs insp-tabs" role="tablist" aria-label="Inspector">
           <button class="cmp-tab" role="tab" data-insp="clip" aria-selected="true" tabindex="0">Clip</button>
-          <button class="cmp-tab" role="tab" data-insp="trans" aria-selected="false" tabindex="-1">Transitions</button>
           <button class="cmp-tab" role="tab" data-insp="gfx" aria-selected="false" tabindex="-1">Motion</button>
           <button class="cmp-tab" role="tab" data-insp="comp" aria-selected="false" tabindex="-1">Comp</button>
         </div>
@@ -289,6 +300,13 @@ export const Editor = (() => {
           <!-- One pane, three views of the same cut. The transcript and the
                code are both full-width things, which is why they live down
                here beside the track rather than in the 196px inspector. -->
+          <!-- The page you are on. Editing the cut and building a motion
+               graphics clip are two different jobs with two different sets of
+               panels, so they are two pages rather than one crowded one. -->
+          <div class="ed-pages" role="group" aria-label="Page">
+            <button class="btn btn-mini ed-page" data-page-to="edit" aria-pressed="true">Edit</button>
+            <button class="btn btn-mini ed-page" data-page-to="motion" aria-pressed="false" hidden>Motion</button>
+          </div>
           <div class="cmp-tabs" role="tablist" aria-label="Timeline views">
             <button class="cmp-tab" role="tab" id="tab-track" aria-controls="pane-track"
                     data-tab="track" aria-selected="true" tabindex="0">Timeline</button>
@@ -361,6 +379,10 @@ export const Editor = (() => {
     const formatBar = body.querySelector(".ed-formats-list");
     const empty = body.querySelector(".ed-empty");
     const libList = body.querySelector(".ed-lib-list");
+    const lib = body.querySelector(".ed-lib");
+    const libTabs = body.querySelector(".lib-tabs");
+    const libPane = (name) => body.querySelector(`[data-libpane="${name}"]`);
+    let libTab = "clips";
     const tl = body.querySelector(".tl");
     const tlScroll = body.querySelector(".tl-scroll");
     const ruler = body.querySelector(".tl-ruler");
@@ -419,6 +441,9 @@ export const Editor = (() => {
 
     /* ---- rendering ---- */
 
+    /** Which library card is having its name typed into, if any. */
+    let libRenaming = null;
+
     async function renderLibrary() {
       const clips = await Clips.all();
       clips.forEach((c) => byId.set(c.id, c));
@@ -430,9 +455,41 @@ export const Editor = (() => {
                 <span class="lib-name">${Desk.esc(c.name)}</span>
                 <span class="lib-time mono">${timecode(c.duration)}</span>
               </button>
+              <button class="lib-ren" data-lib-rename="${c.id}" aria-label="Rename ${Desk.esc(c.name)}" title="Rename">✎</button>
               <button class="lib-del" data-del="${c.id}" aria-label="Delete ${Desk.esc(c.name)}">×</button>
+              ${libRenaming === c.id
+                ? `<input class="lib-rename" type="text" spellcheck="false"
+                          data-lib-rename-input="${c.id}" value="${Desk.esc(c.name)}"
+                          aria-label="New name for ${Desk.esc(c.name)}">`
+                : ""}
             </div>`).join("")
         : `<p class="lib-empty">No clips yet. Record one in Camera, or import a file.</p>`;
+
+      // Focus after the list is in the document, not before it exists.
+      if (libRenaming) {
+        const field = libList.querySelector("[data-lib-rename-input]");
+        if (field) { field.focus(); field.select(); }
+        else libRenaming = null;
+      }
+    }
+
+    /**
+     * Rename a clip from the library.
+     *
+     * It writes the clip, not a label on a card, so the name follows it onto
+     * the timeline and into every segment already cut from it. One name, one
+     * place, whichever end you type it at.
+     */
+    async function commitLibRename(id, value) {
+      const name = String(value ?? "").trim().slice(0, 80);
+      libRenaming = null;
+      const clip = byId.get(id);
+      if (!name || !clip) return void renderLibrary();
+      clip.name = name;
+      byId.set(id, clip);
+      await Store.put("clips", clip);   // emits, so the library redraws
+      Desk.toast("Renamed", "good");
+      refresh();
     }
 
     /* The components a Text clip can be: the ones whose whole content is
@@ -774,15 +831,55 @@ export const Editor = (() => {
      */
     let lastClipClick = { id: null, at: 0 };
 
+    /**
+     * How tall each track is, when someone has said.
+     *
+     * Keyed by the lane rather than by its index, so adding a track above one
+     * you have resized does not hand its height to a different lane. Unset
+     * lanes take the height in the stylesheet.
+     */
+    const laneH = new Map();
+
+    function laneStyle(key, extra = "") {
+      const h = laneH.get(key);
+      const bits = [extra, h ? `--lane-h:${h}px` : ""].filter(Boolean).join("; ");
+      return bits ? ` style="${bits}"` : "";
+    }
+
+    const laneGrip = (key) =>
+      `<span class="tl-lane-resize" data-lane-resize="${key}" aria-hidden="true"></span>`;
+
+    let lastScope = null;
+
+    /** The page buttons say where you are and what is reachable. */
+    function syncPageTabs() {
+      const toEdit = body.querySelector('[data-page-to="edit"]');
+      const toMotion = body.querySelector('[data-page-to="motion"]');
+      if (!toEdit || !toMotion) return;
+      const here = scopeClip();
+      toMotion.hidden = motionClips().length === 0;
+      toMotion.textContent = here ? (here.title || "Motion").slice(0, 22) : "Motion";
+      toEdit.setAttribute("aria-pressed", String(!here));
+      toMotion.setAttribute("aria-pressed", String(Boolean(here)));
+      body.dataset.page = here ? "motion" : "edit";
+    }
+
     function enterScope(id) {
       scope = id;
-      selected = selected ?? null;
+      lastScope = id;
+      // The right rail is the element's own fields on this page, which is what
+      // it already shows for whatever is selected.
+      inspTab = "clip";
+      syncPageTabs();
+      renderLib();
       renderTrack();
       renderInspector();
     }
 
     function leaveScope() {
       scope = null;
+      syncPageTabs();
+      renderLib();
       renderTrack();
       renderInspector();
     }
@@ -803,9 +900,22 @@ export const Editor = (() => {
        position stays a cut-second underneath, so a drag writes the same field
        it always wrote and the agent's numbers never have to be translated. */
     const spanStart = () => scopeClip()?.start ?? 0;
+
+    /**
+     * How far the track is drawn, which is not the same as how long the cut
+     * is.
+     *
+     * Shortening a motion graphics clip can leave an element sitting past the
+     * end of the footage. It is still in the composition and still in the
+     * file, so the track has to reach far enough to show it. `total()` is left
+     * alone on purpose: it is what the export and the playhead measure, and a
+     * graphic hanging off the end must not silently lengthen the video.
+     */
+    const viewEnd = () => Math.max(total(), layerFrames() / (composition().fps || 30));
+
     const span = () => {
       const c = scopeClip();
-      return c ? Math.max(c.end - c.start, 0.5) : Math.max(total(), 1);
+      return c ? Math.max(c.end - c.start, 0.5) : Math.max(viewEnd(), 1);
     };
     /** A moment, as a percentage across the track. */
     const pctOf = (seconds) => ((seconds - spanStart()) / span()) * 100;
@@ -1008,9 +1118,12 @@ export const Editor = (() => {
       return rows.map((x, i) => {
         const left = ((x.from / fps - c.start) / len) * 100;
         const width = Math.max(2, ((Math.max(1, x.durationInFrames) / fps) / len) * 100);
+        // Two rows at most. Five stacked was tall enough to run through the
+        // clip's own label, which is the one thing on the bar you have to be
+        // able to read.
         return `<i style="left:${Math.max(0, Math.min(99, left)).toFixed(2)}%;
                           width:${Math.min(100 - left, width).toFixed(2)}%;
-                          top:${(i % 5) * 3}px"></i>`;
+                          top:${(i % 2) * 3}px"></i>`;
       }).join("");
     }
 
@@ -1064,10 +1177,6 @@ export const Editor = (() => {
         <button class="btn btn-mini" data-act="scope-out">← Timeline</button>
         <b>${Desk.esc(c.title)}</b>
         <span class="tl-crumb-meta mono">${timecode(Math.max(0, c.end - c.start))} · ${els.length} element${els.length === 1 ? "" : "s"}</span>
-        <span class="tl-crumb-acts">
-          <button class="btn btn-mini" data-act="scope-text">+ Text</button>
-          <button class="btn btn-mini" data-act="scope-shape">+ Shape</button>
-        </span>
       </div>`);
 
       if (!els.length && !sounds.length) {
@@ -1079,7 +1188,7 @@ export const Editor = (() => {
       els.forEach((l, i) => {
         const start = l.from / fps;
         const len = Math.max(0.2, l.durationInFrames / fps);
-        rows.push(`<div class="tl-lane tl-lane--el" data-lane="el-${l.id}">
+        rows.push(`<div class="tl-lane tl-lane--el" data-lane="el-${l.id}"${laneStyle("el")}>
           <span class="tl-lane-name mono">${i + 1}</span>
           <div class="tl-lane-body">
             <div class="tl-item tl-item--gfx ${l.status === "proposed" ? "is-proposed" : ""}"
@@ -1515,6 +1624,7 @@ export const Editor = (() => {
       if (inside) {
         laneBox.innerHTML = scopedRows(inside).join("");
         ruler.innerHTML = rulerHtml();
+        syncPageTabs();
         paintPlayhead();
         paintFrame();
         return;
@@ -1522,28 +1632,35 @@ export const Editor = (() => {
 
       const rows = [];
       // Video lanes read top-down like every editor: the newest overlay on
-      // top, the spine at the bottom, motion graphics above the pictures.
+      // top, the spine at the bottom. Motion graphics sit above the pictures
+      // and are numbered with them, because to the frame they are one more
+      // video track and a second letter would be one more thing to learn.
+      const videoLanes = lanes.filter((l) => l.kind === "video");
       const motion = motionLaneHtml();
       if (motion) {
-        rows.push(`<div class="tl-lane tl-lane--motion" data-lane="motion">
-          <span class="tl-lane-name mono">M1</span>
+        const name = `V${videoLanes.length + 2}`;
+        rows.push(`<div class="tl-lane tl-lane--motion" data-lane="motion"${laneStyle("motion")}>
+          <span class="tl-lane-name mono">${name}</span>
           <div class="tl-lane-body">${motion}</div>
+          ${laneGrip("motion")}
         </div>`);
       }
 
-      for (const lane of lanes.filter((l) => l.kind === "video").slice().reverse()) {
-        rows.push(`<div class="tl-lane" data-lane="${lane.id}">
+      for (const lane of videoLanes.slice().reverse()) {
+        rows.push(`<div class="tl-lane" data-lane="${lane.id}"${laneStyle(lane.id)}>
           <span class="tl-lane-name mono">${lane.name}</span>
           <button class="tl-lane-x" data-drop-lane="${lane.id}" aria-label="Remove lane ${lane.name}">×</button>
           <div class="tl-lane-body">${lane.items.map((it) => laneItemHtml(lane, it)).join("")}</div>
+          ${laneGrip(lane.id)}
         </div>`);
       }
 
-      rows.push(`<div class="tl-lane tl-lane--spine" data-lane="spine">
+      rows.push(`<div class="tl-lane tl-lane--spine" data-lane="spine"${laneStyle("spine")}>
         <span class="tl-lane-name mono">V1</span>
         <div class="tl-lane-body">${
           timeline.length ? spineHtml() : `<p class="track-empty">Drag a clip here, or add one from the library.</p>`
         }</div>
+        ${laneGrip("spine")}
       </div>`);
 
       // Audio tracks are numbered the way an editor numbers them, in the order
@@ -1552,31 +1669,35 @@ export const Editor = (() => {
       const audioName = () => `A${++audioNo}`;
 
       if (timeline.some((sg) => !sg.blank)) {
-        rows.push(`<div class="tl-lane tl-lane--a1" data-lane="a1">
+        rows.push(`<div class="tl-lane tl-lane--a1" data-lane="a1"${laneStyle("a1")}>
           <span class="tl-lane-name mono">${audioName()}</span>
           <div class="tl-lane-body">${a1Html()}</div>
+          ${laneGrip("a1")}
         </div>`);
       }
 
       const sfxLane = sfxLaneHtml();
       if (sfxLane.html) {
-        rows.push(`<div class="tl-lane tl-lane--sfx" data-lane="sfx" style="--rows:${sfxLane.rows}">
+        rows.push(`<div class="tl-lane tl-lane--sfx" data-lane="sfx"${laneStyle("sfx", `--rows:${sfxLane.rows}`)}>
           <span class="tl-lane-name mono">${audioName()}</span>
           <div class="tl-lane-body">${sfxLane.html}</div>
+          ${laneGrip("sfx")}
         </div>`);
       }
 
       for (const lane of lanes.filter((l) => l.kind === "audio")) {
         const name = audioName();
-        rows.push(`<div class="tl-lane tl-lane--audio" data-lane="${lane.id}">
+        rows.push(`<div class="tl-lane tl-lane--audio" data-lane="${lane.id}"${laneStyle(lane.id)}>
           <span class="tl-lane-name mono">${name}</span>
           <button class="tl-lane-x" data-drop-lane="${lane.id}" aria-label="Remove audio track ${name}">×</button>
           <div class="tl-lane-body">${lane.items.map((it) => laneItemHtml(lane, it)).join("")}</div>
+          ${laneGrip(lane.id)}
         </div>`);
       }
 
       laneBox.innerHTML = rows.join("");
       ruler.innerHTML = rulerHtml();
+      syncPageTabs();
       paintPlayhead();
       paintFrame();
     }
@@ -2359,6 +2480,7 @@ export const Editor = (() => {
 
     refresh = () => {
       renderTrack();
+      renderLib();
       renderInspector();
       renderClock();
       renderCuts();
@@ -2897,6 +3019,32 @@ export const Editor = (() => {
       const t = e.target;
       const act = t.closest("[data-act]")?.dataset.act;
 
+      const pageTo = t.closest("[data-page-to]")?.dataset.pageTo;
+      if (pageTo === "edit") return void leaveScope();
+      if (pageTo === "motion") {
+        const c = scopeClip()
+          || motionClips().find((x) => x.id === lastScope)
+          || motionClips()[0];
+        if (!c) return void Desk.toast("No motion graphics clip yet. Add one below.", "bad");
+        return void enterScope(c.id);
+      }
+
+      const libRen = t.closest("[data-lib-rename]");
+      if (libRen) {
+        libRenaming = libRen.dataset.libRename;
+        return void renderLibrary();
+      }
+
+      const libTo = t.closest("[data-lib]")?.dataset.lib;
+      if (libTo) { libTab = libTo; return void renderLib(); }
+
+      const addText = t.closest("[data-add-text]");
+      if (addText) return void addElement(TEXT_KINDS[Number(addText.dataset.addText)], e);
+      const addShape = t.closest("[data-add-shape]");
+      if (addShape) {
+        return void addElement({ component: "shape", props: { shape: addShape.dataset.addShape } }, e);
+      }
+
       const opener = t.closest("[data-open-mclip]");
       if (opener) return void enterScope(opener.dataset.openMclip);
 
@@ -3135,7 +3283,7 @@ export const Editor = (() => {
       }
     });
 
-    insp.addEventListener("input", (e) => {
+    body.addEventListener("input", (e) => {
       // Text first: the layer panel and the clip panel share this listener,
       // and a layer is selected the same way a segment is.
       const layer = liveLayers().find((l) => l.id === selected);
@@ -3284,7 +3432,7 @@ export const Editor = (() => {
       seekTo(playhead);
     });
 
-    insp.addEventListener("click", (e) => {
+    body.addEventListener("click", (e) => {
       // The cross-reference at the bottom of a panel. Switching tab from
       // inside a pane is the same act as clicking the tab itself.
       const go = e.target.closest("[data-insp-go]");
@@ -3626,6 +3774,20 @@ export const Editor = (() => {
        * The event never arrives. Comparing the clip's id across two
        * pointerdowns survives the repaint, which is the only thing that does.
        */
+      const sizer = e.target.closest("[data-lane-resize]");
+      if (sizer) {
+        const row = sizer.closest(".tl-lane");
+        gesture = {
+          type: "lane-h",
+          key: sizer.dataset.laneResize,
+          fromY: e.clientY,
+          startH: row.getBoundingClientRect().height,
+        };
+        tl.setPointerCapture?.(e.pointerId);
+        e.preventDefault();
+        return;
+      }
+
       const clipHit = e.target.closest("[data-mclip], .tl-item--spine.tl-item--blank");
       if (clipHit && !e.target.closest("[data-grip]")) {
         const clipId = clipHit.dataset.mclip || clipHit.dataset.seg;
@@ -3688,6 +3850,14 @@ export const Editor = (() => {
 
     function moveGesture(e) {
       if (!gesture) return;
+
+      if (gesture.type === "lane-h") {
+        const h = Math.max(24, Math.min(320, gesture.startH + (e.clientY - gesture.fromY)));
+        laneH.set(gesture.key, Math.round(h));
+        renderTrack();
+        return;
+      }
+
       const now = timeAtPointer(e);
 
       if (gesture.type === "scrub") { seekTo(now); paintPlayhead(); return; }
@@ -4158,6 +4328,112 @@ export const Editor = (() => {
      * accepted the moment it is made — a person does not propose to themselves.
      */
     /**
+     * What a person can put on the frame, and what to fill it with.
+     *
+     * The same list feeds the Text tab beside the library and the palette on
+     * the motion page, because they are the same act: put an element on the
+     * frame. Only where it lands differs.
+     */
+    const TEXT_KINDS = [
+      { component: "title_card", label: "Title card", props: { text: "Your title", subtext: "" }, position: "center" },
+      { component: "lower_third", label: "Lower third", props: { text: "Their name", subtext: "What they do" }, position: "lower_left" },
+      { component: "caption_pop", label: "Caption", props: { text: "Something said" }, position: "bottom_bar" },
+      { component: "quote_card", label: "Quote", props: { text: "A line worth pulling out" }, position: "center" },
+      { component: "bullet_list", label: "Bullet list", props: { items: ["First", "Second", "Third"] }, position: "center" },
+      { component: "stat_badge", label: "Stat", props: { text: "42%" }, position: "upper_right" },
+      { component: "text", label: "Plain text", props: { text: "Text" }, position: "center" },
+    ];
+
+    const SHAPE_KINDS = ["rect", "ellipse", "pill", "triangle", "line", "arrow", "ring", "star"];
+
+    /**
+     * Put an element on the frame.
+     *
+     * Inside a clip it lands after the last thing already there rather than on
+     * top of it, because stacking two elements on one second is the mistake
+     * that makes a motion graphics clip look like a pile. Outside one it lands
+     * at the playhead, where you are looking.
+     */
+    function addElement(spec, e) {
+      const c = scopeClip();
+      let at = playhead;
+      let seconds = 2.5;
+
+      if (c) {
+        const fps = composition().fps || 30;
+        const clipLen = Math.max(0.5, c.end - c.start);
+        const held = [...layersIn(c), ...soundsIn(c)];
+        const lastEnd = held.reduce(
+          (m, x) => Math.max(m, (x.from + Math.max(1, x.durationInFrames)) / fps),
+          c.start
+        );
+        seconds = Math.min(2.5, Math.max(0.6, clipLen / 2));
+        at = Math.min(Math.max(c.start, lastEnd + 0.1), Math.max(c.start, c.end - seconds));
+        seconds = Math.min(seconds, Math.max(0.3, c.end - at));
+      }
+
+      const made = proposeLayer(
+        {
+          component: spec.component,
+          ...(spec.props || {}),
+          at_seconds: at,
+          duration_seconds: seconds,
+          position: spec.position || "center",
+          palette_role: spec.palette_role || "accent",
+          origin: "human",
+        },
+        { cutSeconds: total() }
+      );
+      if (!made.ok) return void Desk.toast(made.error || "Could not add that.", "bad");
+      acceptLayer(made.layer.id, e);
+      selected = made.layer.id;
+      inspTab = "clip";
+      seekTo(Math.min(total(), at + 0.05));
+      refresh();
+    }
+
+    /** The buttons themselves, shared by the Text tab and the motion palette. */
+    function elementButtonsHtml({ shapes = true } = {}) {
+      const text = TEXT_KINDS.map((k, i) =>
+        `<button class="palette-btn" data-add-text="${i}">${k.label}</button>`).join("");
+      const shape = shapes
+        ? `<p class="palette-head mono">Shapes</p>
+           <div class="palette-grid">${SHAPE_KINDS.map((k) =>
+             `<button class="palette-btn palette-btn--shape" data-add-shape="${k}">${k}</button>`).join("")}</div>`
+        : "";
+      return `
+        <div class="palette">
+          <p class="palette-head mono">Text</p>
+          <div class="palette-grid">${text}</div>
+          ${shape}
+          <p class="palette-hint">${scopeClip()
+            ? "Lands after the last element in this clip, so nothing overlaps."
+            : "Lands at the playhead. Open a motion graphics clip to build a sequence."}</p>
+        </div>`;
+    }
+
+    /** The left rail, whichever tab is showing. */
+    function renderLib() {
+      const onMotion = Boolean(scopeClip());
+      // The motion page has its own palette and no use for the footage list.
+      const want = onMotion ? "motion" : libTab;
+      for (const name of ["clips", "text", "trans", "motion"]) {
+        const el = libPane(name);
+        if (el) el.hidden = name !== want;
+      }
+      libTabs.hidden = onMotion;
+      libTabs.querySelectorAll("[data-lib]").forEach((b) => {
+        const on = b.dataset.lib === libTab;
+        b.setAttribute("aria-selected", String(on));
+        b.tabIndex = on ? 0 : -1;
+      });
+      // The Text tab is text. Shapes belong with the rest of the motion work.
+      if (want === "text") libPane("text").innerHTML = elementButtonsHtml({ shapes: false });
+      if (want === "trans") libPane("trans").innerHTML = transitionsPaneHtml();
+      if (want === "motion") libPane("motion").innerHTML = elementButtonsHtml();
+    }
+
+    /**
      * A new element inside the clip you are in.
      *
      * It lands after the last thing already there rather than on top of it.
@@ -4166,37 +4442,13 @@ export const Editor = (() => {
      * easy to make by accident.
      */
     function addInScope(kind, e) {
-      const c = scopeClip();
-      if (!c) return;
-      const fps = composition().fps || 30;
-      const clipLen = Math.max(0.5, c.end - c.start);
-      const held = [...layersIn(c), ...soundsIn(c)];
-      const lastEnd = held.reduce(
-        (m, x) => Math.max(m, (x.from + Math.max(1, x.durationInFrames)) / fps),
-        c.start
+      if (!scopeClip()) return;
+      addElement(
+        kind === "shape"
+          ? { component: "shape", props: { shape: "pill" } }
+          : { component: "title_card", props: { text: "Your text here" } },
+        e
       );
-      const seconds = Math.min(2.5, Math.max(0.6, clipLen / 2));
-      const at = Math.min(Math.max(c.start, lastEnd + 0.1), Math.max(c.start, c.end - seconds));
-
-      const spec = kind === "shape"
-        ? { component: "shape", shape: "pill", palette_role: "accent" }
-        : { component: "title_card", text: "Your text here", palette_role: "accent" };
-
-      const made = proposeLayer(
-        {
-          ...spec,
-          at_seconds: at,
-          duration_seconds: Math.min(seconds, Math.max(0.3, c.end - at)),
-          position: "center",
-          origin: "human",
-        },
-        { cutSeconds: total() }
-      );
-      if (!made.ok) return void Desk.toast(made.error || "Could not add that.", "bad");
-      acceptLayer(made.layer.id, e);
-      selected = made.layer.id;
-      seekTo(Math.min(total(), at + 0.05));
-      refresh();
     }
 
     function addTextClip(e) {
@@ -4463,10 +4715,21 @@ export const Editor = (() => {
       renderInspector();
     }
 
-    insp.addEventListener("change", (e) => {
+    body.addEventListener("change", (e) => {
+      if (e.target.matches?.("[data-lib-rename-input]")) {
+        return void commitLibRename(e.target.dataset.libRenameInput, e.target.value);
+      }
       if (e.target.matches?.("[data-rename-input]")) commitRename(e.target.value);
     });
-    insp.addEventListener("keydown", (e) => {
+    body.addEventListener("keydown", (e) => {
+      if (e.target.matches?.("[data-lib-rename-input]")) {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          commitLibRename(e.target.dataset.libRenameInput, e.target.value);
+        }
+        if (e.key === "Escape") { libRenaming = null; renderLibrary(); }
+        return;
+      }
       if (!e.target.matches?.("[data-rename-input]")) return;
       if (e.key === "Enter") { e.preventDefault(); commitRename(e.target.value); }
       if (e.key === "Escape") { e.preventDefault(); renaming = false; renderInspector(); }
