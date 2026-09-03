@@ -208,12 +208,122 @@ say so.
 - Do not write more than about sixty seconds of speech unless they asked for it.
 `;
 
-/** Two skills to start with, so the folder is never a blank page. */
+
+const MOTION = `---
+name: Building a motion graphics clip
+description: Use whenever you are asked for graphics, an animation, a title, an infographic or a lower third over a cut. It is how this editor wants motion graphics built.
+triggers: timeline_has_clips, graphic, graphics, animation, animate, motion, title, infographic, lower third, callout, stat, list, overlay
+---
+
+# Building a motion graphics clip
+
+Everything you compose lands inside a **motion graphics clip**: a span of the cut
+that holds its elements, that a person opens and edits on its own timeline.
+Getting the containers right is most of the job. A clip with six elements piled
+onto the same second is the failure this file exists to prevent.
+
+## Work in passes, not in one call
+
+1. **Read first.** \`get_composition\` for what is already there and the ids, and
+   \`get_transcript\` when the ask refers to something said, so the seconds come
+   from the words rather than from a guess.
+2. **Make the container.** If the graphics are a sequence of their own rather
+   than a caption over footage, call \`propose_blank_clip\` and build inside it.
+   A clip of its own is cheap. Two ideas sharing one clip is not.
+3. **One element per call**, in the order they appear.
+4. **Sound under each one**, immediately after it. See below.
+5. **Stop.** Do not also reframe, tidy or cut unless that is what was asked.
+
+## Timing: nothing starts at the same second as anything else
+
+- Stagger the starts. **0.25 to 0.4 seconds apart** is the readable range. If
+  three rows land together the eye has nowhere to go.
+- Give each element a real dwell. **1.5 to 3 seconds** for anything with words in
+  it, and never under 0.8 seconds.
+- An element may overlap the one before it, and normally should. What it must
+  not do is *start* at the same moment.
+- Keep everything inside the clip. An element that runs past the end of the clip
+  it belongs to is drawn on whatever follows, which is almost never intended.
+
+## Space: two elements never share a position
+
+Positions are \`upper_left\`, \`upper_right\`, \`lower_left\`, \`lower_right\`,
+\`center\`, \`top_bar\`, \`bottom_bar\`.
+
+- **One element per position at a time.** Before you place a second element at
+  \`center\`, check the first has ended.
+- \`center\` is for one thing only, and it is usually the title.
+- A lower third belongs at \`lower_left\`; a stat badge at \`upper_right\`; a
+  caption at \`bottom_bar\`. Do not stack two of those in one corner.
+- Use a component that already contains its own layout instead of assembling one
+  out of loose parts. \`bullet_list\` is one element that lays out four rows.
+  Four \`text\` layers at the same moment are four things fighting.
+
+## Which component
+
+| You want | Use |
+|---|---|
+| An opening title | \`title_card\` at \`center\` |
+| Someone's name and role | \`lower_third\` at \`lower_left\` |
+| A spoken phrase punched up | \`caption_pop\` at \`bottom_bar\` |
+| Three or four points | \`bullet_list\`, one call, not one per row |
+| This versus that | \`comparison_cards\` |
+| Steps in order | \`process_flow\` |
+| A single number | \`stat_badge\` at \`upper_right\` |
+| Pointing at something on screen | \`callout_arrow\` |
+| A quote | \`quote_card\` |
+| A cut to black, a flash | \`effect\` |
+
+## Sound is part of the graphic
+
+**Every element you propose gets a sound under it**, in the same pass, at the
+same \`at_seconds\`. A graphic that appears in silence reads as a still.
+
+| Element | Sound |
+|---|---|
+| \`title_card\`, \`quote_card\` | \`hit\` |
+| a row of a list, \`caption_pop\` | \`pop\` |
+| anything sliding in from an edge | \`whoosh\` |
+| building to a reveal | \`riser\` |
+| a step in a process, a counter | \`tick\` |
+| a result, a total, a good number | \`chime\` |
+
+Call \`propose_sound\` with \`kind: "sfx"\`. One per element, not one per clip, and
+not one under every frame of a bed.
+
+## Colour
+
+\`palette_role\` is one of \`accent\`, \`warm\`, \`cool\`, \`positive\`, \`plain\`,
+\`invert\`. Spend \`accent\` once per clip, on the thing that matters most.
+Everything else is \`plain\` unless it means something: \`positive\` for a good
+number, \`invert\` for a dip to black.
+
+## Say what you did
+
+Every proposal takes a \`reason\`. Say what it is for in the person's own terms —
+"the three points you list at 0:14" — not "added a bullet list". They are reading
+the reason to decide, and there is no tool that decides for them.
+`;
+
+/**
+ * Three skills to start with, so the folder is never a blank page.
+ *
+ * Missing ones are added rather than the whole set being skipped when anything
+ * is there. Bailing on the first existing skill meant a browser that had opened
+ * an older build never saw a skill added since, which is a bug you only find
+ * on the machine you have been testing on all week.
+ */
 export async function seed() {
   const existing = await Store.all("aiskills");
-  if (existing.length) return;
-  await addSkill(parseSkill("hook-in-three-seconds.md", EXAMPLE));
-  await addSkill(parseSkill("link-to-script.md", FROM_A_LINK));
+  const have = new Set(existing.map((s) => s.filename));
+  const stock = [
+    ["hook-in-three-seconds.md", EXAMPLE],
+    ["link-to-script.md", FROM_A_LINK],
+    ["building-a-motion-graphics-clip.md", MOTION],
+  ];
+  for (const [filename, body] of stock) {
+    if (!have.has(filename)) await addSkill(parseSkill(filename, body));
+  }
 }
 
 /* ---------------- the window ---------------- */

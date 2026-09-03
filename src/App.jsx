@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import Cursor from "./agent/Cursor.jsx";
 import Ghost from "./agent/Ghost.jsx";
 import DeskFolders from "./folders/DeskFolders.jsx";
 import GhostFolder from "./folders/GhostFolder.jsx";
@@ -145,6 +146,7 @@ export default function App() {
 
       {/* The agent, once it has actually used the page. */}
       <Ghost />
+      <Cursor />
 
       {/* The teleprompter. Markup only: scripts-app.js resolves #prompter by id
           and drives the scroll itself, so this must stay outside any window and

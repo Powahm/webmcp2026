@@ -1317,3 +1317,92 @@
 .tl-item--mclip:hover .tl-open,
 .tl-item--mclip:focus-within .tl-open { opacity: 1; }
 .tl-open:focus-visible { opacity: 1; outline: 2px solid var(--blue); outline-offset: 1px; }
+
+/* ============================================================
+   The agent's cursor, and the glow that says it is working
+
+   WebMCP moves a page with nothing on screen to say so. The
+   ghost names the tool; this shows where the tool landed, and
+   the border says the agent has not finished yet. Both are
+   driven only by real calls — nothing here runs on a timer.
+   ============================================================ */
+
+.agent-cursor {
+  position: fixed;
+  left: 0; top: 0;
+  z-index: 240;
+  pointer-events: none;
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  opacity: 0;
+  transition: opacity .22s var(--ease-out, ease);
+  will-change: transform;
+}
+.agent-cursor[data-here="true"] { opacity: 1; }
+
+.agent-cursor-arrow {
+  flex: none;
+  fill: var(--accent);
+  stroke: #fff;
+  stroke-width: 1.4;
+  stroke-linejoin: round;
+  filter: drop-shadow(2px 2px 0 rgba(0, 0, 0, .35));
+}
+.agent-cursor[data-kind="failed"] .agent-cursor-arrow { fill: var(--red, #D9432A); }
+
+.agent-cursor-chip {
+  margin-top: 13px;
+  max-width: 220px;
+  padding: 3px 7px;
+  font-size: 10px;
+  letter-spacing: .04em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #fff;
+  background: var(--ink, #1A1A17);
+  border-radius: 5px;
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, .3);
+}
+
+/* The press. A ring that leaves from under the point, so the cursor looks like
+   it did something rather than merely arrived. */
+.agent-cursor::after {
+  content: "";
+  position: absolute;
+  left: 1px; top: 1px;
+  width: 12px; height: 12px;
+  margin: -6px 0 0 -6px;
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  opacity: 0;
+}
+.agent-cursor.is-pressing::after { animation: agent-press .5s var(--ease-out, ease); }
+
+@keyframes agent-press {
+  0%   { opacity: .9; transform: scale(.5); }
+  100% { opacity: 0;  transform: scale(3.6); }
+}
+
+/* The window the agent is working in. A moving border rather than a static
+   one, so it reads as "in progress" and not as "selected". */
+.win.is-agent-lit {
+  border-color: var(--accent);
+  box-shadow:
+    6px 6px 0 var(--shadow),
+    0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent),
+    0 0 22px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+body.agent-working .win.is-agent-lit { animation: agent-breathe 1.5s ease-in-out infinite; }
+
+@keyframes agent-breathe {
+  0%, 100% { box-shadow: 6px 6px 0 var(--shadow), 0 0 0 2px color-mix(in srgb, var(--accent) 40%, transparent), 0 0 14px color-mix(in srgb, var(--accent) 30%, transparent); }
+  50%      { box-shadow: 6px 6px 0 var(--shadow), 0 0 0 3px color-mix(in srgb, var(--accent) 75%, transparent), 0 0 30px color-mix(in srgb, var(--accent) 55%, transparent); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-cursor { transition: none; }
+  .agent-cursor.is-pressing::after { animation: none; }
+  body.agent-working .win.is-agent-lit { animation: none; }
+}
