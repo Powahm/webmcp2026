@@ -66,7 +66,7 @@ Everything below is built and tested.
 | **Staged cuts** | `src/cuts/` | Cut by quoting the words; `applyCut` splits a segment. |
 | Ghost folders | `src/folders/` | Manifest from the agent, directory picker from the person. |
 | The agent's presence | `src/agent/`, `src/webmcp/StatusBadge.jsx` | A ghost that names each tool as it is called, and a four-state status badge. |
-| WebMCP layer | `src/webmcp/` | Twenty-seven tools, registration with fallback, per-call instrumentation. |
+| WebMCP layer | `src/webmcp/` | Twenty-eight tools, registration with fallback, per-call instrumentation. |
 
 The composition engine is a purpose-built alternative to a React video framework rather than
 an integration of one. The reason is structural: this is a static page with no backend, and
