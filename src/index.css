@@ -532,7 +532,12 @@
 .ais-card-foot { display: flex; align-items: center; gap: 10px; margin-top: 9px; font-size: 10px; color: var(--text-muted); }
 .ais-card-used { color: var(--green); font-weight: 700; }
 .ais-card-idle { color: var(--text-muted); }
-.ais-card-foot .btn { margin-left: auto; }
+.ais-card-acts { display: flex; gap: 6px; margin-left: auto; }
+
+/* The whole card opens the skill, so it has to look like something that would.
+   The lift is the same one a file icon gets, because that is what this is. */
+.ais-card { cursor: pointer; }
+.ais-card:hover { box-shadow: 3px 3px 0 var(--shadow); }
 
 .ais-empty { margin: 0; padding: 26px 14px; text-align: center; font-size: 12px; line-height: 1.7; color: var(--text-muted); }
 .file--sub .file-art { background: color-mix(in srgb, var(--purple) 40%, transparent); border: 2px dashed var(--purple); }
@@ -542,6 +547,74 @@
    arrived. */
 .ais-card.ready { border-left-color: var(--yellow); background: color-mix(in srgb, var(--yellow) 9%, var(--surface-2)); }
 .ais-card-ready { color: var(--yellow-dk); font-weight: 700; }
+
+/* ---- one skill, opened ---- */
+
+/* Reading a skill swaps the window body rather than opening a second window.
+   The list and the file are the same thing seen two ways, and a folder that
+   spawns a window per file is how a desktop turns into a mess. */
+.ais[data-view="detail"] .ais-drop { display: none; }
+.ais[data-view="list"] .ais-detail { display: none; }
+
+.ais-detail { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+.ais-detail-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: var(--bw) solid var(--line);
+  background: color-mix(in srgb, var(--purple) 12%, var(--surface-2));
+}
+.ais-detail-title { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.ais-detail-name { font-family: var(--font-display); font-size: 14px; font-weight: 700; letter-spacing: -0.01em; }
+.ais-detail-file { font-size: 10px; color: var(--text-muted); }
+.ais-detail-acts { flex: none; display: flex; gap: 6px; }
+
+.ais-detail-desc { margin: 0; padding: 11px 12px 0; font-size: 12px; line-height: 1.5; color: var(--text-muted); }
+.ais-detail-facts { display: flex; flex-wrap: wrap; gap: 3px 14px; margin: 0; padding: 7px 12px 10px; font-size: 10px; color: var(--text-muted); }
+
+/* The file's own text, in a recessed well, so it reads as the thing being
+   looked at rather than as more of the chrome around it. Wrapping rather than
+   scrolling sideways: these are paragraphs of instructions, not code. */
+.ais-body {
+  flex: 1;
+  min-height: 0;
+  margin: 0 12px 12px;
+  padding: 12px 14px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.65;
+  tab-size: 2;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--text);
+  background: var(--ground-2);
+  border: var(--bw) solid var(--line);
+  border-radius: var(--radius-s);
+}
+
+.ais-editor { display: block; width: auto; resize: none; outline: none; }
+.ais-editor:focus-visible { border-color: var(--blue); box-shadow: 0 0 0 2px var(--blue); }
+.ais-editor::placeholder { color: var(--text-muted); }
+
+/* The case this viewer was built for: a file with nothing in it. A blank pane
+   would read as the viewer being broken rather than the file being empty. */
+.ais-body-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  text-align: center;
+  font-family: var(--font-body);
+  white-space: normal;
+  color: var(--text-muted);
+}
+.ais-body-empty p { margin: 0; font-size: 12.5px; }
+.ais-body-empty-note { font-size: 11px; }
 
 /* A call that came back an error. The ghost should not say something breezy
    about work it did not manage to do. */
