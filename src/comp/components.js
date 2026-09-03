@@ -1023,14 +1023,15 @@ const Shape = {
 const Effect = {
   key: "effect",
   name: "Effect",
-  blurb: "A full-frame look over the picture: flash, vignette, grain, scanlines, glitch, letterbox bars or a colour wash. Drawn over the frame, so the preview and the exported file are identical.",
+  blurb: "A full-frame look over the picture: a dip to a colour (the transition to put over a cut), a flash, vignette, grain, scanlines, glitch, letterbox bars or a colour wash. Drawn over the frame, so the preview and the exported file are identical.",
   needs: ["effect"],
   uses: ["strength", "animation"],
   defaults: { durationInFrames: 30, position: "center", palette_role: "plain" },
   fields: {
-    effect: { type: "string", note: "flash, vignette, grain, scanlines, glitch, letterbox or wash." },
+    effect: { type: "string", note: "dip, flash, vignette, grain, scanlines, glitch, letterbox or wash. `dip` fades to the colour and back out, which is the transition you put over a cut." },
     strength: { type: "number", note: "0 to 1. Half is usually plenty; grain above 0.4 is a stylistic choice rather than an accident." },
     animation: { type: "string", note: "fade or none. Effects hold rather than move." },
+    tag: { type: "string", max: 60, note: "An internal label. The editor uses it to find the transition it put on a clip; leave it out." },
   },
   draw(ctx, f) {
     const { width: W, height: H, scale: s, props, colour, pal, frame, durationInFrames: D } = f;
@@ -1040,6 +1041,20 @@ const Effect = {
     if (k <= 0.001) return;
 
     switch (props.effect) {
+      case "dip": {
+        // Up to full and back down: the dissolve you put across a cut. The
+        // colour comes from the layer's own colour, so a dip to black and a
+        // dip to white are the same effect with a different role.
+        const half = Math.max(1, D / 2);
+        const up = clamp01(interpolate(frame, [0, half], [0, 1], { easing: "in_out" }));
+        const down = clamp01(interpolate(frame, [half, D], [1, 0], { easing: "in_out" }));
+        isolate(ctx, () => {
+          ctx.globalAlpha = Math.min(up, down) * clampNum(props.strength, 0, 1, 1);
+          ctx.fillStyle = colour;
+          ctx.fillRect(0, 0, W, H);
+        });
+        return;
+      }
       case "vignette": {
         const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.28, W / 2, H / 2, Math.max(W, H) * 0.72);
         g.addColorStop(0, "rgba(0,0,0,0)");

@@ -20,7 +20,7 @@ import { createMixer, createScheduler, speechRanges } from "../comp/audio.js";
 import { generate } from "../comp/codegen.js";
 import { COMPONENT_INFO, SFX_PRESETS, validateLayer } from "../comp/composition.js";
 import { formatOf, toSeconds } from "../comp/engine.js";
-import { PALETTE_ROLES as COMP_ROLES, palette, POSITIONS as COMP_POSITIONS } from "../comp/paint.js";
+import { isolate, PALETTE_ROLES as COMP_ROLES, palette, POSITIONS as COMP_POSITIONS } from "../comp/paint.js";
 import { fitVideo, renderComposition } from "../comp/render.js";
 import {
   acceptAudio,
@@ -227,11 +227,17 @@ export const Editor = (() => {
 
       <section class="ed-stage">
         <div class="ed-screen">
+          <!-- The frame is the composition's, not the footage's. Before this
+               the preview showed the clip at its own aspect ratio and only the
+               export obeyed an accepted reframe, so 9:16 looked like a promise
+               the file kept and the screen did not. -->
+          <div class="ed-frame">
           <video class="ed-video" playsinline></video>
           <!-- Graphics are drawn here, by the same function the export calls.
                A DOM overlay would have meant two renderers for one spec, and
                a preview that quietly stops matching the file. -->
           <canvas class="ed-gfx"></canvas>
+          </div>
           <p class="ed-empty">Add a clip from the library to start cutting.</p>
         </div>
         <div class="ed-transport">
@@ -303,6 +309,7 @@ export const Editor = (() => {
     const gfx = body.querySelector(".ed-gfx");
     const gfxCtx = gfx.getContext("2d");
     const screen = body.querySelector(".ed-screen");
+    const frameBox = body.querySelector(".ed-frame");
     const empty = body.querySelector(".ed-empty");
     const libList = body.querySelector(".ed-lib-list");
     const tl = body.querySelector(".tl");
@@ -621,6 +628,126 @@ export const Editor = (() => {
     }
 
 
+    /* ---------------- handling a graphic on the picture ----------------
+     *
+     * A layer an agent proposed is a spec, and until now the only way to
+     * change it was to argue with the agent about numbers. Selecting one puts
+     * handles on the preview: drag the middle to move it, drag a corner to
+     * size it. What the drag writes is the same `point`, `width` and `height`
+     * the spec already had, so the thing being edited is still one object and
+     * a person and an agent are still editing the same fields.
+     *
+     * Only layers that carry a free point can be dragged. A lower third is
+     * anchored by its component and moving it by hand would be a lie about
+     * what the spec says.
+     */
+    const MOVABLE = new Set(["text", "shape", "callout_arrow"]);
+
+    const selectedLayer = () => liveLayers().find((l) => l.id === selected) || null;
+
+    /** The layer's box on the preview, in canvas pixels. */
+    function layerBox(layer, w, h) {
+      const p = layer.props?.point;
+      const cx = (p && Number.isFinite(p.x) ? p.x : 0.5) * w;
+      const cy = (p && Number.isFinite(p.y) ? p.y : 0.5) * h;
+      const bw = (Number(layer.props?.width) || 0.24) * w;
+      const bh = (Number(layer.props?.height) || 0.18) * h;
+      return { cx, cy, w: bw, h: bh, x: cx - bw / 2, y: cy - bh / 2 };
+    }
+
+    /** Draw the selection box and its corner. */
+    function paintHandles(ctx, w, h) {
+      const layer = selectedLayer();
+      if (!layer || !MOVABLE.has(layer.component)) return;
+      const fps = composition().fps || 30;
+      const f = Math.round(playhead * fps);
+      if (f < layer.from || f > layer.from + layer.durationInFrames) return;
+
+      const b = layerBox(layer, w, h);
+      isolate(ctx, () => {
+        ctx.strokeStyle = pal.accent;
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([5, 4]);
+        ctx.strokeRect(b.x, b.y, b.w, b.h);
+        ctx.setLineDash([]);
+        ctx.fillStyle = pal.accent;
+        for (const [hx, hy] of [[b.x, b.y], [b.x + b.w, b.y], [b.x, b.y + b.h], [b.x + b.w, b.y + b.h]])
+          ctx.fillRect(hx - 4, hy - 4, 8, 8);
+      });
+    }
+
+    /* Dragging on the picture. */
+    let onFrame = null;
+
+    /** Only intercept clicks when there is something on the picture to grab. */
+    function armFrameGrabs() {
+      const layer = selectedLayer();
+      gfx.style.pointerEvents = layer && MOVABLE.has(layer.component) ? "auto" : "none";
+      gfx.style.cursor = layer && MOVABLE.has(layer.component) ? "move" : "";
+    }
+
+    gfx.addEventListener("pointerdown", (e) => {
+      const layer = selectedLayer();
+      if (!layer || !MOVABLE.has(layer.component)) return;
+      const r = gfx.getBoundingClientRect();
+      const b = layerBox(layer, r.width, r.height);
+      const x = e.clientX - r.left;
+      const y = e.clientY - r.top;
+
+      const nearCorner = Math.abs(x - (b.x + b.w)) < 12 && Math.abs(y - (b.y + b.h)) < 12;
+      const inside = x >= b.x - 6 && x <= b.x + b.w + 6 && y >= b.y - 6 && y <= b.y + b.h + 6;
+      if (!inside && !nearCorner) return;
+
+      onFrame = { id: layer.id, mode: nearCorner ? "size" : "move", x, y, rect: r };
+      gfx.setPointerCapture?.(e.pointerId);
+      e.preventDefault();
+    });
+
+    gfx.addEventListener("pointermove", (e) => {
+      if (!onFrame) return;
+      const layer = liveLayers().find((l) => l.id === onFrame.id);
+      if (!layer) return;
+      const r = gfx.getBoundingClientRect();
+      const x = e.clientX - r.left;
+      const y = e.clientY - r.top;
+      const dx = (x - onFrame.x) / r.width;
+      const dy = (y - onFrame.y) / r.height;
+      onFrame.x = x; onFrame.y = y;
+
+      const p = layer.props?.point ?? { x: 0.5, y: 0.5 };
+      if (onFrame.mode === "move") {
+        editLayer(layer.id, {
+          props: {
+            point: {
+              x: Math.max(0, Math.min(1, (Number(p.x) || 0.5) + dx)),
+              y: Math.max(0, Math.min(1, (Number(p.y) || 0.5) + dy)),
+            },
+          },
+        }, e);
+      } else {
+        editLayer(layer.id, {
+          props: {
+            width: Math.max(0.02, Math.min(1.5, (Number(layer.props?.width) || 0.24) + dx * 2)),
+            height: Math.max(0.02, Math.min(1.5, (Number(layer.props?.height) || 0.18) + dy * 2)),
+          },
+        }, e);
+      }
+    });
+
+    const endFrameDrag = () => {
+      if (!onFrame) return;
+      onFrame = null;
+      renderInspector();
+    };
+    gfx.addEventListener("pointerup", endFrameDrag);
+    gfx.addEventListener("pointercancel", endFrameDrag);
+
+    /** The preview frame takes the composition's aspect ratio. */
+    function paintFrame() {
+      const shape = formatOf(composition().format);
+      frameBox.style.setProperty("--ar", `${shape.width} / ${shape.height}`);
+    }
+
     function renderTrack() {
       empty.hidden = timeline.length > 0 || lanes.some((l) => l.items.length)
         || liveLayers().length > 0 || liveAudio().length > 0;
@@ -666,6 +793,7 @@ export const Editor = (() => {
       laneBox.innerHTML = rows.join("");
       ruler.innerHTML = rulerHtml();
       paintPlayhead();
+      paintFrame();
     }
 
     /** Cheap, and called every animation frame while playing. */
@@ -900,6 +1028,7 @@ export const Editor = (() => {
               <input type="color" data-blank="colour" value="${seg.colour || "#101018"}">
             </label>
             <button class="btn btn-ghost btn-wide" data-blank="theme">Use the theme ground</button>
+            ${transitionFields(seg)}
           </div>` + graphicsHtml() + compositionHtml();
         return;
       }
@@ -935,6 +1064,8 @@ export const Editor = (() => {
           </label>
 
           <button class="btn btn-ghost btn-wide" data-set="mute" aria-pressed="${seg.muted}">${seg.muted ? "Muted" : "Sound on"}</button>
+
+          ${transitionFields(seg)}
 
           <div class="insp-row">
             <button class="btn btn-mini" data-move="-1" aria-label="Move earlier">←</button>
@@ -1850,6 +1981,13 @@ export const Editor = (() => {
         return void seekTo(playhead);
       }
 
+      const trans = e.target.dataset.trans;
+      if (trans) {
+        const tseg = timeline.find((x) => x.uid === selected);
+        if (tseg) setTransition(tseg, e.target.value, trans, e);
+        return;
+      }
+
       const set = e.target.dataset.set;
       const seg = timeline.find((s) => s.uid === selected);
       if (!set || !seg) return;
@@ -2203,6 +2341,93 @@ export const Editor = (() => {
     }
 
     /**
+     * A transition on a clip, by hand.
+     *
+     * It is an `effect` layer of kind `dip`, which is exactly what the agent
+     * would propose for the same thing — the person is not getting a second,
+     * lesser mechanism. Because it is a layer it draws through the one
+     * renderer, so it is in the export the moment it is on the timeline, and
+     * it can be dragged, retimed and deleted like anything else.
+     */
+    const TRANSITIONS = {
+      none: null,
+      dip_black: { role: "invert", label: "Dip to black" },
+      dip_white: { role: "plain", label: "Dip to white" },
+      flash: { role: "plain", label: "Flash", effect: "flash" },
+      dip_accent: { role: "accent", label: "Dip to accent" },
+    };
+
+    /** Where a segment starts and ends in the finished cut. */
+    function boundsOf(seg) {
+      let at = 0;
+      for (const s2 of timeline) {
+        const d = segDuration(s2);
+        if (s2 === seg) return { start: at, end: at + d };
+        at += d;
+      }
+      return null;
+    }
+
+    function setTransition(seg, kind, edge, e) {
+      const fps = composition().fps || 30;
+      const spec = TRANSITIONS[kind];
+      const bounds = boundsOf(seg);
+      if (!bounds) return;
+
+      // One transition per edge of a clip: adding another replaces it rather
+      // than stacking two dips on the same cut.
+      const tag = `${seg.uid}:${edge}`;
+      liveLayers()
+        .filter((l) => l.props?.tag === tag)
+        .forEach((l) => removeLayer(l.id, e));
+
+      if (!spec) return void refresh();
+
+      const seconds = 0.6;
+      const at = edge === "in" ? bounds.start : Math.max(0, bounds.end - seconds);
+      const made = proposeLayer(
+        {
+          component: "effect",
+          effect: spec.effect || "dip",
+          strength: 1,
+          tag,
+          at_seconds: at,
+          duration_seconds: seconds,
+          palette_role: spec.role,
+          origin: "human",
+        },
+        { cutSeconds: total() }
+      );
+      if (!made.ok) return void Desk.toast(made.error || "Could not add the transition.", "bad");
+      acceptLayer(made.layer.id, e);
+      refresh();
+    }
+
+    /** The transition already on an edge, if any. */
+    /** The two transition pickers, for whatever kind of clip is selected. */
+    function transitionFields(seg) {
+      const pick = (edge) => `
+        <label class="field">
+          <span>${edge === "in" ? "In" : "Out"}</span>
+          <select data-trans="${edge}">
+            ${Object.entries(TRANSITIONS).map(([k, v]) =>
+              `<option value="${k}" ${k === transitionOn(seg, edge) ? "selected" : ""}>${v ? v.label : "No transition"}</option>`).join("")}
+          </select>
+        </label>`;
+      return pick("in") + pick("out");
+    }
+
+    function transitionOn(seg, edge) {
+      const tag = `${seg.uid}:${edge}`;
+      const l = liveLayers().find((x) => x.props?.tag === tag);
+      if (!l) return "none";
+      const found = Object.entries(TRANSITIONS).find(
+        ([, v]) => v && v.role === l.palette_role && (v.effect || "dip") === l.props?.effect
+      );
+      return found ? found[0] : "none";
+    }
+
+    /**
      * Split whatever is under the playhead.
      *
      * On the spine this is two segments of one clip: the same source, cut at
@@ -2304,6 +2529,7 @@ export const Editor = (() => {
       selected = uid;
       renderTrack();
       renderInspector();
+      armFrameGrabs();
     }
 
     zoom.addEventListener("input", () => {
@@ -2368,7 +2594,7 @@ export const Editor = (() => {
 
       const onBlank = segmentAt(playhead)?.seg?.blank === true;
       const anything = liveGraphics().length || liveLayers().length || composition().pendingFormat
-        || hasOverlayPicture() || onBlank;
+        || hasOverlayPicture() || onBlank || selectedLayer();
       if (!anything) {
         // Clear once, then stop drawing. With nothing to paint this loop was
         // burning a frame budget forever, including while minimised.
@@ -2423,6 +2649,10 @@ export const Editor = (() => {
         guides: Boolean(composition().pendingFormat),
       });
 
+      // On top of everything, so the box you are dragging is never behind the
+      // thing it is selecting.
+      paintHandles(gfxCtx, w, h);
+
       gfxFrame = requestAnimationFrame(paintGraphics);
     }
     gfxFrame = requestAnimationFrame(paintGraphics);
@@ -2436,6 +2666,7 @@ export const Editor = (() => {
       // The graphics and sound lanes are drawn from the composition, so a
       // staged layer or sound has to reach the track too, not just the list.
       renderTrack();
+      paintFrame();
       renderCode();
     });
     insp.addEventListener("focusout", () => {

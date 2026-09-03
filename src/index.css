@@ -991,3 +991,27 @@
   bottom: auto;
   height: 38px;
 }
+
+/* ---- the preview frame ----
+   The composition decides the shape of the picture, so the preview is a box
+   of that aspect ratio with the footage covering it. Reframing to 9:16 now
+   changes what you are looking at, not only what gets written. */
+.ed-frame {
+  position: relative;
+  aspect-ratio: var(--ar, 16 / 9);
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: 100%;
+  overflow: hidden;
+  background: #10121a;
+  transition: aspect-ratio .2s ease;
+}
+.ed-frame .ed-video { width: 100%; height: 100%; max-width: none; max-height: none; object-fit: cover; }
+.ed-frame .ed-gfx { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+@media (prefers-reduced-motion: reduce) { .ed-frame { transition: none; } }
+
+/* The graphics canvas only takes the pointer when there is a handle to grab;
+   otherwise it would swallow every click meant for the picture behind it. */
+.ed-frame .ed-gfx { pointer-events: none; }
