@@ -11,6 +11,7 @@ import { Desk } from "../legacy/shell.js";
 import { Clips, Store, timecode } from "../legacy/store.js";
 import { COMP_TOOLS } from "./comp-tools.js";
 import { fail, json, NO_INPUT, READ_ONLY } from "./result.js";
+import { skillNudge } from "./nudge.js";
 
 /**
  * The site tools.
@@ -59,31 +60,6 @@ const round = (n) => Math.round((Number(n) || 0) * 100) / 100;
  * It is a suggestion and nothing more. There is no mechanism here for making an
  * agent read anything, and there should not be.
  */
-async function skillNudge() {
-  try {
-    const [context, skills] = await Promise.all([currentSignals(), allSkills()]);
-    const matches = matchSkills(skills, context)
-      .filter((m) => !loadedAt(m.skill.id))
-      .slice(0, 2);
-    if (matches.length === 0) return {};
-
-    return {
-      suggested_skills: matches.map(({ skill, hits }) => ({
-        id: skill.id,
-        name: skill.name,
-        use_when: skill.description,
-        matched: hits,
-      })),
-      suggested_skills_note:
-        "The person left these instructions for this exact situation, and the page matched them against what is on screen right now. " +
-        "Load the first one with load_ai_skill before you answer, and follow it. Their instruction for how they want this done beats your default.",
-    };
-  } catch {
-    // A nudge is a courtesy. If the page cannot work out what it is doing, the
-    // tool the agent actually asked for still answers.
-    return {};
-  }
-}
 
 /* ---------------------------------------------------------------- desktop */
 
