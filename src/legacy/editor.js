@@ -34,6 +34,7 @@ import {
   pendingCount,
   proposeLayer,
   editLayer,
+  editAudio,
   rejectAudio,
   rejectFormat,
   rejectLayer,
@@ -181,6 +182,35 @@ export const Editor = (() => {
     return seg;
   }
 
+  /**
+   * A blank clip.
+   *
+   * Until now a graphic had to sit on footage, which meant you could not build
+   * a title sequence, a lower-third pack or an animated card without shooting
+   * something first to put underneath it. A blank is a segment like any other
+   * — it takes up time on the spine, it trims, it splits — it just paints a
+   * colour instead of decoding a video. Everything downstream treats it as a
+   * segment, so the transcript, the export and the cut tools needed no special
+   * case beyond "there is no picture to draw".
+   */
+  function addBlank({ seconds = 5, colour = null, select = true } = {}) {
+    const seg = {
+      uid: `seg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      clipId: null,
+      blank: true,
+      colour,                 // null means the theme's own ground
+      in: 0,
+      out: Math.max(0.5, Math.min(60, seconds)),
+      filter: "none",
+      speed: 1,
+      muted: true,
+    };
+    timeline.push(seg);
+    if (select) selected = seg.uid;
+    refresh();
+    return seg;
+  }
+
   /* ---------------- window UI ---------------- */
 
   function build(body, win) {
@@ -236,6 +266,7 @@ export const Editor = (() => {
           <div class="tl-tools">
             <button class="btn btn-mini" data-act="split" title="Split the clip under the playhead (S)">Split</button>
             <button class="btn btn-mini" data-act="add-text" title="Add a text clip at the playhead (T)">Text</button>
+            <button class="btn btn-mini" data-act="add-blank" title="Add a blank clip to build graphics on (B)">Blank</button>
             <button class="btn btn-mini" data-act="add-lane" title="Add another video lane">+ Video</button>
             <button class="btn btn-mini" data-act="add-audio" title="Add another audio lane">+ Audio</button>
             <input type="file" accept="audio/*" multiple hidden data-act="audio-file">
@@ -482,14 +513,19 @@ export const Editor = (() => {
       return timeline.map((seg) => {
         const dur = segDuration(seg);
         const clip = byId.get(seg.clipId);
+        const name = seg.blank ? "Blank" : (clip?.name || "Missing clip");
         const html = `
-          <div class="tl-item tl-item--spine" draggable="true" data-seg="${seg.uid}"
-               style="left:${pctOf(at)}%; width:${pctOf(dur)}%; --thumb:${clip?.thumb ? `url('${clip.thumb}')` : "none"}"
+          <div class="tl-item tl-item--spine ${seg.blank ? "tl-item--blank" : ""} ${seg.status === "proposed" ? "is-proposed" : ""}" draggable="true" data-seg="${seg.uid}"
+               style="left:${pctOf(at)}%; width:${pctOf(dur)}%; --thumb:${clip?.thumb ? `url('${clip.thumb}')` : "none"}${seg.colour ? `; background-color:${seg.colour}` : ""}"
                role="button" tabindex="0" aria-pressed="${seg.uid === selected}"
-               aria-label="${Desk.esc(clip?.name || "Missing clip")}, ${timecode(dur)}">
+               aria-label="${Desk.esc(name)}, ${timecode(dur)}">
             <span class="tl-grip tl-grip--in" data-grip="in" data-seg="${seg.uid}"></span>
-            <span class="tl-item-name">${Desk.esc(clip?.name || "Missing clip")}</span>
+            <span class="tl-item-name">${Desk.esc(name)}</span>
             <span class="tl-item-time mono">${timecode(dur)}</span>
+            ${seg.status === "proposed" ? `<span class="tl-ask">
+              <button class="btn btn-mini btn-accent" data-take-blank="${seg.uid}">Keep</button>
+              <button class="btn btn-mini btn-danger" data-drop-blank="${seg.uid}">Drop</button>
+            </span>` : ""}
             <span class="tl-grip tl-grip--out" data-grip="out" data-seg="${seg.uid}"></span>
           </div>`;
         at += dur;
@@ -505,36 +541,97 @@ export const Editor = (() => {
      * proposed it. Two representations of one list is how a preview stops
      * matching a file.
      */
-    function graphicsLaneHtml() {
-      const fps = composition().fps || 30;
-      return liveLayers().map((l) => {
-        const at = l.from / fps;
-        const dur = Math.max(0.2, l.durationInFrames / fps);
-        // validateLayer nests the words under props; the layer itself carries
-        // only timing and placement.
-        const words = (l.props?.text || l.props?.items?.[0] || l.component || "Graphic").toString();
-        return `
-          <div class="tl-item tl-item--gfx ${l.status === "proposed" ? "is-proposed" : ""}"
-               data-layer="${l.id}" style="left:${pctOf(at)}%; width:${pctOf(dur)}%"
-               role="button" tabindex="0" aria-pressed="${l.id === selected}"
-               aria-label="${Desk.esc(words)}, ${timecode(dur)}">
-            <span class="tl-grip tl-grip--in" data-grip="in" data-layer="${l.id}"></span>
-            <span class="tl-item-name">${Desk.esc(words.slice(0, 40))}</span>
-            <span class="tl-item-time mono">${l.component}</span>
-            <span class="tl-grip tl-grip--out" data-grip="out" data-layer="${l.id}"></span>
-          </div>`;
-      }).join("");
+    /**
+     * Stack things that overlap.
+     *
+     * Two graphics at the same second on one row draw on top of each other and
+     * neither label can be read. Packing them into sub-rows — the first row
+     * that is free at that moment — is what every editor does, and it costs
+     * one pass over a list that is never long.
+     */
+    const MAX_ROWS = 4;
+
+    function pack(items) {
+      const rowsEnd = [];
+      return items.map((it) => {
+        let row = rowsEnd.findIndex((end) => it.start >= end - 0.001);
+        if (row === -1) {
+          // Past the cap the lane would push the picture off the screen, so it
+          // wraps and two labels overlap instead. Twenty graphics on one second
+          // is a state worth showing badly rather than a state worth hiding.
+          row = rowsEnd.length < MAX_ROWS ? rowsEnd.length : rowsEnd.indexOf(Math.min(...rowsEnd));
+          if (rowsEnd.length < MAX_ROWS) rowsEnd.push(0);
+        }
+        rowsEnd[row] = it.start + it.length;
+        return { ...it, row };
+      });
     }
 
+    /** How tall a lane has to be to show every row it packed into. */
+    const laneRows = (packed) => Math.max(1, ...packed.map((p) => p.row + 1));
+
+    function graphicsLaneHtml() {
+      const fps = composition().fps || 30;
+      const packed = pack(liveLayers().map((l) => ({
+        l, start: l.from / fps, length: Math.max(0.2, l.durationInFrames / fps),
+      })));
+      const rows = laneRows(packed);
+      return {
+        rows,
+        html: packed.map(({ l, start, length, row }) => {
+          const words = (l.props?.text || l.props?.items?.[0] || l.props?.shape || l.props?.effect || l.component || "Graphic").toString();
+          return `
+            <div class="tl-item tl-item--gfx ${l.status === "proposed" ? "is-proposed" : ""}"
+                 data-layer="${l.id}"
+                 style="left:${pctOf(start)}%; width:${pctOf(length)}%; --row:${row}"
+                 role="button" tabindex="0" aria-pressed="${l.id === selected}"
+                 aria-label="${Desk.esc(words)}, ${timecode(length)}">
+              <span class="tl-grip tl-grip--in" data-grip="in" data-layer="${l.id}"></span>
+              <span class="tl-item-name">${Desk.esc(words.slice(0, 40))}</span>
+              <span class="tl-item-time mono">${l.component}</span>
+              <span class="tl-grip tl-grip--out" data-grip="out" data-layer="${l.id}"></span>
+            </div>`;
+        }).join(""),
+      };
+    }
+
+    function sfxLaneHtml() {
+      const fps = composition().fps || 30;
+      const packed = pack(liveAudio().map((a) => ({
+        a, start: a.from / fps, length: Math.max(0.15, (a.durationInFrames || fps) / fps),
+      })));
+      const rows = laneRows(packed);
+      return {
+        rows,
+        html: packed.map(({ a, start, length, row }) => {
+          const name = a.kind === "sfx" ? a.preset : (a.name || "music bed");
+          return `
+            <div class="tl-item tl-item--sfx ${a.status === "proposed" ? "is-proposed" : ""}"
+                 data-sound="${a.id}"
+                 style="left:${pctOf(start)}%; width:${pctOf(length)}%; --row:${row}"
+                 role="button" tabindex="0" aria-pressed="${a.id === selected}"
+                 aria-label="${Desk.esc(String(name))}, ${timecode(length)}">
+              <span class="tl-grip tl-grip--in" data-grip="in" data-sound="${a.id}"></span>
+              <span class="tl-item-name">${Desk.esc(String(name))}</span>
+              <span class="tl-item-time mono">${a.kind}${a.duck ? " · ducks" : ""}</span>
+              <span class="tl-grip tl-grip--out" data-grip="out" data-sound="${a.id}"></span>
+            </div>`;
+        }).join(""),
+      };
+    }
+
+
     function renderTrack() {
-      empty.hidden = timeline.length > 0 || lanes.some((l) => l.items.length) || liveLayers().length > 0;
+      empty.hidden = timeline.length > 0 || lanes.some((l) => l.items.length)
+        || liveLayers().length > 0 || liveAudio().length > 0;
 
       const rows = [];
       // Video lanes read top-down like every editor: the newest overlay on
       // top, the spine at the bottom, graphics above the pictures.
-      rows.push(`<div class="tl-lane tl-lane--gfx" data-lane="gfx">
+      const gfxLane = graphicsLaneHtml();
+      rows.push(`<div class="tl-lane tl-lane--gfx" data-lane="gfx" style="--rows:${gfxLane.rows}">
         <span class="tl-lane-name mono">GFX</span>
-        <div class="tl-lane-body">${graphicsLaneHtml()}</div>
+        <div class="tl-lane-body">${gfxLane.html}</div>
       </div>`);
 
       for (const lane of lanes.filter((l) => l.kind === "video").slice().reverse()) {
@@ -550,6 +647,12 @@ export const Editor = (() => {
         <div class="tl-lane-body">${
           timeline.length ? spineHtml() : `<p class="track-empty">Drag a clip here, or add one from the library.</p>`
         }</div>
+      </div>`);
+
+      const sfxLane = sfxLaneHtml();
+      rows.push(`<div class="tl-lane tl-lane--sfx" data-lane="sfx" style="--rows:${sfxLane.rows}">
+        <span class="tl-lane-name mono">SFX</span>
+        <div class="tl-lane-body">${sfxLane.html}</div>
       </div>`);
 
       for (const lane of lanes.filter((l) => l.kind === "audio")) {
@@ -783,6 +886,24 @@ export const Editor = (() => {
           graphicsHtml() + compositionHtml();
         return;
       }
+      if (seg.blank) {
+        insp.innerHTML = `
+          <div class="ed-head"><span>Blank</span></div>
+          <div class="insp-body">
+            <p class="insp-name">A ground to build on.</p>
+            <label class="field">
+              <span>Seconds <b class="mono">${(seg.out - seg.in).toFixed(1)}</b></span>
+              <input type="range" data-blank="len" min="0.5" max="60" step="0.5" value="${seg.out - seg.in}">
+            </label>
+            <label class="field">
+              <span>Colour</span>
+              <input type="color" data-blank="colour" value="${seg.colour || "#101018"}">
+            </label>
+            <button class="btn btn-ghost btn-wide" data-blank="theme">Use the theme ground</button>
+          </div>` + graphicsHtml() + compositionHtml();
+        return;
+      }
+
       const clip = byId.get(seg.clipId);
       const max = clip?.duration || seg.out;
       insp.innerHTML = `
@@ -995,6 +1116,21 @@ export const Editor = (() => {
       const at = segmentAt(playhead);
       if (!at) return;
 
+      // A blank has nothing to decode. Park the element and let the graphics
+      // canvas carry the frame.
+      if (at.seg.blank) {
+        video.pause();
+        loaded = null;
+        screen.style.filter = "";
+        syncOverlays(playhead, { play });
+        syncLaneAudio(playhead, { play });
+        scheduler?.seek(playhead);
+        renderClock();
+        paintPlayhead();
+        highlightWord();
+        return;
+      }
+
       const clip = byId.get(at.seg.clipId);
       if (!clip) return;
 
@@ -1024,17 +1160,33 @@ export const Editor = (() => {
       highlightWord();
     }
 
+    let lastTick = 0;
+
     function loop() {
       if (!playing) return;
+      const now = performance.now();
+      const dt = lastTick ? Math.min(0.25, (now - lastTick) / 1000) : 0;
+      lastTick = now;
+
       const at = segmentAt(playhead);
       if (at) {
-        const local = Math.max(0, (video.currentTime - at.seg.in) / at.seg.speed);
-        playhead = at.start + local;
+        if (at.seg.blank) {
+          // Nothing is decoding, so the wall clock is the only clock.
+          playhead += dt;
+          if (playhead >= at.start + segDuration(at.seg) - 0.02) {
+            const next = timeline[timeline.indexOf(at.seg) + 1];
+            if (next) seekTo(at.start + segDuration(at.seg) + 0.01, { play: true });
+            else if (playhead >= total() - 0.02) return stop();
+          }
+        } else {
+          const local = Math.max(0, (video.currentTime - at.seg.in) / at.seg.speed);
+          playhead = at.start + local;
 
-        if (video.currentTime >= at.seg.out - 0.03 || video.ended) {
-          const next = timeline[timeline.indexOf(at.seg) + 1];
-          if (next) seekTo(at.start + segDuration(at.seg) + 0.01, { play: true });
-          else return stop();
+          if (video.currentTime >= at.seg.out - 0.03 || video.ended) {
+            const next = timeline[timeline.indexOf(at.seg) + 1];
+            if (next) seekTo(at.start + segDuration(at.seg) + 0.01, { play: true });
+            else return stop();
+          }
         }
       }
       // Fire any accepted effect the playhead just crossed.
@@ -1048,9 +1200,10 @@ export const Editor = (() => {
     }
 
     async function play() {
-      if (!timeline.length) return;
+      if (!timeline.length && !lanes.some((l) => l.items.length)) return;
       if (playhead >= total() - 0.05) playhead = 0;
       cancelAnimationFrame(raf);
+      lastTick = 0;
       playing = true;
       playBtn.dataset.playing = "true";
       playBtn.setAttribute("aria-label", "Pause");
@@ -1149,10 +1302,11 @@ export const Editor = (() => {
 
     async function runExport() {
       if (!timeline.length) return Desk.toast("Nothing on the timeline to export.", "bad");
+      const firstReal = timeline.find((sg) => !sg.blank);
       stop();
       cancelled = false;
 
-      const first = byId.get(timeline[0].clipId);
+      const first = firstReal ? byId.get(firstReal.clipId) : null;
       const shape = formatOf(composition().format);
       const canvas = document.createElement("canvas");
       // The composition's format decides the file's shape. Before this, the
@@ -1196,6 +1350,11 @@ export const Editor = (() => {
           const at = segmentAt(playhead);
           if (!at) return resolve();
 
+          if (at.seg.blank) {
+            ctx.filter = "none";
+            ctx.fillStyle = at.seg.colour || exportPal.ink;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+          } else {
           ctx.filter = FILTERS[at.seg.filter] || "none";
           try {
             // Cover, not stretch. A 16:9 take in a 9:16 frame with bars down
@@ -1211,6 +1370,7 @@ export const Editor = (() => {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             ctx.drawImage(video, fit.x, fit.y, fit.w, fit.h);
           } catch { /* frame not ready */ }
+          }
 
           // The same functions the preview calls, on the frame being written.
           // Proposals are excluded: only what the editor accepted is in the
@@ -1237,12 +1397,21 @@ export const Editor = (() => {
           scheduler?.tick(playhead, liveAudio());
           syncLaneAudio(playhead, { play: true });
 
-          const local = Math.max(0, (video.currentTime - at.seg.in) / at.seg.speed);
-          playhead = at.start + local;
+          if (at.seg.blank) {
+            // Real time, like everything else here: the recorder is capturing
+            // a live canvas, so a blank has to take up its real duration.
+            playhead += 1 / 30;
+          } else {
+            const local = Math.max(0, (video.currentTime - at.seg.in) / at.seg.speed);
+            playhead = at.start + local;
+          }
           fill.style.width = `${Math.min(100, (playhead / duration) * 100)}%`;
           title.textContent = `Exporting… ${timecode(playhead)} of ${timecode(duration)}`;
 
-          if (video.currentTime >= at.seg.out - 0.03 || video.ended) {
+          const done = at.seg.blank
+            ? playhead >= at.start + segDuration(at.seg) - 0.02
+            : video.currentTime >= at.seg.out - 0.03 || video.ended;
+          if (done) {
             const next = timeline[timeline.indexOf(at.seg) + 1];
             if (!next) return resolve();
             seekTo(at.start + segDuration(at.seg) + 0.01, { play: true });
@@ -1559,6 +1728,11 @@ export const Editor = (() => {
       if (act === "import") return fileInput.click();
       if (act === "split") return splitAtPlayhead();
       if (act === "add-text") return addTextClip(e);
+      if (act === "add-blank") {
+        addBlank({ seconds: 5 });
+        Desk.toast("Blank clip added. Put graphics on it.", "good");
+        return rebuildTranscript().then(refresh);
+      }
       if (act === "add-lane") { addLane("video"); Desk.toast("Video lane added. Drag a clip onto it.", "good"); return refresh(); }
       if (act === "add-audio") { addLane("audio"); audioInput.click(); return refresh(); }
       if (act === "export") return runExport();
@@ -1582,6 +1756,17 @@ export const Editor = (() => {
         await rebuildTranscript();
         refresh();
         return seekTo(playhead);
+      }
+
+      const takeBlank = t.closest("[data-take-blank]");
+      if (takeBlank) {
+        Editor.takeBlank(takeBlank.dataset.takeBlank, e);
+        return void rebuildTranscript().then(refresh);
+      }
+      const dropBlank = t.closest("[data-drop-blank]");
+      if (dropBlank) {
+        Editor.dropBlank(dropBlank.dataset.dropBlank, e);
+        return void rebuildTranscript().then(refresh);
       }
 
       const dropLane = t.closest("[data-drop-lane]");
@@ -1655,6 +1840,16 @@ export const Editor = (() => {
         }
       }
 
+      const blank = e.target.dataset.blank;
+      if (blank) {
+        const bseg = timeline.find((x) => x.uid === selected);
+        if (!bseg) return;
+        if (blank === "len") bseg.out = bseg.in + Number(e.target.value);
+        if (blank === "colour") bseg.colour = e.target.value;
+        refresh();
+        return void seekTo(playhead);
+      }
+
       const set = e.target.dataset.set;
       const seg = timeline.find((s) => s.uid === selected);
       if (!set || !seg) return;
@@ -1676,6 +1871,11 @@ export const Editor = (() => {
         removeLayer(drop.dataset.ldrop, e);
         selected = null;
         return refresh();
+      }
+      if (e.target.dataset.blank === "theme") {
+        const bseg = timeline.find((x) => x.uid === selected);
+        if (bseg) { bseg.colour = null; refresh(); seekTo(playhead); }
+        return;
       }
       if (e.target.dataset.set !== "mute") return;
       const seg = timeline.find((s) => s.uid === selected);
@@ -1725,6 +1925,10 @@ export const Editor = (() => {
         case "t": case "T":
           e.preventDefault();
           return addTextClip(e);
+        case "b": case "B":
+          e.preventDefault();
+          addBlank({ seconds: 5 });
+          return void rebuildTranscript().then(refresh);
         default:
           break;
       }
@@ -1828,6 +2032,7 @@ export const Editor = (() => {
       const item = e.target.closest("[data-item]");
       const seg = e.target.closest("[data-seg]");
       const layer = e.target.closest("[data-layer]");
+      const sound = e.target.closest("[data-sound]");
       const onHead = e.target.closest("[data-playhead]");
 
       if (grip) {
@@ -1837,6 +2042,7 @@ export const Editor = (() => {
           itemUid: grip.dataset.item || null,
           laneId: grip.dataset.lane || null,
           layerId: grip.dataset.layer || null,
+          soundId: grip.dataset.sound || null,
           from: timeAtPointer(e),
         };
       } else if (onHead) {
@@ -1847,6 +2053,9 @@ export const Editor = (() => {
       } else if (layer) {
         select(layer.dataset.layer);
         gesture = { type: "move-layer", layerId: layer.dataset.layer, from: timeAtPointer(e) };
+      } else if (sound) {
+        select(sound.dataset.sound);
+        gesture = { type: "move-sound", soundId: sound.dataset.sound, from: timeAtPointer(e) };
       } else if (seg) {
         select(seg.dataset.seg);
         return;
@@ -1884,6 +2093,17 @@ export const Editor = (() => {
         if (!it) return;
         it.at = Math.max(0, it.at + (now - gesture.from));
         gesture.from = now;
+        renderTrack();
+        return;
+      }
+
+      if (gesture.type === "move-sound") {
+        const fps = composition().fps || 30;
+        const frames = Math.round((now - gesture.from) * fps);
+        if (frames === 0) return;
+        gesture.from = now;
+        const a = liveAudio().find((x) => x.id === gesture.soundId);
+        if (a) editAudio(a.id, { from: a.from + frames }, e);
         renderTrack();
         return;
       }
@@ -1941,6 +2161,20 @@ export const Editor = (() => {
         const fps = composition().fps || 30;
         const frames = Math.round(delta * fps);
         if (frames !== 0) stretchLayer(g.layerId, g.edge, frames, e);
+        return;
+      }
+      if (g.soundId) {
+        const fps = composition().fps || 30;
+        const frames = Math.round(delta * fps);
+        if (frames === 0) return;
+        const a = liveAudio().find((x) => x.id === g.soundId);
+        if (!a) return;
+        if (g.edge === "in") {
+          const from = Math.max(0, a.from + frames);
+          editAudio(a.id, { from, durationInFrames: a.durationInFrames - (from - a.from) }, e);
+        } else {
+          editAudio(a.id, { durationInFrames: a.durationInFrames + frames }, e);
+        }
       }
     }
 
@@ -2132,7 +2366,9 @@ export const Editor = (() => {
       // times a second rather than sixty.
       if (palAge++ % 20 === 0) pal = palette();
 
-      const anything = liveGraphics().length || liveLayers().length || composition().pendingFormat || hasOverlayPicture();
+      const onBlank = segmentAt(playhead)?.seg?.blank === true;
+      const anything = liveGraphics().length || liveLayers().length || composition().pendingFormat
+        || hasOverlayPicture() || onBlank;
       if (!anything) {
         // Clear once, then stop drawing. With nothing to paint this loop was
         // burning a frame budget forever, including while minimised.
@@ -2160,6 +2396,11 @@ export const Editor = (() => {
 
       gfxCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
       gfxCtx.clearRect(0, 0, w, h);
+      // A blank has no picture under the canvas, so the canvas is the picture.
+      if (onBlank) {
+        gfxCtx.fillStyle = segmentAt(playhead).seg.colour || pal.ink;
+        gfxCtx.fillRect(0, 0, w, h);
+      }
       // Pictures first, then graphics over them: the same order the export
       // uses, and the reason an overlay lane covers the spine rather than
       // hiding behind it.
@@ -2192,6 +2433,9 @@ export const Editor = (() => {
       // Rebuilding the panel mid-sentence takes the caret with it, so the
       // panel holding focus is left alone and repaints when focus leaves.
       if (!insp.contains(document.activeElement)) renderInspector();
+      // The graphics and sound lanes are drawn from the composition, so a
+      // staged layer or sound has to reach the track too, not just the list.
+      renderTrack();
       renderCode();
     });
     insp.addEventListener("focusout", () => {
@@ -2270,7 +2514,33 @@ export const Editor = (() => {
     clipFor: (clipId) => byId.get(clipId) ?? null,
     SPEEDS,
 
-    clear() { timeline = []; selected = null; refresh(); },
+    clear() { timeline = []; lanes = []; selected = null; refresh(); },
+
+    /** Stage a blank clip. Proposed, like everything an agent asks for: it is
+     *  a dashed block on the spine until a person accepts it. */
+    stageBlank({ seconds = 5, colour = null } = {}) {
+      const seg = addBlank({ seconds, colour, select: false });
+      seg.status = "proposed";
+      refresh();
+      return seg;
+    },
+
+    /** A person accepting a staged blank. Refuses without a real click. */
+    takeBlank(uid, gesture) {
+      if (!(gesture?.isTrusted === true || gesture?.nativeEvent?.isTrusted === true)) return false;
+      const seg = timeline.find((x) => x.uid === uid);
+      if (!seg || seg.status !== "proposed") return false;
+      delete seg.status;
+      refresh();
+      return true;
+    },
+
+    dropBlank(uid, gesture) {
+      if (!(gesture?.isTrusted === true || gesture?.nativeEvent?.isTrusted === true)) return false;
+      timeline = timeline.filter((x) => x.uid !== uid);
+      refresh();
+      return true;
+    },
     trimSelected(inS, outS) {
       const seg = timeline[timeline.length - 1];
       if (!seg) return;

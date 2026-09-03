@@ -21,7 +21,10 @@
  */
 
 import { clamp01, interpolate, phase, spring } from "./engine.js";
-import { anchor, box, DARK, isolate, label, measure, panel, scrim, wrap } from "./paint.js";
+import {
+  anchor, box, DARK, font, FONTS, isHex, isolate, label, measure, PALETTE_ROLES,
+  panel, roleColour, roundedPath, scrim, wrap,
+} from "./paint.js";
 
 /* ----------------------------------------------------------------- helpers */
 
@@ -757,6 +760,376 @@ const QuoteCard = {
 
 /* -------------------------------------------------------------- the library */
 
+
+/* ------------------------------------------------ the open-ended three ----
+ *
+ * The eleven above are opinionated: a lower third knows where it sits and what
+ * it weighs, and that is why an agent can ask for one in a sentence. What they
+ * cannot do is anything their author did not think of, and "put a pink circle
+ * behind the logo and fade it in" is a perfectly ordinary request that none of
+ * them can express.
+ *
+ * These three are the escape hatch. They take the parameters a motion designer
+ * expects — typeface, size, weight, colour, placement, rotation, an in and out
+ * animation — and they draw exactly what they are told. The trade is that the
+ * caller now has to have taste; the point is that the tool no longer decides
+ * on their behalf.
+ */
+
+/** in/out motion, shared by the open components. */
+const MOTIONS = ["fade", "rise", "drop", "slide_left", "slide_right", "pop", "grow", "none"];
+
+/**
+ * One motion applied to the canvas, as a transform plus an alpha.
+ *
+ * Returns rather than draws, so a component can combine it with its own
+ * geometry instead of having the movement imposed on it.
+ */
+function motion(name, { enter, exit, scale }) {
+  const k = Math.min(enter, exit);
+  const away = 1 - enter;
+  switch (name) {
+    case "none": return { alpha: 1, dx: 0, dy: 0, k: 1 };
+    case "rise": return { alpha: k, dx: 0, dy: away * 48 * scale, k: 1 };
+    case "drop": return { alpha: k, dx: 0, dy: -away * 48 * scale, k: 1 };
+    case "slide_left": return { alpha: k, dx: away * 90 * scale, dy: 0, k: 1 };
+    case "slide_right": return { alpha: k, dx: -away * 90 * scale, dy: 0, k: 1 };
+    case "pop": return { alpha: k, dx: 0, dy: 0, k: 0.86 + 0.14 * enter };
+    case "grow": return { alpha: k, dx: 0, dy: 0, k: Math.max(0.02, enter) };
+    case "fade":
+    default: return { alpha: k, dx: 0, dy: 0, k: 1 };
+  }
+}
+
+/** Where a layer sits: a free point if it was given one, else a named anchor. */
+function placement(f) {
+  const p = f.props.point;
+  if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) {
+    return { x: f.width * p.x, y: f.height * p.y, ax: 0.5, ay: 0.5, free: true };
+  }
+  const a = anchor(f.position, { width: f.width, height: f.height, safe: f.safe });
+  return { ...a, free: false };
+}
+
+/**
+ * Words, with the controls a person expects to have over words.
+ *
+ * Every other text in this library is styled by its component. This one is
+ * styled by whoever asked for it: face, size, weight, colour, tracking,
+ * alignment, an optional plate behind it and an optional outline. It is the
+ * answer to "I could not change the font colour or style", and it is the
+ * component an agent should reach for when the preset ones do not fit.
+ */
+const TextBlock = {
+  key: "text",
+  name: "TextBlock",
+  blurb: "Free text you control completely: typeface, size, colour, alignment, tracking, a plate behind it, an outline, and how it enters and leaves. Use this when none of the preset graphics fit, or when the styling is the point.",
+  needs: ["text"],
+  uses: ["font", "size", "align", "tracking", "backdrop", "outline", "line_height", "point", "rotation", "animation"],
+  defaults: { durationInFrames: 90, position: "center", palette_role: "plain" },
+  fields: {
+    text: { type: "string", max: 220, note: "The words. Newlines are kept, so you can set two lines deliberately." },
+    font: { type: "string", note: 'One of: display, displayHeavy, body, bodyBold, mono. "displayHeavy" is the headline weight.' },
+    size: { type: "number", note: "Type size in points of a 1080-tall frame, 12 to 220. It scales with the format, so one number is right in every aspect ratio." },
+    align: { type: "string", note: "left, center or right. Also decides which way the block grows from its anchor." },
+    tracking: { type: "number", note: "Letter spacing as a fraction of the size, -0.05 to 0.4. Small caps labels want about 0.07." },
+    line_height: { type: "number", note: "Multiple of the size, 0.8 to 2.4. Defaults to 1.18." },
+    backdrop: { type: "string", note: "none, box, or scrim. A box is a plate behind the words; a scrim dims the whole frame so text over busy footage stays readable." },
+    outline: { type: "number", note: "Outline thickness in points of a 1080 frame, 0 to 12. Reads on any background, which a plate does not." },
+    rotation: { type: "number", note: "Degrees, -180 to 180." },
+    point: { type: "object", note: "Free placement as fractions of the frame: {x: 0.5, y: 0.5} is the middle. Leave it out to use `position` instead." },
+    animation: { type: "string", note: `How it enters and leaves: ${MOTIONS.join(", ")}.` },
+  },
+  draw(ctx, f) {
+    const { width: W, height: H, scale: s, props, colour, pal, frame, durationInFrames: D } = f;
+    const { enter, exit } = phase(frame, D, { enter: 12, exit: 10, easing: f.easing });
+    const m = motion(props.animation ?? "fade", { enter, exit, scale: s });
+
+    const size = clampNum(props.size, 12, 220, 54);
+    const family = FONTS[props.font] ? props.font : "display";
+    const align = ["left", "center", "right"].includes(props.align) ? props.align : "center";
+    const tracking = clampNum(props.tracking, -0.05, 0.4, 0);
+    const lh = clampNum(props.line_height, 0.8, 2.4, 1.18) * size * s;
+
+    // Explicit newlines first, then wrap what is still too wide. A person who
+    // typed two lines meant two lines.
+    const maxW = W * (props.point ? 0.9 : 0.86);
+    const lines = String(props.text ?? "")
+      .split(/\r?\n/)
+      .flatMap((line) => wrap(ctx, line, maxW, { family, size, scale: s }));
+
+    const widest = Math.max(1, ...lines.map((l) => measure(ctx, l, { family, size, tracking, scale: s })));
+    const blockH = lines.length * lh;
+    const at = placement(f);
+
+    if (props.backdrop === "scrim") scrim(ctx, W, H, pal.ink, m.alpha * 0.6);
+
+    isolate(ctx, () => {
+      ctx.globalAlpha = m.alpha;
+      ctx.translate(at.x + m.dx, at.y + m.dy);
+      if (props.rotation) ctx.rotate((clampNum(props.rotation, -180, 180, 0) * Math.PI) / 180);
+      if (m.k !== 1) ctx.scale(m.k, m.k);
+
+      // The anchor decides which corner the block hangs from; alignment then
+      // decides where each line sits inside it.
+      const left = at.free
+        ? (align === "center" ? -widest / 2 : align === "right" ? -widest : 0)
+        : -widest * at.ax;
+      const top = at.free ? -blockH / 2 : -blockH * at.ay;
+
+      if (props.backdrop === "box") {
+        const padX = size * s * 0.5;
+        const padY = size * s * 0.34;
+        panel(ctx, left - padX, top - padY, widest + padX * 2, blockH + padY * 2, {
+          fill: colour, border: pal.ink, shadow: pal.ink, radius: size * 0.22, scale: s,
+        });
+      }
+
+      const ink = props.backdrop === "box" ? f.ink : colour;
+      const outline = clampNum(props.outline, 0, 12, 0);
+
+      lines.forEach((line, i) => {
+        const w = measure(ctx, line, { family, size, tracking, scale: s });
+        const x = left + (align === "center" ? widest / 2 - w / 2 : align === "right" ? widest - w : 0);
+        const y = top + i * lh + lh * 0.5;
+        if (outline > 0) {
+          ctx.save();
+          ctx.font = font(family, size * s);
+          ctx.textBaseline = "middle";
+          ctx.lineWidth = outline * s;
+          ctx.strokeStyle = pal.ink;
+          ctx.lineJoin = "round";
+          ctx.strokeText(line, x, y);
+          ctx.restore();
+        }
+        label(ctx, line, x, y, {
+          family, size, colour: ink, align: "left", baseline: "middle", tracking, alpha: 1, scale: s,
+        });
+      });
+    });
+  },
+};
+
+/**
+ * A shape.
+ *
+ * Not decoration for its own sake: a circle behind a face, a bar under a
+ * headline, an arrow that is not the callout arrow's arrow. Everything is a
+ * fraction of the frame, so a shape placed on a 16:9 preview is in the same
+ * place in a 9:16 export.
+ */
+const Shape = {
+  key: "shape",
+  name: "Shape",
+  blurb: "A rectangle, ellipse, pill, triangle, line, arrow, ring or star, in any colour, anywhere in the frame, at any size and rotation. The building block for anything the preset graphics do not cover.",
+  needs: ["shape"],
+  uses: ["width", "height", "point", "fill", "stroke", "stroke_width", "radius", "rotation", "opacity", "animation"],
+  defaults: { durationInFrames: 75, position: "center", palette_role: "accent" },
+  fields: {
+    shape: { type: "string", note: "rect, ellipse, pill, triangle, line, arrow, ring or star." },
+    width: { type: "number", note: "As a fraction of the frame width, 0.01 to 1.5." },
+    height: { type: "number", note: "As a fraction of the frame height, 0.01 to 1.5." },
+    point: { type: "object", note: "Centre, as fractions of the frame: {x: 0.5, y: 0.5}. Leave it out to use `position`." },
+    fill: { type: "string", note: 'A hex like "#F54E00", a palette role, or "none" for an outline only.' },
+    stroke: { type: "string", note: 'Outline colour: a hex, a palette role, or "none".' },
+    stroke_width: { type: "number", note: "Outline thickness in points of a 1080 frame, 0 to 40." },
+    radius: { type: "number", note: "Corner rounding for a rect, in points of a 1080 frame." },
+    rotation: { type: "number", note: "Degrees, -180 to 180." },
+    opacity: { type: "number", note: "0 to 1." },
+    animation: { type: "string", note: `How it enters and leaves: ${MOTIONS.join(", ")}.` },
+  },
+  draw(ctx, f) {
+    const { width: W, height: H, scale: s, props, colour, pal, frame, durationInFrames: D } = f;
+    const { enter, exit } = phase(frame, D, { enter: 10, exit: 9, easing: f.easing });
+    const m = motion(props.animation ?? "pop", { enter, exit, scale: s });
+
+    const w = clampNum(props.width, 0.01, 1.5, 0.24) * W;
+    const h = clampNum(props.height, 0.01, 1.5, 0.24) * H;
+    const at = placement(f);
+    const fill = paintOf(props.fill, colour, pal);
+    const stroke = paintOf(props.stroke, "none", pal);
+    const lw = clampNum(props.stroke_width, 0, 40, stroke === "none" ? 0 : 4) * s;
+    const kind = ["rect", "ellipse", "pill", "triangle", "line", "arrow", "ring", "star"].includes(props.shape)
+      ? props.shape : "rect";
+
+    isolate(ctx, () => {
+      ctx.globalAlpha = m.alpha * clampNum(props.opacity, 0, 1, 1);
+      ctx.translate(at.x + m.dx - (at.free ? 0 : w * (at.ax - 0.5)), at.y + m.dy - (at.free ? 0 : h * (at.ay - 0.5)));
+      if (props.rotation) ctx.rotate((clampNum(props.rotation, -180, 180, 0) * Math.PI) / 180);
+      if (m.k !== 1) ctx.scale(m.k, m.k);
+
+      ctx.beginPath();
+      const x = -w / 2, y = -h / 2;
+      switch (kind) {
+        case "ellipse": ctx.ellipse(0, 0, w / 2, h / 2, 0, 0, Math.PI * 2); break;
+        case "ring": ctx.ellipse(0, 0, w / 2, h / 2, 0, 0, Math.PI * 2); break;
+        case "pill": roundedPath(ctx, x, y, w, h, Math.min(w, h) / 2); break;
+        case "triangle":
+          ctx.moveTo(0, y); ctx.lineTo(x + w, y + h); ctx.lineTo(x, y + h); ctx.closePath();
+          break;
+        case "line":
+          ctx.moveTo(x, 0); ctx.lineTo(x + w, 0);
+          break;
+        case "arrow": {
+          const headW = Math.min(w * 0.36, h * 1.6);
+          const shaft = h * 0.34;
+          ctx.moveTo(x, -shaft / 2);
+          ctx.lineTo(x + w - headW, -shaft / 2);
+          ctx.lineTo(x + w - headW, y);
+          ctx.lineTo(x + w, 0);
+          ctx.lineTo(x + w - headW, y + h);
+          ctx.lineTo(x + w - headW, shaft / 2);
+          ctx.lineTo(x, shaft / 2);
+          ctx.closePath();
+          break;
+        }
+        case "star": {
+          const R = Math.min(w, h) / 2;
+          for (let i = 0; i < 10; i++) {
+            const r = i % 2 ? R * 0.46 : R;
+            const a = (Math.PI / 5) * i - Math.PI / 2;
+            i ? ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r) : ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+          }
+          ctx.closePath();
+          break;
+        }
+        default: roundedPath(ctx, x, y, w, h, clampNum(props.radius, 0, 400, 0) * s);
+      }
+
+      // A ring and a line are strokes by nature, whatever was asked for.
+      const strokeOnly = kind === "ring" || kind === "line";
+      if (!strokeOnly && fill !== "none") { ctx.fillStyle = fill; ctx.fill(); }
+      const edge = strokeOnly ? (stroke === "none" ? fill : stroke) : stroke;
+      if (edge !== "none") {
+        ctx.strokeStyle = edge;
+        ctx.lineWidth = Math.max(strokeOnly ? 2 * s : 0, lw);
+        ctx.lineCap = "round";
+        ctx.stroke();
+      }
+    });
+  },
+};
+
+/**
+ * A full-frame effect.
+ *
+ * Only effects that are *drawn over* the picture, never ones that claim to
+ * change it. A layer sits on a canvas above the video in the preview and is
+ * composited over it in the export, so a vignette or a flash is identical in
+ * both, and a blur of the footage would not be — it would look right in the
+ * file and wrong on screen, which is the one failure this app is built to
+ * avoid.
+ */
+const Effect = {
+  key: "effect",
+  name: "Effect",
+  blurb: "A full-frame look over the picture: flash, vignette, grain, scanlines, glitch, letterbox bars or a colour wash. Drawn over the frame, so the preview and the exported file are identical.",
+  needs: ["effect"],
+  uses: ["strength", "animation"],
+  defaults: { durationInFrames: 30, position: "center", palette_role: "plain" },
+  fields: {
+    effect: { type: "string", note: "flash, vignette, grain, scanlines, glitch, letterbox or wash." },
+    strength: { type: "number", note: "0 to 1. Half is usually plenty; grain above 0.4 is a stylistic choice rather than an accident." },
+    animation: { type: "string", note: "fade or none. Effects hold rather than move." },
+  },
+  draw(ctx, f) {
+    const { width: W, height: H, scale: s, props, colour, pal, frame, durationInFrames: D } = f;
+    const { enter, exit } = phase(frame, D, { enter: 6, exit: 6, easing: f.easing });
+    const hold = props.animation === "none" ? 1 : Math.min(enter, exit);
+    const k = clampNum(props.strength, 0, 1, 0.5) * hold;
+    if (k <= 0.001) return;
+
+    switch (props.effect) {
+      case "vignette": {
+        const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.28, W / 2, H / 2, Math.max(W, H) * 0.72);
+        g.addColorStop(0, "rgba(0,0,0,0)");
+        g.addColorStop(1, pal.ink);
+        isolate(ctx, () => { ctx.globalAlpha = k; ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); });
+        return;
+      }
+      case "grain": {
+        // Deterministic per frame, so scrubbing back gives the same grain.
+        isolate(ctx, () => {
+          ctx.globalAlpha = k * 0.5;
+          ctx.fillStyle = pal.surface;
+          let seed = frame * 9301 + 49297;
+          const dots = Math.round((W * H) / 5200);
+          for (let i = 0; i < dots; i++) {
+            seed = (seed * 9301 + 49297) % 233280;
+            const x = (seed / 233280) * W;
+            seed = (seed * 9301 + 49297) % 233280;
+            const y = (seed / 233280) * H;
+            ctx.fillRect(x, y, 1.4 * s, 1.4 * s);
+          }
+        });
+        return;
+      }
+      case "scanlines":
+        isolate(ctx, () => {
+          ctx.globalAlpha = k * 0.34;
+          ctx.fillStyle = pal.ink;
+          for (let y = 0; y < H; y += Math.max(2, Math.round(3 * s))) ctx.fillRect(0, y, W, Math.max(1, 1.4 * s));
+        });
+        return;
+      case "glitch":
+        isolate(ctx, () => {
+          let seed = frame * 7919 + 13;
+          const bars = 3 + Math.round(k * 5);
+          for (let i = 0; i < bars; i++) {
+            seed = (seed * 9301 + 49297) % 233280;
+            const y = (seed / 233280) * H;
+            seed = (seed * 9301 + 49297) % 233280;
+            const hgt = (seed / 233280) * H * 0.06 + 4 * s;
+            seed = (seed * 9301 + 49297) % 233280;
+            const dx = ((seed / 233280) - 0.5) * W * 0.08 * k;
+            ctx.globalAlpha = k * 0.55;
+            ctx.fillStyle = i % 2 ? colour : pal.surface;
+            ctx.fillRect(dx, y, W, hgt);
+          }
+        });
+        return;
+      case "letterbox": {
+        const bar = H * 0.11 * (props.strength == null ? 1 : clampNum(props.strength, 0, 1, 1));
+        isolate(ctx, () => {
+          ctx.globalAlpha = hold;
+          ctx.fillStyle = pal.ink;
+          ctx.fillRect(0, 0, W, bar);
+          ctx.fillRect(0, H - bar, W, bar);
+        });
+        return;
+      }
+      case "wash":
+        isolate(ctx, () => { ctx.globalAlpha = k * 0.55; ctx.fillStyle = colour; ctx.fillRect(0, 0, W, H); });
+        return;
+      case "flash":
+      default:
+        // Brightest at the start and gone quickly: a cut accent, not a state.
+        isolate(ctx, () => {
+          ctx.globalAlpha = clamp01(interpolate(frame, [0, Math.max(2, D * 0.5)], [k, 0], { easing: "out" }));
+          ctx.fillStyle = pal.surface;
+          ctx.fillRect(0, 0, W, H);
+        });
+    }
+  },
+};
+
+/** A number, kept inside its range, with a default for anything unusable. */
+function clampNum(v, lo, hi, fallback) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(lo, Math.min(hi, n));
+}
+
+/** A fill or a stroke: a hex, a role, or the string "none". */
+function paintOf(value, fallback, pal) {
+  if (value == null || value === "") return fallback;
+  const v = String(value).trim();
+  if (v === "none") return "none";
+  if (isHex(v)) return v;
+  if (PALETTE_ROLES.includes(v)) return roleColour(v, pal);
+  return fallback;
+}
+
 export const COMPONENTS = [
   TitleCard,
   LowerThird,
@@ -769,6 +1142,9 @@ export const COMPONENTS = [
   ProgressBar,
   CodeCard,
   QuoteCard,
+  TextBlock,
+  Shape,
+  Effect,
 ];
 
 /** Keyed by the snake_case name a spec uses. */

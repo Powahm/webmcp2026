@@ -247,6 +247,66 @@ export const getCompositionCode = {
 
 /* ----------------------------------------------------------------- staging */
 
+/**
+ * The layer schema, generated from the components themselves.
+ *
+ * This used to be typed out by hand, which meant a component could declare a
+ * field and the tool would still refuse it — `additionalProperties: false` and
+ * a stale property list is a silent way to make a feature unreachable. The
+ * component library is the single description of what a graphic takes, so the
+ * schema is built from it and adding a field to a component is the whole job.
+ */
+const FIELD_TYPE = { number: "number", object: "object", "string[]": "array" };
+
+function layerFieldSchema(name, spec, componentsUsing) {
+  const who = componentsUsing.length && componentsUsing.length < COMPONENT_KEYS.length
+    ? `${componentsUsing.join(", ")} only. `
+    : "";
+  const description = `${who}${spec.note ?? ""}`.trim() || undefined;
+
+  if (name === "point") {
+    return {
+      type: "object",
+      description,
+      properties: { x: { type: "number", minimum: 0, maximum: 1 }, y: { type: "number", minimum: 0, maximum: 1 } },
+      required: ["x", "y"],
+      additionalProperties: false,
+    };
+  }
+  if (name === "items") {
+    return { type: "array", items: { type: "string", maxLength: spec.max ?? 90 }, maxItems: 6, description };
+  }
+  if (name === "timings") {
+    return { type: "array", items: { type: "integer", minimum: 0 }, maxItems: 40, description };
+  }
+  const type = FIELD_TYPE[spec.type] ?? "string";
+  const out = { type, description };
+  if (type === "string" && spec.max) out.maxLength = spec.max;
+  return out;
+}
+
+/** Every field any component declares, with the components that take it. */
+function componentFieldProperties() {
+  const seen = new Map();
+  for (const key of COMPONENT_KEYS) {
+    for (const [name, spec] of Object.entries(COMPONENT_INFO[key].fields ?? {})) {
+      if (!seen.has(name)) seen.set(name, { spec, used: [] });
+      seen.get(name).used.push(key);
+      // Keep the longest note: the component that bothered to explain it.
+      if ((spec.note ?? "").length > (seen.get(name).spec.note ?? "").length) seen.get(name).spec = spec;
+    }
+  }
+  return Object.fromEntries(
+    [...seen].map(([name, { spec, used }]) => [name, layerFieldSchema(name, spec, used)])
+  );
+}
+
+const LAYER_FIELDS = componentFieldProperties();
+
+const COLOUR_NOTE =
+  "A palette role, or a hex like \"#F54E00\". Roles resolve against the live theme, so one spec is legible in light and dark; send a hex when the exact colour is the point. Roles: " +
+  PALETTE_ROLES.join(", ") + ".";
+
 const COMPONENT_MENU = COMPONENT_KEYS
   .map((k) => `${k}: ${COMPONENT_INFO[k].blurb}`)
   .join(" ");
@@ -254,45 +314,16 @@ const COMPONENT_MENU = COMPONENT_KEYS
 export const proposeLayerTool = {
   name: "propose_layer",
   description:
-    `Propose a motion graphic over the cut. It appears at once on the timeline as a dashed, unconfirmed layer that previews live, and it is not in the video until the editor accepts it. Choose from: ${COMPONENT_MENU} Call get_composition first for the format and what is already there, and get_transcript if they asked for it over something they said.`,
+    `Propose a motion graphic over the cut. It appears at once on the timeline as a dashed, unconfirmed layer that previews live, and it is not in the video until the editor accepts it. Choose from: ${COMPONENT_MENU} For anything the preset graphics do not cover, use 'text' (full control of typeface, size, colour, alignment and animation), 'shape' (rectangles, ellipses, pills, triangles, lines, arrows, rings and stars in any colour and rotation) or 'effect' (flash, vignette, grain, scanlines, glitch, letterbox, wash). Colour is a palette role or a hex. Call get_composition first for the format and what is already there, and get_transcript if they asked for it over something they said.`,
   inputSchema: {
     type: "object",
     properties: {
       component: { type: "string", enum: [...COMPONENT_KEYS] },
-      text: {
-        type: "string",
-        maxLength: 180,
-        description: "The words on screen. Not a description of them. Short: this is a graphic, not a paragraph.",
-      },
-      subtext: { type: "string", maxLength: 120, description: "Optional second line: a role, a source, a label under a number." },
-      eyebrow: { type: "string", maxLength: 32, description: "title_card only. A small tracked label above the headline." },
-      items: {
-        type: "array",
-        items: { type: "string", maxLength: 90 },
-        maxItems: 6,
-        description: "For bullet_list, comparison_cards, process_flow and code_card: the rows, in order. For comparison_cards write each as 'Heading — the line under it'.",
-      },
-      timings: {
-        type: "array",
-        items: { type: "integer", minimum: 0 },
-        maxItems: 40,
-        description: "caption_pop only. One frame number per word, relative to this layer's start, from get_transcript. Without it the words spread evenly, which is close but never exact.",
-      },
-      point: {
-        type: "object",
-        description: "callout_arrow only. Where to aim, as fractions of the frame: {x: 0.5, y: 0.5} is the middle.",
-        properties: { x: { type: "number", minimum: 0, maximum: 1 }, y: { type: "number", minimum: 0, maximum: 1 } },
-        required: ["x", "y"],
-        additionalProperties: false,
-      },
+      ...LAYER_FIELDS,
       at_seconds: { type: "number", minimum: 0, description: "Seconds from the start of the finished cut. From get_timeline or get_transcript." },
       duration_seconds: { type: "number", minimum: 0.2, maximum: 30, description: "Seconds on screen. Leave it out for the component's own sensible default." },
-      position: { type: "string", enum: [...POSITIONS] },
-      palette_role: {
-        type: "string",
-        enum: [...PALETTE_ROLES],
-        description: "A role, not a colour. The theme decides what it looks like, so one spec is legible in light and dark.",
-      },
+      position: { type: "string", enum: [...POSITIONS], description: "A named anchor. For `text` and `shape` you can send `point` instead and place it anywhere." },
+      palette_role: { type: "string", description: COLOUR_NOTE },
       easing: { type: "string", enum: [...EASING_NAMES] },
       reason: { type: "string", maxLength: 200, description: "One sentence, shown to the editor on the card. Why this, here." },
     },
@@ -314,6 +345,51 @@ export const proposeLayerTool = {
   },
 };
 
+/**
+ * A blank clip to build on.
+ *
+ * Until this existed a graphic had to sit on footage, so an agent asked to
+ * "make me an animated title card" had nowhere to put one. A blank takes up
+ * real time on the spine and paints a colour, and every graphic tool then
+ * works over it exactly as it would over a take.
+ *
+ * Staged, not added: it changes the length of their cut, which is not a
+ * decision a tool gets to make.
+ */
+export const proposeBlankTool = {
+  name: "propose_blank_clip",
+  description:
+    "Propose a blank clip on the timeline: a solid colour that takes up time, for building motion graphics on when there is no footage to put them over. Stage this first when they ask for a title sequence, an animated card or a graphics-only piece, then propose layers over it with propose_layer. It appears as a dashed block on the base track and is not part of the cut until the editor accepts it.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      seconds: { type: "number", minimum: 0.5, maximum: 60, description: "How long it lasts. Five is a sensible title card." },
+      colour: { type: "string", description: 'The ground, as a hex like "#101018". Leave it out for the theme\'s own dark ground, which is the safe choice.' },
+      reason: { type: "string", maxLength: 200, description: "One sentence, shown to the editor. Why this, here." },
+    },
+    required: ["seconds"],
+    additionalProperties: false,
+  },
+  execute: (args) => {
+    if (!Editor.isOpen()) {
+      return fail("The Editor is not open.", "Ask them to open the Editor, then try again.");
+    }
+    const colour = args.colour == null ? null : String(args.colour).trim();
+    if (colour && !/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(colour)) {
+      return fail(`"${colour}" is not a colour.`, 'Send a hex like "#101018", or leave it out for the theme ground.');
+    }
+    const seg = Editor.stageBlank({ seconds: Number(args.seconds), colour });
+    if (!seg) return fail("Could not stage a blank clip.", "Ask them to open the Editor.");
+    return json({
+      ok: true,
+      segment_uid: seg.uid,
+      staged: true,
+      seconds: round(seg.out - seg.in),
+      note: "A dashed blank on the base track, at the end of the cut. Propose your graphics over it with propose_layer using at_seconds inside its range. Nothing is in the video until they accept it, and there is no tool that accepts.",
+    });
+  },
+};
+
 export const proposeLayerChangeTool = {
   name: "propose_layer_change",
   description:
@@ -322,20 +398,12 @@ export const proposeLayerChangeTool = {
     type: "object",
     properties: {
       layer_id: { type: "string", description: "Id from get_composition." },
-      text: { type: "string", maxLength: 180 },
-      subtext: { type: "string", maxLength: 120 },
-      eyebrow: { type: "string", maxLength: 32 },
-      items: { type: "array", items: { type: "string", maxLength: 90 }, maxItems: 6 },
-      point: {
-        type: "object",
-        properties: { x: { type: "number", minimum: 0, maximum: 1 }, y: { type: "number", minimum: 0, maximum: 1 } },
-        required: ["x", "y"],
-        additionalProperties: false,
-      },
+      component: { type: "string", enum: [...COMPONENT_KEYS], description: "Change what kind of graphic it is. The fields it takes change with it." },
+      ...LAYER_FIELDS,
       at_seconds: { type: "number", minimum: 0 },
       duration_seconds: { type: "number", minimum: 0.2, maximum: 30 },
       position: { type: "string", enum: [...POSITIONS] },
-      palette_role: { type: "string", enum: [...PALETTE_ROLES] },
+      palette_role: { type: "string", description: COLOUR_NOTE },
       easing: { type: "string", enum: [...EASING_NAMES] },
       reason: { type: "string", maxLength: 200 },
     },
@@ -562,6 +630,7 @@ export const COMP_TOOLS = [
   getTranscript,
   getCompositionCode,
   proposeLayerTool,
+  proposeBlankTool,
   proposeLayerChangeTool,
   proposeSound,
   proposeFormatTool,

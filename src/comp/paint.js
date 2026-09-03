@@ -139,12 +139,37 @@ const ROLE_KEY = {
   invert: "surface",
 };
 
-export const roleColour = (role, pal) => pal[ROLE_KEY[role] ?? "accent"] ?? pal.accent;
+/**
+ * A colour can be a role or a literal.
+ *
+ * Roles are the good default: `accent` resolves against the live theme, so one
+ * spec stays legible in light and dark, which is the whole argument for them.
+ * But "make the title pink" is a reasonable thing to want, and a palette of
+ * six is not a design system, it is a cage. So anything that looks like a CSS
+ * hex is taken at its word and everything else falls back to a role.
+ */
+export const isHex = (v) => typeof v === "string" && /^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(v.trim());
 
-/** The readable colour to put on top of a role fill. Roles are saturated
- *  fills, so this is near-black for everything except the plain role, which is
- *  already the text colour and wants the surface behind it. */
-export const roleInk = (role, pal) => (role === "plain" ? pal.surface : pal.ink);
+export const roleColour = (role, pal) =>
+  isHex(role) ? role.trim() : (pal[ROLE_KEY[role] ?? "accent"] ?? pal.accent);
+
+/** Relative luminance, for deciding what to put on top of a literal colour. */
+function luminance(hex) {
+  let h = hex.trim().slice(1);
+  if (h.length === 3) h = h.split("").map((c) => c + c).join("");
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
+  const lin = (c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+}
+
+/** The readable colour to put on top of a fill. Roles are saturated fills, so
+ *  this is near-black for everything except the plain role, which is already
+ *  the text colour and wants the surface behind it. A literal colour is
+ *  measured rather than assumed: white on yellow is not a house style. */
+export const roleInk = (role, pal) => {
+  if (isHex(role)) return luminance(role) > 0.55 ? pal.ink : pal.surface;
+  return role === "plain" ? pal.surface : pal.ink;
+};
 
 /* ------------------------------------------------------------------- boxes */
 

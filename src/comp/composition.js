@@ -19,6 +19,7 @@
  */
 
 import { componentFor, COMPONENT_INFO, COMPONENT_KEYS, rows } from "./components.js";
+import { isHex } from "./paint.js";
 import { EASING_NAMES, FORMAT_NAMES, formatOf, FPS, toFrames, toSeconds } from "./engine.js";
 import { PALETTE_ROLES, POSITIONS } from "./paint.js";
 
@@ -125,6 +126,32 @@ export function validateLayer(input, context = {}) {
       : null;
   }
 
+  /**
+   * Everything else a component declares.
+   *
+   * The named cases above exist because they need shaping — a list from a
+   * string, one timing per word, a point clamped to the frame. The rest are
+   * plain values, and copying them by their declared type means adding a field
+   * to a component is the whole job: no second list here to remember.
+   */
+  const SHAPED = new Set(["text", "subtext", "eyebrow", "items", "timings", "point"]);
+  for (const [name, spec] of Object.entries(fields)) {
+    if (SHAPED.has(name)) continue;
+    const raw = input[name];
+    if (raw == null || raw === "") { props[name] = null; continue; }
+    if (spec.type === "number") {
+      const n = Number(raw);
+      if (!Number.isFinite(n)) {
+        return fail(`${name} must be a number; got ${JSON.stringify(raw)}.`, spec.note ?? "");
+      }
+      props[name] = n;
+    } else if (spec.type === "object") {
+      props[name] = typeof raw === "object" ? raw : null;
+    } else {
+      props[name] = str(raw, spec.max ?? 40);
+    }
+  }
+
   // What to add to a field's own note when it is missing. Keyed by the field's
   // declared type, because "send the words that appear on screen" is good
   // advice for a headline and gibberish for a coordinate.
@@ -180,11 +207,15 @@ export function validateLayer(input, context = {}) {
   const position = input.position == null ? component.defaults.position : str(input.position, 20);
   if (!POSITIONS.includes(position)) return fail(`"${position}" is not a position.`, listOf("position", POSITIONS));
 
+  // A role, or a literal hex. Roles are still the right default — they resolve
+  // against the live theme, so one spec reads in light and dark — but refusing
+  // every colour outside a palette of six turned out to mean "you cannot make
+  // the title pink", which is not a design principle, it is a missing feature.
   const role = input.palette_role == null ? component.defaults.palette_role : str(input.palette_role, 20);
-  if (!PALETTE_ROLES.includes(role)) {
+  if (!PALETTE_ROLES.includes(role) && !isHex(role)) {
     return fail(
-      `"${role}" is not a palette role.`,
-      `${listOf("palette_role", PALETTE_ROLES)} Roles resolve against the live theme, which is why you cannot send a colour and why one spec is legible in both themes.`
+      `"${role}" is not a palette role or a colour.`,
+      `${listOf("palette_role", PALETTE_ROLES)} Or send a hex like "#F54E00". Roles resolve against the live theme, so prefer one unless the colour is the point.`
     );
   }
 

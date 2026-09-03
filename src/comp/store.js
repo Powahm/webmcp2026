@@ -303,6 +303,21 @@ export function removeLayer(layerId, gesture) {
   return { ok: true };
 }
 
+/** Move or retime a sound by hand. Same trusted gesture as everything else. */
+export function editAudio(trackId, patch, gesture) {
+  if (!trusted(gesture)) return denied("move a sound");
+  const target = doc.audio.find((a) => a.id === trackId);
+  if (!target) return { ok: false, error: "No sound with that id." };
+  const from = Math.max(0, Math.round(patch.from ?? target.from));
+  const durationInFrames = Math.max(2, Math.round(patch.durationInFrames ?? target.durationInFrames));
+  doc = {
+    ...doc,
+    audio: doc.audio.map((a) => (a.id === trackId ? { ...a, from, durationInFrames, gain: patch.gain ?? a.gain } : a)),
+  };
+  emit();
+  return { ok: true };
+}
+
 export function removeAudio(trackId, gesture) {
   if (!trusted(gesture)) return denied("delete a sound");
   doc = { ...doc, audio: doc.audio.filter((a) => a.id !== trackId) };

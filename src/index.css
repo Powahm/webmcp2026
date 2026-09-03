@@ -931,3 +931,26 @@
 @media (prefers-reduced-motion: reduce) {
   .tl-item { transition: none; }
 }
+
+/* A staged blank, and the sound lane. */
+.tl-item--blank { background-color: var(--ink, #1A1A17); background-image: none; }
+.tl-item--spine.is-proposed { border-style: dashed; opacity: .85; }
+.tl-lane--sfx .tl-item { background-color: var(--green, #2C9E4B); background-image: none; }
+.tl-item--sfx.is-proposed { border-style: dashed; background-color: transparent; color: var(--text); }
+.tl-ask {
+  position: absolute;
+  right: 12px; top: 50%;
+  transform: translateY(-50%);
+  display: flex; gap: 5px;
+  z-index: 2;
+}
+
+/* Packed rows inside a lane: each item sits in its own band, and the lane
+   grows to fit however many bands the packing needed. */
+.tl-lane--gfx, .tl-lane--sfx { min-height: calc(var(--rows, 1) * 44px + 4px); }
+.tl-lane--gfx .tl-lane-body, .tl-lane--sfx .tl-lane-body { min-height: calc(var(--rows, 1) * 44px); }
+.tl-lane--gfx .tl-item, .tl-lane--sfx .tl-item {
+  top: calc(var(--row, 0) * 44px + 3px);
+  bottom: auto;
+  height: 38px;
+}
