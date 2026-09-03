@@ -1,3 +1,9 @@
+import {
+  askForCameraAndMic,
+  describeEnvironment,
+  framed as framedIn,
+  openInOwnTab,
+} from "../env/browser.js";
 import { Store, Clips, timecode, noPictureMessage } from "./store.js";
 import { Desk } from "./shell.js";
 import { Editor } from "./editor.js";
@@ -53,7 +59,7 @@ export const Camera = (() => {
     return options.find((t) => window.MediaRecorder?.isTypeSupported?.(t)) || "";
   }
 
-  const framed = () => { try { return window.self !== window.top; } catch { return true; } };
+  const framed = () => framedIn();
 
   function describeError(err) {
     const name = err?.name || "";
@@ -235,10 +241,21 @@ export const Camera = (() => {
     body.innerHTML = `
       <div class="cam-stage">
         <video class="cam-video" playsinline muted autoplay></video>
+        <!-- Three doors out, in the order worth trying. Asking is first
+             because it is the one that works when the browser simply has not
+             been asked yet; a tab of its own is second because it is the only
+             thing that helps when the surrounding page never passed the camera
+             down; Try again is last, for when the person has just changed
+             something themselves. -->
         <div class="cam-blocked" hidden>
           <p class="cam-blocked-title">Camera unavailable</p>
           <p class="cam-blocked-msg"></p>
-          <button class="btn btn-ghost" data-act="retry">Try again</button>
+          <div class="cam-blocked-acts">
+            <button class="btn btn-accent" data-act="ask">Ask for camera and mic</button>
+            <button class="btn btn-ghost" data-act="own-tab" hidden>Open in its own tab</button>
+            <button class="btn btn-ghost" data-act="retry">Try again</button>
+          </div>
+          <p class="cam-blocked-env mono"></p>
         </div>
         <div class="cam-rec" hidden><span class="cam-dot"></span><span class="cam-time mono">00:00:00</span></div>
 
@@ -392,7 +409,51 @@ export const Camera = (() => {
         shutter.disabled = true;
         blocked.hidden = false;
         blockedMsg.textContent = describeError(err);
+        showEnvironment();
       }
+    }
+
+    /**
+     * Ask for the camera and the microphone, deliberately.
+     *
+     * The prompt usually arrives the moment this window opens, which is a
+     * prompt nobody pressed anything for: some browsers, agent browsers in
+     * particular, dismiss one of those on the person's behalf and there is no
+     * way back to it. This button is a request the person made, so the browser
+     * has a gesture to attach the prompt to and they know what they are
+     * answering. A grant is remembered for the origin, so pressing record next
+     * time asks nobody.
+     */
+    async function askPermission() {
+      const ask = body.querySelector('[data-act="ask"]');
+      if (ask) { ask.disabled = true; ask.textContent = "Asking…"; }
+      const result = await askForCameraAndMic();
+      if (ask) { ask.disabled = false; ask.textContent = "Ask for camera and mic"; }
+
+      if (result.ok) {
+        Desk.toast("Camera and mic allowed.", "good");
+        return connect();
+      }
+      blocked.hidden = false;
+      blockedMsg.textContent = describeError({ name: result.error, message: result.detail });
+      showEnvironment();
+    }
+
+    /**
+     * What the browser says about itself, under the message.
+     *
+     * A refusal with no reason is the thing this window has always been worst
+     * at: "Camera unavailable" is true and useless. This is the one line that
+     * separates a permission the person can grant from a frame that was never
+     * given the camera to pass down, and it decides whether the way out is
+     * worth offering.
+     */
+    async function showEnvironment() {
+      const line = body.querySelector(".cam-blocked-env");
+      const escape = body.querySelector('[data-act="own-tab"]');
+      if (escape) escape.hidden = !framed();
+      if (!line) return;
+      line.textContent = await describeEnvironment();
     }
 
     async function listDevices() {
@@ -467,6 +528,15 @@ export const Camera = (() => {
       const act = e.target.closest("[data-act]")?.dataset.act;
       if (act === "record") toggleRecord();
       if (act === "retry") connect();
+      if (act === "ask") return void askPermission();
+      if (act === "own-tab") {
+        // Straight off the click. A window opened later is a popup, and popups
+        // are blocked, which would look like this button doing nothing.
+        if (!openInOwnTab()) {
+          Desk.toast("This browser would not open a new tab. Copy the address into one yourself.", "bad");
+        }
+        return;
+      }
       if (act === "import") fileInput.click();
       if (act === "mic") {
         withAudio = !withAudio;

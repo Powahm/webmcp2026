@@ -1164,6 +1164,12 @@ body {
 }
 .cam-blocked-title { margin: 0; font-family: var(--font-display); font-weight: 700; font-size: 17px; }
 .cam-blocked-msg { margin: 0; max-width: 34ch; font-size: 13.5px; color: var(--text-muted); }
+.cam-blocked-acts { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.cam-blocked-acts .btn[hidden] { display: none; }
+/* What the browser says about itself, small and last: it is the sentence that
+   explains the buttons above it, not a thing to read first. */
+.cam-blocked-env { margin: 0; font-size: 10.5px; letter-spacing: .02em; color: var(--text-muted); opacity: .8; }
+.cam-blocked-env:empty { display: none; }
 
 .cam-rec {
   position: absolute;

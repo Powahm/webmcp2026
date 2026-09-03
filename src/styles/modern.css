@@ -218,6 +218,13 @@
 }
 .win-body.cam .cam-blocked-title { letter-spacing: -0.015em; font-size: 18px; }
 .win-body.cam .cam-blocked-msg { color: rgba(255, 255, 255, .55); }
+.win-body.cam .cam-blocked-env { color: rgba(255, 255, 255, .38); }
+.win-body.cam .cam-blocked .btn-accent {
+  background: var(--accent);
+  border-color: transparent;
+  color: #fff;
+}
+.win-body.cam .cam-blocked .btn-accent:hover { background: var(--accent); filter: brightness(1.08); }
 .win-body.cam .cam-blocked .btn {
   background: rgba(255, 255, 255, .1);
   border-color: rgba(255, 255, 255, .18);
