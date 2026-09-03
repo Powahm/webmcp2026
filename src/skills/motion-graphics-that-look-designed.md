@@ -81,8 +81,11 @@ Uppercase every word in this register. Each word ends before the next starts.
 
 ### Kinetic caption on speech (the words they actually say)
 
-Use `caption_pop` with `timings` from `get_transcript` (`include_words: true`)
-so each word lands on the frame it is spoken. One line of at most eight words.
+Use `caption_pop` with `timings` so each word lands on the frame it is spoken.
+`get_transcript` with `include_words: true` gives each word's start in seconds;
+`timings` wants one frame number per word, counted from the layer's own start:
+`round((word_start - at_seconds) * fps)`, with `fps` from `get_composition`
+(30). One line of at most eight words.
 `position: "center"` for a punchline, `bottom_bar` for a running caption.
 `font: "displayHeavy"`. One `pop` sound at the start only, not one per word.
 
