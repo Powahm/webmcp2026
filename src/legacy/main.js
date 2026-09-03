@@ -21,22 +21,24 @@ export const Readme = (() => {
       eyebrow: "Start here",
       title: "This is a computer",
       blocks: [
-        { t: "lede", v: "Three folders and two apps. Write what you are going to say, record it, cut it." },
+        { t: "lede", v: "Three folders and two apps. Write what you are going to say, record it, cut it. An agent can work in here beside you, and cannot change anything without you." },
         { t: "h", v: "The five things on the desktop" },
         { t: "ul", v: [
           "**Readme**: this folder. What everything does.",
-          "**Scripts**: what you are going to say on camera, with a teleprompter.",
-          "**Skills**: craft notes on cutting, pacing and looks.",
-          "**Camera**: live preview, one button to record.",
-          "**Editor**: a timeline. Trim, grade, reorder, export."
+          "**Scripts**: what you are going to say on camera, with a prompter and a place for research.",
+          "**Skills**: craft notes on cutting, pacing and looks, and **AI Skills** inside it: instructions you write for the agent.",
+          "**Camera**: live preview, one button to record, and the prompter over the top of it.",
+          "**Editor**: lanes of clips, graphics and sound. Trim, grade, reframe, reorder, export."
         ] },
         { t: "h", v: "A first run" },
         { t: "ul", v: [
-          "Open Scripts, write a couple of lines, and hit Teleprompter.",
-          "Open Camera and press the red button. Press it again to stop.",
-          "Open Editor. Your clip is in the library on the left: click it to add it to the timeline.",
-          "Drag the Start and End sliders to trim, pick a look, press Export."
+          "Open **Scripts**, write a couple of lines, and read them through with the prompter.",
+          "Open **Camera**, load that script, and press the red button. Space advances the prompter a line at a time. Press the button again to stop.",
+          "Open **Editor**. Your take is in the library on the left: click it to put it on the timeline.",
+          "Open the **Transcript** tab. The words are already there and already timed, because the prompter was watching. Click one to jump to it.",
+          "Drag either end of the clip to trim, pick a look, and press **Export**."
         ] },
+        { t: "note", v: "Rendering happens in real time, so a forty-second cut takes forty seconds to export. It is worth knowing before you start one." },
         { t: "note", v: "No camera? Every app has an Import video button. The editor works the same on a file you already have." },
         { t: "h", v: "Being shown around" },
         { t: "p", v: "The **?** in the menubar walks the whole machine: it dims the screen, lights up each thing in turn and says what it is for. Every window's title bar has its own **?** for that window alone, in more detail. Arrow keys move through a tour, Escape leaves it." },
@@ -57,8 +59,16 @@ export const Readme = (() => {
       eyebrow: "App",
       title: "Camera",
       blocks: [
-        { t: "lede", v: "A preview, a shutter, and a strip of what you just shot." },
-        { t: "p", v: "Recording uses MediaRecorder against the live camera stream, which produces WebM. Clips are written straight to the library, where the editor and any script can reach them." },
+        { t: "lede", v: "A preview, a shutter, a teleprompter over the top of it, and a strip of what you just shot." },
+        { t: "p", v: "Recording uses MediaRecorder against the live stream, which produces WebM. Clips are written straight to the library, where the Editor and any script can reach them." },
+
+        { t: "h", v: "Camera, or your screen" },
+        { t: "ul", v: [
+          "**Camera** is the default: whatever the machine is pointing at you with.",
+          "**Screen** records a window or a whole display, and keeps your microphone, so a walkthrough is one take rather than a picture you narrate afterwards.",
+          "Stopping the share from the browser's own bar stops the recording too, instead of running on with a frozen frame."
+        ] },
+
         { t: "h", v: "Controls" },
         { t: "ul", v: [
           "**Shutter**: starts recording, and turns into a stop button with a running timer.",
@@ -66,6 +76,11 @@ export const Readme = (() => {
           "**Mic**: toggles audio capture. It restarts the stream, so the preview blinks.",
           "**Import video**: pulls a file into the library without a camera."
         ] },
+
+        { t: "h", v: "The teleprompter, while you record" },
+        { t: "p", v: "Load a script and its lines appear over the preview, one at a time, large. **Space or a click advances; the left arrow goes back.** It does not scroll on a timer, because a prompter that gets ahead of you is worse than no prompter at all: you advance when you have finished the line." },
+        { t: "note", v: "Advancing is also how the transcript gets made. Each press records which line was on screen at which second of the take, saved onto the clip, and the Editor turns that into word-level timing with no upload and no key. See **The agent** for what reads it." },
+
         { t: "h", v: "If the camera will not start" },
         { t: "p", v: "The app tells you which of the three it is: permission was refused, no device exists, or another program holds it. Camera access also needs a secure context, so this works on https and on localhost, and an embedded preview frame may refuse it outright." },
         { t: "p", v: "**Ask for camera and mic** on that panel puts the question to the browser deliberately, which matters in an agent's browser: a prompt that appears on its own, that nobody pressed anything for, is one some browsers answer for you. The **Permissions** chip in the menubar shows the same thing for everything at once." }
@@ -78,26 +93,70 @@ export const Readme = (() => {
       eyebrow: "App",
       title: "Editor",
       blocks: [
-        { t: "lede", v: "A timeline of trimmed clips, each with its own look and speed." },
-        { t: "h", v: "Layout" },
+        { t: "lede", v: "Lanes of clips, graphics and sound, in one timebase, with the picture above and whatever you have selected either side of it." },
+
+        { t: "h", v: "The five regions" },
         { t: "ul", v: [
-          "**Library**, left: every clip you have recorded or imported, and every sound.",
-          "**Preview**, centre: plays the timeline as one piece, not clip by clip.",
-          "**Clip inspector**, right: trim, look, speed and sound for whatever is selected.",
-          "**Timeline**, bottom: click to select, drag to reorder."
+          "**Left rail**: four tabs. **Library** is your footage and sound; **Text** adds words; **Transitions** holds how a clip arrives and leaves, and where it sits in the frame; **Words** is the transcript.",
+          "**Viewer**, centre: plays the whole cut as one piece. The frame shape is the composition's, not the footage's, so a reframe is something you look at rather than discover at export.",
+          "**Right rail**: **Clip** for whatever is selected, **VFX** for graphics waiting on a decision, **Comp** for the composition as a whole.",
+          "**Timeline**, bottom: **Timeline**, **Transcript** and **Code** are three views of the same cut.",
+          "Every divider between them can be dragged, and the timeline has its own zoom."
         ] },
-        { t: "h", v: "The library" },
+
+        { t: "h", v: "Lanes" },
         { t: "ul", v: [
-          "**Video** and **Audio** at the top bring files in. Sound lands in the library like anything else rather than going straight onto the timeline, so a shelf of effects can sit there until you want one.",
-          "**Folders** are the row of chips underneath. Press **+** to make one and name it on the spot; click one to show only what is in it.",
-          "Put a clip in a folder by dragging its card onto the chip, or with the folder button on the card itself.",
-          "Deleting a folder does not delete what was in it. The clips come back out into the library unfiled.",
-          "Clicking a video adds it to the end of the cut. Clicking a sound puts it on an audio lane at the playhead, because sound on the spine would be a clip with no picture."
+          "**V1** is the spine: clips end to end, and its length is the length of the cut.",
+          "**A1** is the spine's own sound, drawn from the same segments rather than kept as a second list of them, because trimming the picture trims the sound with it.",
+          "**VFX** holds graphics; **SFX** holds effects.",
+          "**+ Video** and **+ Audio** add overlay lanes. Anything on one floats: it has its own position, trim, volume and placement in the frame."
         ] },
-        { t: "h", v: "Looks" },
-        { t: "p", v: "Six grades: none, mono, warm, cool, punch, faded. They are CSS filter strings in preview and the identical string on the canvas at export, so what you see is what is written." },
+
+        { t: "h", v: "Moving and cutting" },
+        { t: "ul", v: [
+          "Drag a clip along V1 to reorder it. It snaps to the seam between two clips, and a marker shows which one before you let go.",
+          "**[** and **]** shuffle the selected clip one place, for when you would rather not aim a drag.",
+          "Drag either end of a clip to trim it. **S** splits whatever is under the playhead.",
+          "Drag the ruler, or the playhead's handle, to scrub. **Backspace** removes whatever is selected, including a suggestion.",
+          "**Rename** in the Clip panel renames the underlying clip, so the library stops being a list of `export-00_41`."
+        ] },
+
+        { t: "h", v: "Shape of the frame" },
+        { t: "p", v: "**16:9**, **9:16** and **1:1** sit beside the picture. Changing one moves no graphic, because every position in a composition is a fraction of the frame rather than a pixel." },
+        { t: "ul", v: [
+          "**Fill frame** crops the footage to the frame. Going from 16:9 to 9:16 this throws away about seventy per cent of the width, which is right once you have chosen what to keep.",
+          "**Fit whole clip** keeps all of it and pads the edges instead.",
+          "**Drag the picture** to choose what stays in frame. It moves under your cursor, and it stops where the hidden part runs out, so you cannot slide the shot off its own edge."
+        ] },
+        { t: "note", v: "On footage already the shape of the frame there is nothing hidden and nothing to pan, and the cursor says so rather than offering a grab that would do nothing." },
+
+        { t: "h", v: "Sound" },
+        { t: "ul", v: [
+          "Every clip has a volume and a mute, and every overlay item has its own.",
+          "**Unlink sound from picture** lifts a clip's audio onto its own audio lane. From then on it has its own position and trim, so a line can run under the next shot, or be replaced.",
+          "**Relink** puts it back, and brings the volume with it.",
+          "Effects are synthesised in the browser: there is nothing to download and nothing to license."
+        ] },
+
+        { t: "h", v: "Looks, transitions and transform" },
+        { t: "ul", v: [
+          "Six grades: none, mono, warm, cool, punch, faded. They are CSS filter strings in the preview and the identical string on the canvas at export.",
+          "A transition is a real layer on the VFX lane, so you can drag it, retime it or delete it there rather than hunting for the menu that made it.",
+          "Across, down, scale, rotate and flip live in **Transitions**. Put a key down, move the playhead, drag it again, and the two keys are an animation."
+        ] },
+
+        { t: "h", v: "Transcript and Code" },
+        { t: "p", v: "The **Transcript** tab is the words, timed. Click one to move the playhead to it. Fillers are struck through and gaps are called out, and **Find fillers and gaps** stages a cut over each one for you to take or leave. The **Code** tab prints the composition as the TSX it compiles to, one `Sequence` per graphic, so the exact frame a thing starts on is readable rather than implied." },
+
+        { t: "h", v: "Keyboard" },
+        { t: "ul", v: [
+          "**Space** plays and pauses. **J K L** and the arrows move the playhead; hold Shift for a whole second.",
+          "**Home** and **End** jump to either end. **S** splits, **T** adds text, **B** adds a blank.",
+          "**[** and **]** move the selected clip. **Backspace** deletes it."
+        ] },
+
         { t: "h", v: "Export" },
-        { t: "p", v: "There is no encoder dependency here. Export replays the timeline into a canvas, captures that canvas as a stream, mixes the audio back in through a Web Audio graph, and records the result. That has one consequence worth knowing: **rendering happens in real time**, so a forty-second cut takes forty seconds." },
+        { t: "p", v: "There is no encoder dependency here. Export replays the timeline into a canvas at the composition's own size, draws the accepted graphics over each frame with the same function the preview uses, mixes the audio back in through a Web Audio graph, and records the result. That has one consequence worth knowing: **rendering happens in real time**, so a forty-second cut takes forty seconds." },
         { t: "note", v: "Exports are saved back into your library as a new clip, and offered as a download. The library copy is the reliable one: some embedded frames block downloads that a page starts itself." }
       ]
     },
@@ -110,16 +169,60 @@ export const Readme = (() => {
       blocks: [
         { t: "lede", v: "A script here is what you are going to say out loud, broken into lines you can actually deliver." },
         { t: "p", v: "Each line has two parts: the **spoken text**, and a **shot direction**: where the camera is, what the b-roll is, what the tone should be. The direction is for you while filming; it never appears in the teleprompter." },
+
+        { t: "h", v: "Two views, and a place to put research" },
+        { t: "ul", v: [
+          "**Draft** is the writing surface: the lines, in order, as one document.",
+          "**Shot list** is the same script read as directions, for the day you are filming rather than the day you are writing.",
+          "**Research** is a pane for whatever you pasted in while reading around. It is not filler: it is what an agent writes from, so a suggested line comes out of your sources instead of out of the air."
+        ] },
+
         { t: "h", v: "Runtime" },
         { t: "p", v: "Every line shows an estimated duration, and the script totals them. The estimate assumes about 150 words a minute, which is an unhurried speaking pace; if you read fast, treat it as an upper bound." },
-        { t: "h", v: "The teleprompter" },
+
+        { t: "h", v: "Two prompters, for two different jobs" },
         { t: "ul", v: [
-          "Scrolls the whole script across roughly its estimated runtime.",
-          "The line you should be on is bright; the rest sit back.",
-          "− and + change speed while it runs. Space it out rather than racing it.",
-          "**Open Camera** puts the recorder up beside it. Escape leaves."
+          "**In here**, the rehearsal prompter scrolls the whole script across roughly its estimated runtime, brightening the line you should be on. − and + change speed while it runs. It is for finding out whether the writing says out loud what it says on the page.",
+          "**In the Camera**, the prompter waits: one line at a time, advanced by space or a click. That is the one to use on a take."
         ] },
+
+        { t: "h", v: "A line the agent wrote" },
+        { t: "p", v: "A suggestion arrives in the draft itself, in a gap held open at the line it belongs before, at the document's own line height. It reads as part of the page rather than a panel over it, and there is no tool that can accept one: that is a click, and only yours." },
         { t: "note", v: "Write the hook last. You rarely know what the video is about until you have written the rest of it." }
+      ]
+    },
+    {
+      id: "the-agent",
+      name: "The agent",
+      kind: "doc",
+      eyebrow: "Reference",
+      title: "What the agent can and cannot do",
+      blocks: [
+        { t: "lede", v: "This page hands a browser agent twenty-eight tools. Not one of them can put a frame into your video." },
+
+        { t: "p", v: "The tools are registered on `document.modelContext`, which is the browser's own way of letting a page offer an agent something to do. Open this site in an agent's browser and they appear in its site-tools panel. Open it in an ordinary one and nothing changes: the machine is the same machine, and the **Agent** chip in the menubar says whether a host is there and whether anything has actually called one." },
+
+        { t: "h", v: "Why the tools live in the page" },
+        { t: "p", v: "Because what makes them useful never leaves it. Which script is open, which beat the prompter is on, whether the camera is rolling and how far in, which clip is selected, where the playhead sits, and what you said and when you said it. There is no backend here, so no server has any of it. A service can tell you what is in a file you uploaded; it cannot tell you what you were reading off the prompter when you said it." },
+
+        { t: "h", v: "Reading is free" },
+        { t: "p", v: "Roughly half the tools only look: the state of the desktop, the scripts, the recorder, the clips, the cut, the selection, the playhead, the graphics, the transcript, and the composition printed as code. They carry `readOnlyHint`, so a browser need not stop and ask before answering a question about your own timeline." },
+
+        { t: "h", v: "Writing is a suggestion" },
+        { t: "ul", v: [
+          "A graphic arrives dashed on the timeline, previewing live over the footage, with the reason it was suggested on its card.",
+          "A line arrives in the draft, in a gap held open where it would go.",
+          "A cut arrives as a marked region under the track. Nothing is removed.",
+          "A reframe arrives with the safe-area guides up, so the crop is a decision rather than a surprise."
+        ] },
+        { t: "p", v: "Every one of them waits. **Accept** and **Reject** are buttons, and the code behind them refuses anything that is not a real key or mouse event: the same bit the browser uses to tell a person from a script. There is no tool that accepts, no tool that exports, and no tool that deletes a clip." },
+        { t: "note", v: "That is the whole bargain. An agent can compose a title card, put a sound under it, reframe the cut to vertical and list every hesitation in the take, in four calls, and you will still have to press something before any of it is in your video." },
+
+        { t: "h", v: "Telling it how you work" },
+        { t: "p", v: "**AI Skills**, inside the Skills folder, is a folder of your own instructions in markdown. Each one says when it applies, and the page offers the matching one back in its own tool results when the situation it was written for is actually on screen. It is a suggestion and nothing more: there is no way here to make an agent read anything, and there should not be." },
+
+        { t: "h", v: "Folders" },
+        { t: "p", v: "An agent can ask for a folder on your machine by name and say what it wants it for. Nothing opens on its own: the request sits there until you press the button that shows the browser's own directory picker, and the browser then asks you as well." }
       ]
     },
     {
@@ -130,7 +233,8 @@ export const Readme = (() => {
       title: "Where everything lives",
       blocks: [
         { t: "lede", v: "On your machine, in your browser. Nothing is uploaded, because there is nowhere to upload it to." },
-        { t: "p", v: "Clips and scripts are held in IndexedDB under the origin serving the page. Video never leaves the tab: recording, editing and export all happen locally, and the site has no backend to receive anything." },
+        { t: "p", v: "Four stores in IndexedDB under the origin serving the page: your clips, your scripts, the folders you have filed the clips into, and the AI Skills you have written. Video never leaves the tab: recording, editing and export all happen locally, and the site has no backend to receive anything." },
+        { t: "p", v: "A clip carries its own transcript, so it travels with the footage and dies with it rather than sitting in a table of its own. The one thing kept outside IndexedDB is an OpenAI key, if you paste one in for Whisper: that lives in this browser's localStorage and is sent to nowhere except OpenAI." },
         { t: "h", v: "What that means in practice" },
         { t: "ul", v: [
           "Clearing site data clears your clips. There is no copy anywhere else.",
@@ -189,10 +293,18 @@ export const Readme = (() => {
         { t: "h", v: "Contrast, and the wallpaper" },
         { t: "p", v: "The wallpaper is a photograph, which means text has to sit on top of a picture nobody designed for text. Three things keep it legible: a wash of the ground colour across the band where the icons sit, a halo in the same colour behind every desktop label, and a solid plate under the hint along the bottom. Each theme has its own photograph rather than one image dimmed: dark is the same valley at last light, not the light one turned down." },
 
+        { t: "h", v: "The Editor from the keyboard" },
+        { t: "ul", v: [
+          "**Space**, **J K L** and the arrows drive the playhead; **S** splits, **T** adds text, **B** adds a blank.",
+          "**[** and **]** move the selected clip along the spine, so reordering no longer needs a pointer.",
+          "**Backspace** removes whatever is selected, a suggestion included.",
+          "The three panel dividers are focusable separators: reach one with Tab and the arrow keys resize it."
+        ] },
+
         { t: "h", v: "What is still not there" },
         { t: "ul", v: [
-          "Reordering clips on the timeline is drag-and-drop only. Everything else in the Editor has keys (J K L, Space, arrows, S to split), but reordering needs a pointer.",
           "Exported video has no caption track. The transcript exists in the Editor; it does not yet travel with the file.",
+          "Dragging a clip into the frame to reposition it is pointer-only. The same numbers are on sliders in **Transitions**, so nothing is unreachable, but the direct way needs a mouse.",
           "The desktop has not been tested against a screen magnifier at high zoom."
         ] },
         { t: "note", v: "If something here is unreachable from a keyboard, that is a bug rather than a limitation, and it is worth reporting as one." }
@@ -311,7 +423,7 @@ export const ICONS = {
  */
 export function boot() {
   Desk.register({
-    id: "readme", name: "Readme", type: "folder", subtitle: "6 documents",
+    id: "readme", name: "Readme", type: "folder", subtitle: "7 documents",
     tint: "#30ABC6", tintDark: "#1F7E94", icon: ICONS.readme, open: Readme.open
   });
 
