@@ -4317,6 +4317,17 @@ export const Editor = (() => {
         liveLayers()
           .filter((l) => String(l.props?.tag || "").startsWith(`${seg.uid}:`))
           .forEach((l) => removeLayer(l.id, e));
+        // A motion graphics clip owns what is inside it, same as a folder
+        // owns its files. Deleting the clip and leaving its elements behind
+        // at the same cut seconds is how they used to come back as a stray
+        // clip of their own the moment the timeline reflowed around the gap.
+        if (seg.blank) {
+          const mine = explicitClips().find((c) => c.id === seg.uid);
+          if (mine) {
+            layersIn(mine).forEach((l) => removeLayer(l.id, e));
+            soundsIn(mine).forEach((a) => removeAudio(a.id, e));
+          }
+        }
         timeline = timeline.filter((x) => x.uid !== seg.uid);
         selected = null;
         Desk.toast("Clip removed", "good");
