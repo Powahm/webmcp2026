@@ -6,3 +6,5 @@ dist
 # Local scratch, never committed.
 ref/
 scratch/
+CLAUDE.md
+CODEX.md
