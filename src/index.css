@@ -128,36 +128,73 @@
    suggestion is the thing your eye lands on. */
 .scr-doc[data-suggesting="true"] { background: color-mix(in srgb, var(--accent) 3%, var(--surface)); }
 
-/* ---- a line the agent wrote, sitting where it would go ---- */
+/* ---- a line the agent wrote, sitting in the gap the draft opened ---- */
+/*
+ * No card. The document holds a blank row open at the insertion point and the
+ * suggestion is drawn into it, on one line, at the draft's own line height —
+ * so it reads as part of the page rather than as a panel over it, and two
+ * suggestions can never overlap because each has a row of its own.
+ */
 
 .scr-suggests { position: absolute; inset: 0; pointer-events: none; }
 
 .scr-sugg {
   position: absolute;
-  left: 10px;
-  right: 14px;
-  display: grid;
-  grid-template-columns: 22px minmax(0, 1fr);
+  left: 0;
+  right: 12px;
+  height: 22px;
+  display: flex;
+  align-items: center;
   gap: 8px;
-  padding: 9px 11px;
-  border: 1.5px dashed var(--accent);
-  border-radius: var(--radius-s);
-  background: var(--accent-soft);
-  box-shadow: 0 6px 18px rgb(0 0 0 / 0.14);
+  padding-left: 12px;
+  font: 500 13px/22px var(--font-mono);
+  color: var(--accent);
   pointer-events: auto;
-  animation: sugg-in 320ms cubic-bezier(0.22, 1.4, 0.36, 1) both;
+  animation: sugg-in 240ms cubic-bezier(0.22, 1.2, 0.36, 1) both;
 }
 
 @keyframes sugg-in {
-  from { transform: translateY(-6px) scale(0.98); opacity: 0; }
-  to   { transform: none; opacity: 1; }
+  from { opacity: 0; transform: translateX(-6px); }
+  to   { opacity: 1; transform: none; }
 }
 
-.scr-sugg-rail { color: var(--accent); font-size: 13px; font-weight: 700; text-align: center; }
-.scr-sugg-text { margin: 0; font-size: 13px; line-height: 1.5; color: var(--ink); }
-.scr-sugg-note { margin: 4px 0 0; font-size: 11px; color: var(--text-muted); }
-.scr-sugg-why { margin: 5px 0 0; font-size: 11px; font-style: italic; color: var(--text-muted); }
-.scr-sugg-acts { display: flex; gap: 6px; margin-top: 8px; }
+/* Points up and left, at the line number this goes in under. */
+.scr-sugg-arrow {
+  flex: none;
+  font-size: 15px;
+  line-height: 1;
+  opacity: 0.85;
+  transform: translateY(-1px);
+}
+
+.scr-sugg-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scr-sugg-acts { flex: none; display: flex; align-items: center; gap: 10px; opacity: 0; transition: opacity .12s; }
+.scr-sugg:hover .scr-sugg-acts,
+.scr-sugg:focus-within .scr-sugg-acts { opacity: 1; }
+
+.scr-sugg-btn {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: 500 11px/1 var(--font-mono);
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.scr-sugg-btn--no { font-size: 15px; text-decoration: none; color: var(--text-muted); }
+.scr-sugg-btn:hover { color: var(--text); }
+.scr-sugg-btn--no:hover { color: var(--red, #D9432A); }
+
+/* The gap row gets no number: it is not a line yet. */
+.scr-gap-no { visibility: hidden; }
 
 .scr-research { flex: none; border-top: var(--bw) solid var(--line); background: var(--surface-2); display: grid; grid-template-rows: auto 1fr; height: 148px; }
 .scr-sources { width: 100%; padding: 10px 12px; border: 0; background: transparent; color: var(--text); font-family: var(--font-mono); font-size: 11.5px; line-height: 1.6; resize: none; outline: none; }

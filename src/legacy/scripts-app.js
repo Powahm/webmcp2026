@@ -350,15 +350,133 @@ export const Scripts = (() => {
          * a beat, not to a sentence, and folding them in would mean the line
          * numbers here stopped matching the block numbers there.
          */
-        function renderDoc() {
-          if (document.activeElement === doc) return;
-          doc.value = script.lines.map((l) => l.text).join("\n");
+        /**
+         * A suggestion opens a real gap in the draft.
+         *
+         * The old version floated a card over the text, which meant two
+         * suggestions near each other drew on top of one another and neither
+         * could be read. Instead the textarea holds a blank row at the
+         * insertion point — the document literally makes room — and the
+         * suggestion is drawn into that space.
+         *
+         * The blank row is marked with a zero-width space rather than tracked
+         * by index. Indices shift the moment anyone presses Enter above them,
+         * and a stale index means deleting a line somebody wrote; a marker
+         * travels with its row whatever happens around it.
+         */
+        const GAP = "\u200B";
+        const isGap = (line) => line.startsWith(GAP);
+
+        /** What the textarea should contain: the script, plus a held-open row
+         *  for every pending suggestion, in order. */
+        function displayText() {
+          const pending = proposalsFor(script.id).slice().sort((a, b) => a.index - b.index);
+          const out = script.lines.map((l) => l.text);
+          // Back to front, so an insertion does not move the next one.
+          for (let i = pending.length - 1; i >= 0; i--) {
+            const at = Math.max(0, Math.min(pending[i].index, out.length));
+            out.splice(at, 0, GAP);
+          }
+          return out.join("\n");
+        }
+
+        /**
+         * Offsets, with and without the gap rows.
+         *
+         * A gap adds two characters to the document that are not part of the
+         * script, so a caret position means two different things depending on
+         * which text you are counting. These convert between them, which is
+         * what lets a suggestion open a gap while somebody is mid-sentence
+         * without the caret jumping.
+         */
+        function toPlain(value, off) {
+          let plain = 0;
+          let seen = 0;
+          for (const row of value.split("\n")) {
+            const len = row.length + 1;
+            if (seen + len > off) {
+              if (!isGap(row)) plain += Math.max(0, off - seen);
+              return plain;
+            }
+            seen += len;
+            if (!isGap(row)) plain += len;
+          }
+          return plain;
+        }
+
+        function fromPlain(value, plainOff) {
+          let plain = 0;
+          let off = 0;
+          for (const row of value.split("\n")) {
+            const len = row.length + 1;
+            if (isGap(row)) { off += len; continue; }
+            if (plain + len > plainOff) return off + (plainOff - plain);
+            plain += len;
+            off += len;
+          }
+          return off;
+        }
+
+        /**
+         * Rewrite the textarea, keeping the caret where the writer left it.
+         *
+         * This runs even while the draft has focus. It has to: a suggestion
+         * that arrives while somebody is typing used to render nothing at all,
+         * because the gap it needed could not be opened.
+         */
+        function writeDoc() {
+          const focused = document.activeElement === doc;
+          const plain = focused ? toPlain(doc.value, doc.selectionStart) : 0;
+          const next = displayText();
+          if (doc.value !== next) doc.value = next;
+          if (focused) {
+            const at = fromPlain(next, plain);
+            doc.setSelectionRange(at, at);
+          }
           paintGutter();
         }
 
+        function renderDoc() {
+          writeDoc();
+        }
+
+        /**
+         * Read the script back out of the textarea.
+         *
+         * A gap row that is still empty is not a line and never becomes one. A
+         * gap row somebody has typed into is theirs: it turns into a real line
+         * and the suggestion that was sitting there is dropped, because they
+         * have just answered it by writing their own.
+         */
+        function readDoc() {
+          const rows = doc.value.split("\n");
+          const pending = proposalsFor(script.id).slice().sort((a, b) => a.index - b.index);
+          const kept = [];
+          let seen = 0;
+          const superseded = [];
+
+          for (const row of rows) {
+            if (isGap(row)) {
+              const typed = row.slice(GAP.length);
+              const owner = pending[seen];
+              seen += 1;
+              if (typed.trim()) {
+                kept.push(typed);
+                if (owner) superseded.push(owner.id);
+              }
+              continue;
+            }
+            kept.push(row);
+          }
+          return { texts: kept, superseded };
+        }
+
         function paintGutter() {
-          const n = Math.max(1, doc.value.split("\n").length);
-          gutter.innerHTML = Array.from({ length: n }, (_, i) => `<span>${i + 1}</span>`).join("");
+          const rows = doc.value.split("\n");
+          let n = 0;
+          gutter.innerHTML = rows
+            .map((row) => (isGap(row) ? `<span class="scr-gap-no"></span>` : `<span>${++n}</span>`))
+            .join("");
           gutter.scrollTop = doc.scrollTop;
         }
 
@@ -389,47 +507,43 @@ export const Scripts = (() => {
 
           const lh = lineHeight();
           const padTop = parseFloat(getComputedStyle(doc).paddingTop) || 0;
-          const count = doc.value.split("\n").length;
-          const place = (p) => padTop + Math.max(0, Math.min(p.index, count)) * lh;
 
-          // Only rebuild when the cards themselves changed. Typing in the
-          // draft repaints on every keystroke, and blurring it rebuilds the
-          // blocks; either one replacing these nodes mid-gesture swallows the
-          // click, because the button you pressed is gone before mouseup.
-          const sig = pending.map((p) => `${p.id}:${p.index}:${p.mode}`).join("|") + `@${count}`;
-          if (suggests.dataset.sig === sig) {
-            pending.forEach((p) => {
-              const el = suggests.querySelector(`[data-proposal="${p.id}"]`);
-              if (el) el.style.top = `${place(p)}px`;
-            });
-            return;
-          }
+          // Each suggestion sits in the gap the document is holding open for
+          // it, so the row it is drawn on is wherever that gap ended up — not
+          // a number computed from its index, which drifts the moment anyone
+          // types above it.
+          // Make sure every pending suggestion has a gap to sit in before
+          // measuring where the gaps are.
+          if (doc.value.split("\n").filter(isGap).length !== pending.length) writeDoc();
+
+          const rows = doc.value.split("\n");
+          const gapRows = [];
+          rows.forEach((row, i) => { if (isGap(row)) gapRows.push(i); });
+          const ordered = pending.slice().sort((a, b) => a.index - b.index);
+
+          const sig = ordered.map((p, i) => `${p.id}:${gapRows[i]}:${p.mode}`).join("|");
+          if (suggests.dataset.sig === sig) return;
           suggests.dataset.sig = sig;
 
-          suggests.innerHTML = pending
-            .map((p) => {
-              const at = Math.max(0, Math.min(p.index, count));
-              const top = place(p);
+          suggests.innerHTML = ordered
+            .map((p, i) => {
+              const row = gapRows[i];
+              if (row == null) return "";
+              // Which line number it lands under, counting only real lines.
+              const above = rows.slice(0, row).filter((r) => !isGap(r)).length;
               return `
-                <div class="scr-sugg" data-proposal="${p.id}" style="top:${top}px">
-                  <span class="scr-sugg-rail mono">${p.mode === "replace" ? "↻" : "+"}</span>
-                  <div class="scr-sugg-main">
-                    <p class="scr-sugg-text">${Desk.esc(p.text)}</p>
-                    ${p.note ? `<p class="scr-sugg-note">${Desk.esc(p.note)}</p>` : ""}
-                    ${p.reason ? `<p class="scr-sugg-why">${Desk.esc(p.reason)}</p>` : ""}
-                    <div class="scr-sugg-acts">
-                      <button class="btn btn-mini btn-accent" data-take="${p.id}">
-                        ${p.mode === "replace" ? `Replace line ${at + 1}` : `Insert at line ${at + 1}`}
-                      </button>
-                      <button class="btn btn-mini btn-danger" data-drop="${p.id}">Discard</button>
-                    </div>
-                  </div>
+                <div class="scr-sugg" data-proposal="${p.id}" style="top:${padTop + row * lh}px">
+                  <span class="scr-sugg-arrow" aria-hidden="true">&#8624;</span>
+                  <span class="scr-sugg-text">${Desk.esc(p.text)}</span>
+                  <span class="scr-sugg-acts">
+                    <button class="scr-sugg-btn" data-take="${p.id}"
+                      title="${p.mode === "replace" ? `Replace line ${above}` : `Put this in at line ${above + 1}`}">insert</button>
+                    <button class="scr-sugg-btn scr-sugg-btn--no" data-drop="${p.id}" title="Discard">&times;</button>
+                  </span>
                 </div>`;
             })
             .join("");
 
-          // Room at the bottom so a suggestion aimed past the last line is not
-          // hanging off the end of the document.
           suggests.scrollTop = doc.scrollTop;
           doc.style.paddingBottom = `${Math.max(140, lh * 4)}px`;
         }
@@ -448,7 +562,13 @@ export const Scripts = (() => {
         }
 
         doc.addEventListener("input", () => {
-          script.lines = adoptNotes(doc.value.split("\n"));
+          const { texts, superseded } = readDoc();
+          script.lines = adoptNotes(texts);
+          if (superseded.length) {
+            // They wrote in the gap, so the suggestion has been answered.
+            superseded.forEach((id) => drop(id, { isTrusted: true }));
+            writeDoc();
+          }
           paintGutter();
           paintSuggestions();
           renderTotals();
@@ -547,15 +667,22 @@ export const Scripts = (() => {
             // Rebuild the draft even while it has focus. renderDoc bails when
             // the textarea is focused, which is right for ordinary typing and
             // wrong here: the line arrived from outside and has to appear.
-            doc.value = script.lines.map((l) => l.text).join("\n");
-            paintGutter();
+            writeDoc();
             render();
 
             // Put the caret at the end of the line that just landed, so
             // carrying on typing continues from it.
-            const upto = script.lines.slice(0, at + 1).map((l) => l.text).join("\n").length;
+            // Put the caret at the end of the line that just landed. Counted
+            // through the displayed text, because any other suggestion is
+            // still holding its own gap open above or below it.
+            const shown = doc.value.split("\n");
+            let real = 0, upto = 0;
+            for (const row of shown) {
+              upto += row.length + 1;
+              if (!isGap(row) && ++real > at) break;
+            }
             doc.focus();
-            doc.setSelectionRange(upto, upto);
+            doc.setSelectionRange(Math.max(0, upto - 1), Math.max(0, upto - 1));
             return;
           }
           const no = e.target.closest("[data-drop]");
