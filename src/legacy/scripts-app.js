@@ -249,7 +249,7 @@ export const Scripts = (() => {
               <button class="scr-view on" data-view="text" role="tab" aria-selected="true">Draft</button>
               <button class="scr-view" data-view="blocks" role="tab" aria-selected="false">Shot list</button>
             </div>
-            <button class="btn btn-mini" data-act="research" aria-pressed="false">Research</button>
+            <button class="btn btn-mini" data-act="research" aria-pressed="true">Research</button>
             <button class="btn btn-mini" data-act="save">Save</button>
             <button class="btn btn-mini btn-danger" data-act="delete">Delete</button>
             <button class="btn btn-accent" data-act="prompt">Teleprompter</button>
@@ -274,7 +274,7 @@ export const Scripts = (() => {
             </div>
           </div>
 
-          <aside class="scr-research" hidden>
+          <aside class="scr-research">
             <div class="ed-head"><span>Research</span></div>
             <textarea class="scr-sources" spellcheck="false"
               aria-label="Research notes and links"
