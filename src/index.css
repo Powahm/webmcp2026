@@ -1294,9 +1294,13 @@
   padding: 6px;
   border-bottom: var(--bw) solid var(--line);
   background: var(--surface-2);
+  /* Four labels now, and "Transitions" is a long word. They share one row
+     while the rail is wide enough and fold to two when it is not, which beats
+     ellipsing every tab down to five letters. */
+  flex-wrap: wrap;
 }
 .insp-tabs .cmp-tab {
-  flex: 1 1 0;
+  flex: 1 1 68px;
   min-width: 0;
   padding: 4px 2px;
   font-size: 9.5px;

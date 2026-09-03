@@ -267,12 +267,13 @@ export const Editor = (() => {
       <div class="ed-grip ed-grip--insp" data-grip-pane="insp" role="separator"
            aria-label="Resize the inspector" tabindex="0"></div>
       <aside class="ed-insp">
-        <!-- Three columns of the same right-hand rail. Clip, graphics and the
-             composition were stacked in one scroll, which meant reaching the
-             composition took a scroll past whatever else happened to be
-             selected. -->
+        <!-- Four columns of the same right-hand rail. Clip, transitions,
+             graphics and the composition were stacked in one scroll, which
+             meant reaching the composition took a scroll past whatever else
+             happened to be selected. -->
         <div class="cmp-tabs insp-tabs" role="tablist" aria-label="Inspector">
           <button class="cmp-tab" role="tab" data-insp="clip" aria-selected="true" tabindex="0">Clip</button>
+          <button class="cmp-tab" role="tab" data-insp="trans" aria-selected="false" tabindex="-1">Transitions</button>
           <button class="cmp-tab" role="tab" data-insp="gfx" aria-selected="false" tabindex="-1">VFX</button>
           <button class="cmp-tab" role="tab" data-insp="comp" aria-selected="false" tabindex="-1">Comp</button>
         </div>
@@ -1566,7 +1567,7 @@ export const Editor = (() => {
             </select>
           </label>
 
-          ${isAudio ? "" : itemTransformFields(it)}
+          ${isAudio ? "" : crossToTransitions()}
 
           <button class="btn btn-danger btn-wide" data-item-drop="${it.uid}">Remove from lane</button>
         </div>`;
@@ -1643,8 +1644,7 @@ export const Editor = (() => {
               <input type="color" data-blank="colour" value="${seg.colour || "#101018"}">
             </label>
             <button class="btn btn-ghost btn-wide" data-blank="theme">Use the theme ground</button>
-            ${transitionFields(seg)}
-            ${transformFields(seg)}
+            ${crossToTransitions()}
           </div>`;
       }
 
@@ -1684,8 +1684,7 @@ export const Editor = (() => {
           </label>
           <button class="btn btn-ghost btn-wide" data-set="mute" aria-pressed="${seg.muted}">${seg.muted ? "Muted" : "Sound on"}</button>
 
-          ${transitionFields(seg)}
-          ${transformFields(seg)}
+          ${crossToTransitions()}
 
           <div class="insp-row">
             <button class="btn btn-mini" data-move="-1" aria-label="Move earlier">←</button>
@@ -1695,9 +1694,64 @@ export const Editor = (() => {
         </div>`;
     }
 
+    /**
+     * A line back to the tab that now owns the sliders.
+     *
+     * Splitting a panel is only an improvement if the half you are looking at
+     * says where the other half went. One sentence, and it is a button, so the
+     * keyboard reaches it like everything else here.
+     */
+    function crossToTransitions() {
+      return `<button class="btn btn-ghost btn-wide" data-insp-go="trans">Transitions &amp; transform &rarr;</button>`;
+    }
+
+    /**
+     * The second tab: how a clip arrives, how it leaves, and where it sits.
+     *
+     * These used to be the bottom half of the Clip panel, below the trim, the
+     * look, the speed and the volume — which meant the two things you reach
+     * for while watching the cut back were the two things furthest down a
+     * scroll. They are their own column now.
+     *
+     * A transition is not a property on the segment: picking one stages an
+     * `effect` layer on the VFX lane, tagged to this clip's edge, which is why
+     * it survives being dragged and is in the export the moment it is set.
+     */
+    function transitionsPaneHtml() {
+      const onLane = findItem(selected);
+      if (onLane) {
+        const { lane, it } = onLane;
+        if (lane.kind === "audio") {
+          return `<p class="insp-empty">Sound has no transition and nothing to move in the frame. Its level and timing are in <b>Clip</b>.</p>`;
+        }
+        return `
+          ${itemTransformFields(it)}
+          <p class="insp-hint">Transitions belong to the clips on the spine. This one is on an overlay lane, so fade it with a graphic instead.</p>`;
+      }
+
+      const layer = liveLayers().find((l) => l.id === selected);
+      if (layer) {
+        return `<p class="insp-empty">A graphic carries its own position and motion. They are in <b>Clip</b>, under the settings for this layer.</p>`;
+      }
+
+      const seg = timeline.find((s2) => s2.uid === selected);
+      if (!seg) {
+        return `<p class="insp-empty">Select a clip on the timeline to give it a transition, or to move it in the frame.</p>`;
+      }
+
+      return `
+        <p class="insp-kind mono">Transition</p>
+        <div class="insp-body insp-body--tight">
+          <p class="insp-hint">How this clip arrives and how it leaves. Each one is a real layer on the VFX lane, so you can drag it, retime it or delete it there.</p>
+          ${transitionFields(seg)}
+        </div>
+        ${transformFields(seg)}`;
+    }
+
     function renderInspector() {
       insp.innerHTML =
-        inspTab === "gfx" ? graphicsHtml()
+        inspTab === "trans" ? transitionsPaneHtml()
+        : inspTab === "gfx" ? graphicsHtml()
         : inspTab === "comp" ? compositionHtml()
         : clipPaneHtml();
       // A count on the tab, because a proposal behind a closed tab is a
@@ -1754,6 +1808,23 @@ export const Editor = (() => {
       if (!tab) return;
       inspTab = tab.dataset.insp;
       renderInspector();
+    });
+
+    /** Arrows walk the rail's tabs, which is what a tablist is meant to do. */
+    inspTabs.addEventListener("keydown", (e) => {
+      const step = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+      if (!step && e.key !== "Home" && e.key !== "End") return;
+      e.preventDefault();
+
+      const order = [...inspTabs.querySelectorAll("[data-insp]")].map((b) => b.dataset.insp);
+      const i = order.indexOf(inspTab);
+      inspTab =
+        e.key === "Home" ? order[0]
+        : e.key === "End" ? order[order.length - 1]
+        : order[(i + step + order.length) % order.length];
+
+      renderInspector();
+      inspTabs.querySelector(`[data-insp="${inspTab}"]`)?.focus({ preventScroll: true });
     });
 
     function renderClock() {
@@ -2782,6 +2853,16 @@ export const Editor = (() => {
     });
 
     insp.addEventListener("click", (e) => {
+      // The cross-reference at the bottom of a panel. Switching tab from
+      // inside a pane is the same act as clicking the tab itself.
+      const go = e.target.closest("[data-insp-go]");
+      if (go) {
+        inspTab = go.dataset.inspGo;
+        renderInspector();
+        inspTabs.querySelector(`[data-insp="${inspTab}"]`)?.focus({ preventScroll: true });
+        return;
+      }
+
       const keyBtn = e.target.closest("[data-key]");
       if (keyBtn) {
         const layer = liveLayers().find((l) => l.id === selected);
@@ -2947,7 +3028,10 @@ export const Editor = (() => {
     document.addEventListener("keydown", onShortcut);
 
     body.addEventListener("keydown", (e) => {
-      const onTab = e.target.closest?.(".cmp-tab");
+      // Scoped to this tablist. Both strips are built from `.cmp-tab`, so an
+      // unscoped match had the arrow keys on the inspector's tabs quietly
+      // switching the pane under the timeline instead.
+      const onTab = e.target.closest?.(".cmp-tabs:not(.insp-tabs) .cmp-tab");
       if (!onTab) return;
       const step = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
       if (step) {
@@ -3622,8 +3706,10 @@ export const Editor = (() => {
 
     function select(uid) {
       selected = uid;
-      // Selecting a thing means you want to look at it, so the rail follows.
-      inspTab = "clip";
+      // Selecting a thing means you want to look at it, so the rail follows —
+      // but Clip and Transitions are both views of the selection, so picking
+      // the next clip while setting transitions must not throw you back.
+      if (inspTab !== "clip" && inspTab !== "trans") inspTab = "clip";
       renderTrack();
       renderInspector();
       armFrameGrabs();
