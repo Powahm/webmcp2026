@@ -305,8 +305,76 @@ Every proposal takes a \`reason\`. Say what it is for in the person's own terms 
 the reason to decide, and there is no tool that decides for them.
 `;
 
+const TASTE = `---
+name: Taste, not slop
+description: Use before writing any headline, label or caption text, or when the creator says a graphic reads flat, generic or "made by AI".
+triggers: graphic, graphics, title, headline, copy, caption, text, slop, generic, bland, bullet_list, quote_card, title_card
+---
+
+# Taste, not slop
+
+Most of what makes an AI-made interface look AI-made is not available to you here, and that is
+deliberate. \`paint.js\` draws flat fills, a 2px ink border and a hard offset shadow with zero blur
+-- there is no gradient function in this renderer, no blur, no glassmorphism, because none of those
+exist as calls you can make. The type is Bricolage Grotesque over IBM Plex Sans, fixed, not a
+choice. The palette is six roles -- \`accent\`, \`warm\`, \`cool\`, \`positive\`, \`plain\`, \`invert\` --
+not a colour wheel. You cannot accidentally build the purple-to-blue gradient every AI landing page
+reaches for, because the tool you would need to build it does not exist.
+
+That means the slop this file exists to stop is not visual. It is what you still control: the
+words, the repetition, and the one door left open into a literal colour.
+
+## The hex door
+
+A \`colour\` prop takes a role or a hex, and a hex is taken at its word -- \`roleColour\` in
+\`paint.js\` does not second-guess it. That is the one place you could still hand-build the thing
+the renderer was built to prevent: reach for \`#7C3AED\` or \`#3B82F6\` because the phrase in your
+head is "make it pop," and you have quietly recreated indigo-to-blue on a page designed never to
+have it. Ask what a role already means before naming a hex. Use a literal colour only when the
+creator names one -- a brand colour, a hex from their own deck -- never as a synonym for "accent,
+but more."
+
+## Words
+
+A caption in a demo video is read in under a second, so it has no room for a word that was already
+worn out on every SaaS landing page before this one. Do not write, and reject if you are tidying
+someone else's:
+
+| Banned | Because | Say instead |
+|---|---|---|
+| Elevate, Empower, Unlock, Supercharge, Revolutionize, Streamline | means nothing until it names what changed | the actual thing that changed |
+| Seamless, Effortless, Frictionless | a claim, not a fact the viewer can check | the number or the step it removed |
+| "Welcome to", "In this video", "Let's dive in" | describes the video instead of being it | open on the claim itself |
+| Game-changer, Next-level, Cutting-edge | says nothing a specific noun wouldn't say better | the noun |
+
+A \`stat_badge\` gets a real number, not "many" or "10x faster*" with no source. A \`quote_card\`
+gets the actual sentence someone said, not a paraphrase that sounds more like a testimonial. If the
+composition has nothing concrete to put in a box, that is a sign the box should not exist yet --
+propose fewer elements, not vaguer ones.
+
+## Repetition is the tell
+
+Three identical cards in a row is the single most recognisable AI layout, and this engine can still
+produce its version of it: the same component, the same \`palette_role\`, the same position, three
+rows of a \`bullet_list\` in the same voice, back to back. Before adding an element, call
+\`get_composition\` and look at what is already there in this clip. If the last two elements share a
+component and a role, change one of them -- role, position, or which component does the job --
+rather than adding a third that matches.
+
+\`accent\` is spent once per clip, per the motion-graphics skill. That rule exists for the same
+reason: a graphic where everything is loud is a graphic where nothing is.
+
+## Applying it
+
+Before a \`propose_layer\` or \`propose_blank_clip\` call that carries text: run the copy past the
+banned-words table, check whether a hex is standing in for a role that already says what you mean,
+and check the last one or two elements in the clip for a repeat you are about to add to. Say what
+you avoided in the \`reason\` if it is not obvious -- "kept it to the one stat rather than three
+bullets" is as much a design decision as the layer itself.
+`;
+
 /**
- * Three skills to start with, so the folder is never a blank page.
+ * Four skills to start with, so the folder is never a blank page.
  *
  * Missing ones are added rather than the whole set being skipped when anything
  * is there. Bailing on the first existing skill meant a browser that had opened
@@ -320,6 +388,7 @@ export async function seed() {
     ["hook-in-three-seconds.md", EXAMPLE],
     ["link-to-script.md", FROM_A_LINK],
     ["building-a-motion-graphics-clip.md", MOTION],
+    ["taste-not-slop.md", TASTE],
   ];
   for (const [filename, body] of stock) {
     if (!have.has(filename)) await addSkill(parseSkill(filename, body));
