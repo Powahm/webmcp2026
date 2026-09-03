@@ -159,7 +159,19 @@ export const Editor = (() => {
 
   const segDuration = (seg) => Math.max(0.05, (seg.out - seg.in) / seg.speed);
   const spine = () => timeline.reduce((sum, seg) => sum + segDuration(seg), 0);
-  const total = () => Math.max(spine(), overlayEnd());
+  /**
+   * How far the floating motion graphics clips reach.
+   *
+   * Assigned by the open window, because the floats live with it. It is a hook
+   * rather than a read of `floats` for the same reason `refresh` is one: the
+   * length of the cut is asked for out here, and the clips are in there.
+   *
+   * Without it, `total()` was the spine plus the overlay lanes and a floating
+   * clip was in neither, so a title sequence hung off the end of the last shot
+   * was drawn up to the end of that shot and stopped mid-animation.
+   */
+  let floatEnd = () => 0;
+  const total = () => Math.max(spine(), overlayEnd(), floatEnd());
 
   function segmentAt(time) {
     let acc = 0;
@@ -702,6 +714,7 @@ export const Editor = (() => {
      * so a person can open one and work in it.
      */
     let floats = [];
+    floatEnd = () => floats.reduce((max, f) => Math.max(max, f.at + f.seconds), 0);
     let floatNo = 0;
 
     function addFloatingClip({ at = 0, seconds = 5, title = "Overlay" } = {}) {
@@ -2887,9 +2900,16 @@ export const Editor = (() => {
           const at = segmentAt(playhead);
           if (!at) return resolve();
 
-          if (at.seg.blank) {
+          /* Past the last clip, with a floating motion graphics clip still
+             running. The loop used to stop the moment the spine ran out, which
+             is why a title sequence hung off the end was in the timeline and
+             not in the file. There is nothing to decode down here, so it runs
+             like a blank: ground, graphics, real time. */
+          const tail = playhead >= spine() - 0.001;
+
+          if (tail || at.seg.blank) {
             ctx.filter = "none";
-            ctx.fillStyle = at.seg.colour || exportPal.ink;
+            ctx.fillStyle = (tail ? null : at.seg.colour) || exportPal.ink;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
           } else {
           ctx.filter = FILTERS[at.seg.filter] || "none";
@@ -2939,7 +2959,7 @@ export const Editor = (() => {
           scheduler?.tick(playhead, liveAudio());
           syncLaneAudio(playhead, { play: true });
 
-          if (at.seg.blank) {
+          if (tail || at.seg.blank) {
             // Real time, like everything else here: the recorder is capturing
             // a live canvas, so a blank has to take up its real duration.
             playhead += 1 / 30;
@@ -2950,12 +2970,23 @@ export const Editor = (() => {
           fill.style.width = `${Math.min(100, (playhead / duration) * 100)}%`;
           title.textContent = `Exporting… ${timecode(playhead)} of ${timecode(duration)}`;
 
+          if (tail) {
+            if (playhead >= duration - 0.02) return resolve();
+            return void requestAnimationFrame(paint);
+          }
+
           const done = at.seg.blank
             ? playhead >= at.start + segDuration(at.seg) - 0.02
             : video.currentTime >= at.seg.out - 0.03 || video.ended;
           if (done) {
             const next = timeline[timeline.indexOf(at.seg) + 1];
-            if (!next) return resolve();
+            if (!next) {
+              // The spine is finished. Anything still running past it is a
+              // floating clip, and the next frame falls into the tail above.
+              if (playhead >= duration - 0.02) return resolve();
+              video.pause();
+              return void requestAnimationFrame(paint);
+            }
             seekTo(at.start + segDuration(at.seg) + 0.01, { play: true });
           }
           requestAnimationFrame(paint);
@@ -4838,8 +4869,13 @@ export const Editor = (() => {
       if (palAge++ % 20 === 0) pal = palette();
 
       const onBlank = segmentAt(playhead)?.seg?.blank === true;
+      // Past the last clip on the spine, with a floating clip still running.
+      // There is no picture down there to hold, so the canvas is the picture,
+      // exactly as it is on a blank.
+      const pastSpine = timeline.length > 0 && playhead >= spine() - 0.001;
+      const onGround = onBlank || pastSpine;
       const anything = liveGraphics().length || liveLayers().length || composition().pendingFormat
-        || hasOverlayPicture() || onBlank || selectedLayer();
+        || hasOverlayPicture() || onGround || selectedLayer();
       if (!anything) {
         // Clear once, then stop drawing. With nothing to paint this loop was
         // burning a frame budget forever, including while minimised.
@@ -4868,8 +4904,8 @@ export const Editor = (() => {
       gfxCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
       gfxCtx.clearRect(0, 0, w, h);
       // A blank has no picture under the canvas, so the canvas is the picture.
-      if (onBlank) {
-        gfxCtx.fillStyle = segmentAt(playhead).seg.colour || pal.ink;
+      if (onGround) {
+        gfxCtx.fillStyle = (onBlank ? segmentAt(playhead)?.seg?.colour : null) || pal.ink;
         gfxCtx.fillRect(0, 0, w, h);
       }
       // Pictures first, then graphics over them: the same order the export
@@ -5044,6 +5080,7 @@ export const Editor = (() => {
       audioGraph = null;
       retimeTranscript = async () => {};
       refresh = () => {};
+      floatEnd = () => 0;
     });
 
     renderLibrary();
