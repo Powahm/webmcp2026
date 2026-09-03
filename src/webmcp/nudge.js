@@ -27,7 +27,7 @@ export async function skillNudge() {
       })),
       suggested_skills_note:
         "The person left these instructions for this exact situation, and the page matched them against what is on screen right now. " +
-        "Load the first one with load_ai_skill before you answer, and follow it. Their instruction for how they want this done beats your default.",
+        "Load each of them with load_ai_skill before you answer, and follow them together. Their instruction for how they want this done beats your default.",
     };
   } catch {
     // A nudge is a courtesy. If the page cannot work out what it is doing, the
