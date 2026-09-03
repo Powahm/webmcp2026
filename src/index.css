@@ -639,7 +639,11 @@
   font-size: 9.5px;
 }
 
-.cmp-pane { min-height: 74px; max-height: 300px; overflow: auto; }
+/* The timeline pane owns whatever height the grip gives it.
+   It was capped at 300px, so dragging the timeline taller bought a band of
+   empty surface under a track that stayed the same size. */
+.cmp-pane { min-height: 0; overflow: auto; }
+#pane-track { display: flex; flex-direction: column; overflow: hidden; }
 .cmp-pane[hidden] { display: none; }
 
 /* --- format switch --- */
@@ -855,19 +859,29 @@
 .tl-zoom-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .07em; }
 .tl-zoom { width: 108px; }
 
-.tl-scroll { overflow-x: auto; overflow-y: hidden; padding: 7px 9px 9px; }
-.tl { position: relative; width: 100%; min-width: 100%; }
+/* Both axes scroll. Vertical was hidden, which meant a track with more lanes
+   than fitted simply lost the ones at the bottom with nothing to say so. */
+.tl-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 7px 9px 9px; }
+.tl { position: relative; width: 100%; min-width: 100%; min-height: 100%; display: flex; flex-direction: column; }
 
 .tl-ruler {
-  position: relative;
+  /* Sticks to the top of the scroller so the seconds stay readable however far
+     down the lane stack you are. */
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  flex: none;
   height: 19px;
+  background: var(--surface);
   border-bottom: var(--bw) solid var(--line);
   cursor: pointer;
 }
 .tl-tick { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--line); opacity: .55; }
 .tl-tick i { position: absolute; left: 4px; top: 2px; font-size: 9.5px; font-style: normal; color: var(--text-muted); white-space: nowrap; }
 
-.tl-lanes { display: grid; gap: 4px; padding-top: 5px; }
+/* The lanes take the leftover height rather than leaving a gap under them:
+   `1fr` rows stretch, and each lane keeps its own minimum. */
+.tl-lanes { flex: 1 1 auto; display: grid; grid-auto-rows: minmax(min-content, 1fr); gap: 4px; padding-top: 5px; }
 
 .tl-lane {
   position: relative;
@@ -1211,3 +1225,95 @@
   text-transform: uppercase;
   color: var(--text-muted);
 }
+
+/* ============================================================
+   Motion graphics clips
+
+   A clip is a container, so it is drawn like one: a solid bar
+   with a little map of what is inside it. The elements
+   themselves are not on this timeline at all — you open the
+   clip to see them, and inside it each one gets a row to
+   itself, which is why the lane can no longer run out of
+   space.
+   ============================================================ */
+
+.tl-lane--motion .tl-lane-body { min-height: 46px; }
+
+.tl-item--mclip {
+  background-color: var(--purple, #B62AD9);
+  background-image: none;
+  cursor: pointer;
+}
+.tl-item--spine.tl-item--mclip { background-color: var(--purple, #B62AD9); }
+
+/* The map of what the clip holds. Bars, not labels: at this size a label is
+   unreadable and a bar still tells you the shape of the animation. */
+.tl-mini {
+  position: absolute;
+  left: 6px; right: 6px; bottom: 4px;
+  height: 15px;
+  pointer-events: none;
+}
+.tl-mini i {
+  position: absolute;
+  height: 2px;
+  border-radius: 1px;
+  background: color-mix(in srgb, #fff 78%, transparent);
+}
+
+/* The way back out, and the two things worth adding by hand. */
+.tl-crumb {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 8px;
+  margin-bottom: 2px;
+  border: var(--bw) solid var(--line);
+  border-radius: var(--radius-s);
+  background: var(--surface-2);
+}
+.tl-crumb b { font-family: var(--font-display); font-size: 13px; }
+.tl-crumb-meta { font-size: 10px; color: var(--text-muted); }
+.tl-crumb-acts { margin-left: auto; display: flex; gap: 6px; }
+
+/* One element, one row. */
+.tl-lane--el { min-height: 40px; }
+.tl-lane--el .tl-lane-body { min-height: 38px; }
+.tl-lane--el .tl-item { top: 0; bottom: 0; }
+
+/* Inside a clip the library and the clip inspector are about the cut, not
+   about the animation, so they get out of the way. */
+.ed.is-scoped .tl-tools [data-act="split"],
+.ed.is-scoped .tl-tools [data-act="add-blank"],
+.ed.is-scoped .tl-tools [data-act="add-lane"],
+.ed.is-scoped .tl-tools [data-act="add-audio"] { display: none; }
+
+/* A card that has just been decided, before the repaint that redraws it from
+   the composition. It is only ever on screen for a frame or two; what it buys
+   is that the press never looks ignored. */
+.cmp-item.is-settling, .gfx-item.is-settling {
+  border-style: solid;
+  transition: border-color .12s var(--ease-out, ease), opacity .12s;
+}
+.cmp-item.is-settling .cmp-item-acts { opacity: .45; }
+
+/* The way in. Double click opens a clip like a precomp anywhere else, and this
+   is the same door for anyone who has not learned that yet. */
+.tl-open {
+  position: absolute;
+  top: 4px; right: 4px;
+  padding: 1px 6px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: .06em;
+  color: var(--text);
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity .12s;
+}
+.tl-item--mclip:hover .tl-open,
+.tl-item--mclip:focus-within .tl-open { opacity: 1; }
+.tl-open:focus-visible { opacity: 1; outline: 2px solid var(--blue); outline-offset: 1px; }

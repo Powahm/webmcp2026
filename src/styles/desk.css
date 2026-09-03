@@ -1194,7 +1194,7 @@ body {
   /* The three panels are grid tracks driven by custom properties, so the
      resize grips are one property write each and the layout does the rest. */
   grid-template-columns: var(--ed-lib, 152px) minmax(0, 1fr) var(--ed-insp, 220px);
-  grid-template-rows: minmax(0, 1fr) var(--ed-tl, auto);
+  grid-template-rows: minmax(0, 1fr) var(--ed-tl, 300px);
   grid-template-areas: "lib stage insp" "tl tl tl";
   overflow: hidden;
 }
@@ -1308,7 +1308,19 @@ body {
 .insp-row { display: flex; gap: 5px; }
 .insp-row .btn { flex: 1; }
 
-.ed-timeline { grid-area: tl; border-top: var(--bw) solid var(--line); background: var(--surface); }
+.ed-timeline {
+  grid-area: tl;
+  /* A column, so the track pane takes every pixel the grip hands the timeline
+     instead of stopping at a fixed height with dead surface under it. */
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  border-top: var(--bw) solid var(--line);
+  background: var(--surface);
+}
+.ed-timeline .ed-head { flex: none; }
+.ed-timeline .cmp-pane:not([hidden]) { flex: 1 1 auto; }
 .ed-track { display: flex; gap: 5px; padding: 9px; min-height: 74px; align-items: stretch; overflow-x: auto; }
 
 .seg {
