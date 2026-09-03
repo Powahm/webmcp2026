@@ -103,7 +103,16 @@
 
 * { box-sizing: border-box; }
 
-html, body { height: 100%; }
+/* The page is a screen, not a document: it never scrolls, and it never
+   rubber-bands open past its own edge either. Both are said on the root as
+   well as on the body, because an embedded browser -- the site opened inside
+   ChatGPT, say -- scrolls the root and would otherwise pull the wallpaper up
+   off an empty background. */
+html, body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
 
 body {
   margin: 0;
@@ -112,7 +121,6 @@ body {
   font-family: var(--font-body);
   font-size: 15px;
   line-height: 1.55;
-  overflow: hidden;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -1120,9 +1128,28 @@ body {
   overflow: hidden;
 }
 
-/* contain, not cover: resizing the window should letterbox the picture,
-   never crop it out of view. */
-.cam-video { width: 100%; height: 100%; object-fit: contain; display: block; transform: scaleX(-1); }
+/*
+ * The whole feed, always, whatever the window is doing.
+ *
+ * Laid against the stage rather than flowed inside it, and that is the load
+ * bearing part. As a grid item its `height: 100%` had no definite row to
+ * resolve against -- `place-items: center` leaves the row auto -- so it fell
+ * back to the camera's own 4:3 and made the row that tall: a 756x513 stage
+ * holding a 756x567 video, the bottom 54px of the picture clipped away behind
+ * the control bar. `object-fit: contain` could not help, because the element
+ * and the picture had the same shape by then and there was nothing left to
+ * letterbox. Absolute against a relative stage gives it a definite box the
+ * size of the stage, and contain does the rest.
+ */
+.cam-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  transform: scaleX(-1);
+}
 
 .cam-blocked {
   position: absolute;
@@ -1162,6 +1189,11 @@ body {
 .cam-bar {
   flex: none;
   display: flex;
+  /* Wraps at any width, not only on a phone. Six controls need about 650px
+     and the window may legitimately be narrower than that, and the one that
+     went over the edge first was the shutter -- a record button you cannot
+     reach is worse than a toolbar two rows tall. */
+  flex-wrap: wrap;
   align-items: center;
   gap: 9px;
   padding: 11px 14px;
@@ -1287,6 +1319,21 @@ body {
 .lib-name { padding: 0 7px; font-size: 12px; font-weight: 500; line-height: 1.25; overflow-wrap: anywhere; }
 .lib-time { padding: 0 7px; font-size: 10.5px; color: var(--text-muted); }
 
+/* A clip whose sound imported but whose picture this browser will not draw.
+   Said on the tile, because the thumbnail is blank for the same reason and a
+   blank thumbnail on its own looks like a clip that failed to import. */
+.lib-mute {
+  align-self: start;
+  margin: 0 7px;
+  padding: 1px 6px;
+  font-size: 9.5px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: #fff;
+  background: var(--accent);
+  border-radius: 999px;
+}
+
 .lib-del {
   position: absolute;
   top: 4px; right: 4px;
@@ -1320,6 +1367,22 @@ body {
 .ed-video { max-width: 100%; max-height: 100%; display: block; }
 .ed-empty { position: absolute; margin: 0; padding: 0 24px; text-align: center; font-size: 13px; color: #9BA1B4; }
 .ed-empty[hidden] { display: none; }
+
+/* Over the frame, on the black the missing picture leaves behind. */
+.ed-nopic {
+  position: absolute;
+  max-width: 42ch;
+  margin: 0;
+  padding: 10px 14px;
+  text-align: center;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: #fff;
+  background: rgba(11, 12, 16, .82);
+  border: 1px solid rgba(255, 255, 255, .16);
+  border-radius: var(--radius-s);
+}
+.ed-nopic[hidden] { display: none; }
 
 .ed-transport {
   flex: none;

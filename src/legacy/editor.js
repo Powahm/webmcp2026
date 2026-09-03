@@ -1,4 +1,4 @@
-import { Clips, Folders, Store, timecode } from "./store.js";
+import { Clips, Folders, noPictureMessage, Store, timecode } from "./store.js";
 import { drawGraphics } from "../graphics/render.js";
 import {
   accept as acceptGraphic,
@@ -173,6 +173,15 @@ export const Editor = (() => {
   let floatEnd = () => 0;
   const total = () => Math.max(spine(), overlayEnd(), floatEnd());
 
+  /**
+   * A clip this browser can play but not draw.
+   *
+   * Explicitly `false`, never merely falsy: clips saved before the probe
+   * started recording this have no such field at all, and "we never checked"
+   * is not "we checked and there is no picture".
+   */
+  const noPicture = (clip) => clip?.hasPicture === false;
+
   function segmentAt(time) {
     let acc = 0;
     for (const seg of timeline) {
@@ -285,6 +294,10 @@ export const Editor = (() => {
           <canvas class="ed-gfx"></canvas>
           </div>
           <p class="ed-empty">Add a clip from the library to start cutting.</p>
+          <!-- Shown over the picture when the clip under the playhead is one
+               this browser can play but not draw, so a black frame says why
+               it is black instead of looking like a broken editor. -->
+          <p class="ed-nopic" hidden></p>
         </div>
         <!-- The format lives where the picture is, because it is a thing you
              look at and change, not a setting you go and find. -->
@@ -408,6 +421,7 @@ export const Editor = (() => {
     const frameBox = body.querySelector(".ed-frame");
     const formatBar = body.querySelector(".ed-formats-list");
     const empty = body.querySelector(".ed-empty");
+    const noPic = body.querySelector(".ed-nopic");
     const libList = body.querySelector(".ed-lib-list");
     const lib = body.querySelector(".ed-lib");
     const libTabs = body.querySelector(".lib-tabs");
@@ -571,10 +585,13 @@ export const Editor = (() => {
               <button class="lib-add" draggable="true" data-add="${c.id}"
                       title="${sound
                         ? "Put it on an audio lane at the playhead, or drag it onto one"
-                        : "Add to the timeline, or drag onto a lane"}">
+                        : noPicture(c)
+                          ? Desk.esc(noPictureMessage(c.name))
+                          : "Add to the timeline, or drag onto a lane"}">
                 ${sound
                   ? SOUND_MARK
                   : c.thumb ? `<img src="${c.thumb}" alt="">` : `<span class="strip-blank"></span>`}
+                ${!sound && noPicture(c) ? `<span class="lib-mute mono">no picture</span>` : ""}
                 <span class="lib-name">${Desk.esc(c.name)}</span>
                 <span class="lib-time mono">${sound ? "sound &middot; " : ""}${timecode(c.duration)}</span>
               </button>
@@ -2870,6 +2887,7 @@ export const Editor = (() => {
         video.pause();
         loaded = null;
         video.style.filter = "";
+        noPic.hidden = true;
         syncOverlays(playhead, { play });
         syncLaneAudio(playhead, { play });
         scheduler?.seek(playhead);
@@ -2881,6 +2899,11 @@ export const Editor = (() => {
 
       const clip = byId.get(at.seg.clipId);
       if (!clip) return;
+
+      // The picture is missing for a reason worth reading, and the frame it
+      // would have filled is the one place nobody can miss it.
+      noPic.hidden = !noPicture(clip);
+      if (noPicture(clip)) noPic.textContent = noPictureMessage(clip.name);
 
       if (loaded !== at.seg.clipId) {
         video.src = Clips.url(clip);
@@ -5343,18 +5366,24 @@ export const Editor = (() => {
     });
 
     fileInput.addEventListener("change", async () => {
-      const files = [...fileInput.files];
-      for (const file of files) {
-        await Clips.save(file, {
+      const mute = [];
+      for (const file of fileInput.files) {
+        const clip = await Clips.save(file, {
           name: file.name.replace(/\.[^.]+$/, ""),
           kind: "import",
           // Imported into whichever folder is open, because filing it
           // afterwards is the step that never happens.
           folder: isFolder(libFolder) ? libFolder : null,
         });
+        if (clip.hasPicture === false) mute.push(clip.name);
       }
       fileInput.value = "";
-      Desk.toast("Imported.", "good");
+      // Said at the moment of import, because that is when it can still be
+      // acted on. Finding out later, from a black rectangle on the timeline,
+      // reads as the editor being broken rather than the file being one this
+      // browser cannot draw.
+      if (mute.length) Desk.toast(noPictureMessage(mute), "bad");
+      else Desk.toast("Imported.", "good");
     });
 
     /**
