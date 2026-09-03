@@ -639,7 +639,7 @@ export const Editor = (() => {
     function motionClips() {
       const clips = explicitClips();
       const fps = composition().fps || 30;
-      const inside = (t) => clips.some((c) => t >= c.start - 0.001 && t < c.end - 0.001);
+      const inside = (t) => clips.some((c) => withinClip(c, t));
 
       const loose = liveLayers()
         .map((l) => ({
@@ -672,17 +672,36 @@ export const Editor = (() => {
 
     const withinClip = (c, seconds) => seconds >= c.start - 0.001 && seconds < c.end - 0.001;
 
+    /**
+     * Which clip owns a moment. Exactly one does.
+     *
+     * An overlay placed over a clip on the spine covers the same seconds, and
+     * asking each container separately what it holds counts every element
+     * twice — two clips both claiming six elements, and deleting one from
+     * inside either leaves it in the other. The overlay wins because it sits
+     * above the picture, which is the same order the frame is painted in.
+     */
+    function ownerOf(seconds) {
+      const ex = explicitClips();
+      return ex.find((c) => c.kind === "float" && withinClip(c, seconds))
+        || ex.find((c) => c.kind === "spine" && withinClip(c, seconds))
+        || null;
+    }
+
+    const holds = (c, seconds) =>
+      c.kind === "loose" ? withinClip(c, seconds) : ownerOf(seconds)?.id === c.id;
+
     function layersIn(c) {
       const fps = composition().fps || 30;
       return liveLayers()
-        .filter((l) => withinClip(c, l.from / fps))
+        .filter((l) => holds(c, l.from / fps))
         .sort((a, b) => a.from - b.from || a.id.localeCompare(b.id));
     }
 
     function soundsIn(c) {
       const fps = composition().fps || 30;
       return liveAudio()
-        .filter((a) => withinClip(c, a.from / fps))
+        .filter((a) => holds(c, a.from / fps))
         .sort((a, b) => a.from - b.from);
     }
 
@@ -792,9 +811,8 @@ export const Editor = (() => {
       return timeline.map((seg) => {
         const dur = segDuration(seg);
         const clip = byId.get(seg.clipId);
-        const held = seg.blank
-          ? layersIn({ start: at, end: at + dur }).length + soundsIn({ start: at, end: at + dur }).length
-          : 0;
+        const mine = { id: seg.uid, kind: "spine", start: at, end: at + dur };
+        const held = seg.blank ? layersIn(mine).length + soundsIn(mine).length : 0;
         const name = seg.blank
           ? (seg.title || "Motion graphics")
           : (clip?.name || "Missing clip");
@@ -806,7 +824,7 @@ export const Editor = (() => {
             <span class="tl-grip tl-grip--in" data-grip="in" data-seg="${seg.uid}"></span>
             <span class="tl-item-name">${Desk.esc(name)}</span>
             <span class="tl-item-time mono">${seg.blank ? `${held} element${held === 1 ? "" : "s"} · ${timecode(dur)}` : timecode(dur)}</span>
-            ${seg.blank ? `<span class="tl-mini" aria-hidden="true">${miniHtml({ start: at, end: at + dur })}</span>
+            ${seg.blank ? `<span class="tl-mini" aria-hidden="true">${miniHtml(mine)}</span>
             <button class="tl-open" data-open-mclip="${seg.uid}" aria-label="Open ${Desk.esc(name)}">Open</button>` : ""}
             ${(seg.tkeys ?? []).map((k) => {
               const at2 = Math.max(0, Math.min(1, k.f / Math.max(1, dur * (composition().fps || 30))));
@@ -1073,7 +1091,7 @@ export const Editor = (() => {
       // clip. Drawing it here as well would be the same thing in two places,
       // which is the state where a person deletes one copy and is surprised.
       const clips = motionClips();
-      const held = (a) => clips.some((c) => withinClip(c, a.from / fps));
+      const held = (a) => clips.some((c) => holds(c, a.from / fps));
       const packed = pack(liveAudio().filter((a) => !held(a)).map((a) => ({
         a, start: a.from / fps, length: Math.max(0.15, (a.durationInFrames || fps) / fps),
       })));
