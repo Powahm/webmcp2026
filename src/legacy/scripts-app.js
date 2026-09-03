@@ -4,7 +4,7 @@ import { drop, onProposals, proposalsFor, take } from "../scripts/proposals.js";
 import { Desk } from "./shell.js";
 
 /* ============================================================
-   Scripts — what you are going to say, on camera.
+   Scripts: what you are going to say, on camera.
    A script is a title and a list of lines. Each line is one
    spoken beat plus an optional shot direction. Runtime is
    estimated from word count, and the teleprompter scrolls it
@@ -24,7 +24,7 @@ export const Scripts = (() => {
       name: "WebMCP Challenge demo",
       lines: [
         { text: "This is Deskmate. A whole editing workstation, living in one browser tab.", note: "Straight to camera. Desktop visible behind you." },
-        { text: "You write the script here, read it off the teleprompter while you record, and cut what you shot.", note: "Screen: Scripts, then Camera, then Editor. Keep it moving — three seconds each." },
+        { text: "You write the script here, read it off the teleprompter while you record, and cut what you shot.", note: "Screen: Scripts, then Camera, then Editor. Keep it moving, three seconds each." },
         { text: "The interesting part is what the agent sitting next to me can see.", note: "Back to camera. Beat before the next line." },
         { text: "Which line of the prompter I am on, mid-take. Whether the camera is rolling. What I have selected on the timeline.", note: "Screen: the ghost reading the page. Let the tool names show." },
         { text: "None of that is on a server. It is a Blob in IndexedDB and an array in a closure.", note: "Hold on the Editor. Slow down here." },
@@ -32,7 +32,7 @@ export const Scripts = (() => {
         { text: "Twenty-eight tools, registered straight onto the page.", note: "Screen: the badge in the menu bar, then the tool list." },
         { text: "Watch. I ask for a title card over the bit where I stumbled.", note: "Type the ask on camera. Do not cut away." },
         { text: "It composes the graphic, times it against the transcript, and puts it on the timeline dashed.", note: "Hold on the dashed proposal previewing live." },
-        { text: "Dashed means proposed. There is no tool that accepts one — that click is mine.", note: "Accept it on camera. Beat after." },
+        { text: "Dashed means proposed. There is no tool that accepts one: that click is mine.", note: "Accept it on camera. Beat after." },
         { text: "Nothing uploaded. No backend. Everything you just watched happened in this tab.", note: "Back to camera." },
         { text: "Link is below. Go and break it.", note: "Point down. Hold two seconds for the outro." }
       ]
@@ -41,7 +41,7 @@ export const Scripts = (() => {
       id: "example-intro",
       name: "Channel intro",
       lines: [
-        { text: "Right — so this thing has been sitting on my desk for about three weeks now.", note: "Hold it up. Straight to camera." },
+        { text: "Right, so this thing has been sitting on my desk for about three weeks now.", note: "Hold it up. Straight to camera." },
         { text: "And I genuinely did not expect to like it as much as I do.", note: "Beat. Small smile." },
         { text: "Three things I want to show you, and the third one is the reason I kept it.", note: "Count on fingers." },
         { text: "Let's get into it.", note: "Cut to title card." }
@@ -52,7 +52,7 @@ export const Scripts = (() => {
       name: "Product demo, 60s",
       lines: [
         { text: "Here's the problem. Every clip you shoot ends up in a different folder, and by Friday you can't find any of them.", note: "Screen recording of a messy folder." },
-        { text: "So — record here, and it lands in the library automatically.", note: "Cut to Camera app. Press record." },
+        { text: "So, record here, and it lands in the library automatically.", note: "Cut to Camera app. Press record." },
         { text: "Drop it on the timeline, drag the ends to trim, pick a look.", note: "Screen capture of the editor. Keep it moving." },
         { text: "That's it. No accounts, no upload, nothing leaves your machine.", note: "Back to camera. Slow down here." },
         { text: "Link's below if you want to try it.", note: "Point down. Hold two seconds for the outro." }
@@ -95,7 +95,7 @@ export const Scripts = (() => {
      * Seed per example, not all-or-nothing.
      *
      * The old check was `if (existing.length) return`, which meant an example
-     * added later never reached anybody who had already opened the app once —
+     * added later never reached anybody who had already opened the app once,
      * and the people who have opened it are exactly the ones a new example is
      * written for. Offered ids are remembered instead, so a fresh one arrives
      * and one you deleted stays deleted.
@@ -392,7 +392,7 @@ export const Scripts = (() => {
                 <textarea class="line-text" rows="2" data-field="text"
                   placeholder="What you say out loud…">${Desk.esc(line.text)}</textarea>
                 <input class="line-note" data-field="note" value="${Desk.esc(line.note || "")}"
-                  placeholder="Shot direction — camera, b-roll, tone">
+                  placeholder="Shot direction: camera, b-roll, tone">
               </div>
               <div class="line-acts">
                 <button class="line-btn" data-move="-1" aria-label="Move line ${i + 1} up">↑</button>

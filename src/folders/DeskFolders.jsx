@@ -9,7 +9,7 @@ import { deskFolders, onDeskFolders } from "./desk.js";
  * with it.
  *
  * The **Add a folder** tile is always here, and that is the point of it. The
- * ghost asks once, and someone who says "not now" then has no way back — a
+ * ghost asks once, and someone who says "not now" then has no way back: a
  * question you can only answer at the moment it is asked is not really an
  * offer. So the desk keeps one dashed folder open at all times.
  */

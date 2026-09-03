@@ -2,8 +2,8 @@
  * What is true about this page, right now, in terms a skill can be written
  * against.
  *
- * A skill declares when it applies — `triggers: research_has_url, script_empty`
- * — and this is the other half of that contract. Every name below is part of
+ * A skill declares when it applies (`triggers: research_has_url, script_empty`)
+ * and this is the other half of that contract. Every name below is part of
  * the format, so it is worth them being obvious rather than clever: someone
  * writing a skill in a text editor has to be able to guess them.
  *

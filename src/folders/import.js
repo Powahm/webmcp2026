@@ -196,7 +196,7 @@ function chooseFiles() {
 
     // The old version resolved null 600ms after focus returned. On a folder
     // with any size to it the change event has not fired by then, so the
-    // import was abandoned while the browser was still reading the directory —
+    // import was abandoned while the browser was still reading the directory,
     // which is exactly the "it just disappears" symptom. Give it real time, and
     // only give up if nothing was chosen.
     window.addEventListener(

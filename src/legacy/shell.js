@@ -1,5 +1,5 @@
 /* ============================================================
-   Shell — desktop, window manager, dock, launcher, theme.
+   Shell: desktop, window manager, dock, launcher, theme.
    Apps register themselves with Desk.register() and are handed
    a body element to fill when they open.
    ============================================================ */
@@ -334,7 +334,7 @@ export const Desk = (() => {
    *
    * The dock used to be a coloured square and a word, which is fine until four
    * windows are open and three of them are documents. Window ids are already
-   * namespaced by what opened them — `doc:`, `script:`, `skill:`, `folder:` —
+   * namespaced by what opened them (`doc:`, `script:`, `skill:`, `folder:`),
    * so the prefix picks the glyph and an app supplies its own.
    */
   const DOCK_GLYPHS = {
@@ -371,7 +371,7 @@ export const Desk = (() => {
       const minimised = rec.el.dataset.state === "minimised";
       btn.dataset.minimised = String(minimised);
       btn.setAttribute("aria-current", String(rec.el.dataset.focused === "true" && !minimised));
-      // The glyph is decorative — the label beside it already names the window,
+      // The glyph is decorative: the label beside it already names the window,
       // so a second reading of the same word would be noise.
       btn.innerHTML =
         `<span class="dock-glyph" aria-hidden="true">${dockGlyph(rec.id)}</span>` +

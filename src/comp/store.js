@@ -8,7 +8,7 @@
  * rather than a move between two stores that can disagree.
  *
  * **Nothing here can be accepted by an agent.** `accept` and its siblings
- * refuse without a trusted user event — the same bit a browser uses to tell a
+ * refuse without a trusted user event: the same bit a browser uses to tell a
  * real click from a synthetic one. So the agent can compose an eight-second
  * animated title card, a sound effect under it and a reframe to vertical in
  * three calls, and it still cannot put one frame of any of it into the video.

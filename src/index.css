@@ -129,7 +129,7 @@
  * A real card, not text laid straight over the page.
  *
  * This used to be one printed row at the draft's own line height, on the
- * theory that the document held a blank line open for it — it never did, and
+ * theory that the document held a blank line open for it: it never did, and
  * a suggestion carries a note and a reason as well as the line itself, none
  * of which fit in 22px. Squeezed into that box with no backing of its own,
  * the card's text and the document's text underneath it blended into one
@@ -161,7 +161,7 @@
   to   { opacity: 1; transform: none; }
 }
 
-/* The mode glyph — insert or replace — as a small badge, not bare text lost
+/* The mode glyph (insert or replace) as a small badge, not bare text lost
    against the card. */
 .scr-sugg-rail {
   flex: none;
@@ -602,7 +602,7 @@
    The composition: layers, sound, format, transcript, code.
 
    New surfaces, so they live here rather than in desk.css, and
-   they take their own prefixes — cmp- for the composition panel,
+   they take their own prefixes: cmp- for the composition panel,
    trx- for the transcript, tsx- for the code view, cut- for the
    markers on the track. Every colour is a token; the form
    language is the same 2px border and hard offset shadow as the
@@ -736,7 +736,7 @@
   overflow-wrap: anywhere;
 }
 .cmp-item-why { margin: 0; font-size: 11px; color: var(--text-muted); line-height: 1.35; }
-/* A proposed sound carries three buttons — hear it, accept, reject — one more
+/* A proposed sound carries three buttons (hear it, accept, reject), one more
    than a layer ever does, so this wraps rather than overflowing a narrow rail. */
 .cmp-item-acts { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 2px; }
 
@@ -1022,6 +1022,15 @@
 /* A staged blank, and the sound lane. */
 .tl-item--blank { background-color: var(--ink, #1A1A17); background-image: none; }
 .tl-item--spine.is-proposed { border-style: dashed; opacity: .85; }
+
+/* On the main timeline a clip is a clip: its block is pinned to the lane's
+   designed height no matter how much a motion graphics clip holds inside it.
+   `top`/`bottom` alone leave the height to resolve from content in some
+   layouts (a tall inspector pane, a resized lane), which is how a clip with
+   a lot of elements in it ends up taller than its neighbours. An explicit
+   height forecloses that regardless of how many elements, mini-map bars, or
+   future badges end up inside the block. */
+.tl-item--spine { height: 50px; max-height: 50px; }
 .tl-lane--sfx .tl-item { background-color: var(--green, #2C9E4B); background-image: none; }
 .tl-item--sfx.is-proposed { border-style: dashed; background-color: transparent; color: var(--text); }
 .tl-ask {
@@ -1102,7 +1111,7 @@
  * absolutely against the whole editor.
  *
  * They used to be `top: 0; bottom: 0` inside `.ed`, which made each one a
- * full-height bar running down through the timeline — visible as a stripe
+ * full-height bar running down through the timeline: visible as a stripe
  * whenever the pointer was anywhere in that column, and, at z-index 6, a 7px
  * strip that swallowed every pointerdown meant for the track behind it.
  * Sharing the stage's grid area confines them to the row they resize.
@@ -1192,7 +1201,7 @@
 .ed-zoom-read { font-size: 10.5px; color: var(--text-muted); min-width: 38px; text-align: right; }
 
 /* A1: the spine's sound. The cut is made on V1, so this row shows rather than
-   edits — one cut, not two that can disagree. */
+   edits: one cut, not two that can disagree. */
 .tl-lane--a1 .tl-item { background-color: var(--teal, #30ABC6); background-image: none; }
 .tl-lane--a1 .tl-item.is-muted { opacity: .45; }
 .tl-lane--a1 { min-height: 40px; }
@@ -1213,7 +1222,7 @@
 /*
  * Text fields in the app's own language.
  *
- * There was no rule at all for a text input or a textarea — only for a range —
+ * There was no rule at all for a text input or a textarea (only for a range),
  * so every one of them rendered as a browser-default white box with black
  * text, which in the dark theme reads as a hole in the panel. These take the
  * same surface, border and radius as `.select`, so a Words box and a Look
@@ -1367,7 +1376,7 @@
 
    A clip is a container, so it is drawn like one: a solid bar
    with a little map of what is inside it. The elements
-   themselves are not on this timeline at all — you open the
+   themselves are not on this timeline at all: you open the
    clip to see them, and inside it each one gets a row to
    itself, which is why the lane can no longer run out of
    space.
@@ -1389,12 +1398,19 @@
 .tl-item--mclip .tl-item-name { color: #fff; }
 .tl-item--mclip .tl-item-time { color: rgba(255, 255, 255, .72); }
 
+/* A floating motion graphics clip in its own lane is pinned the same way the
+   spine's own clips are, above: the lane's designed height, full stop. */
+.tl-lane--motion .tl-item--mclip { height: 40px; max-height: 40px; }
+
 /* The map of what the clip holds. Bars, not labels: at this size a label is
-   unreadable and a bar still tells you the shape of the animation. */
+   unreadable and a bar still tells you the shape of the animation. Clipped,
+   so a future regression in how many rows it packs stays a rendering glitch
+   inside a 5px strip instead of a clip that grows to fit it. */
 .tl-mini {
   position: absolute;
   left: 6px; right: 6px; bottom: 3px;
   height: 5px;
+  overflow: hidden;
   pointer-events: none;
 }
 .tl-mini i {

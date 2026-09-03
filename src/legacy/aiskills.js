@@ -3,7 +3,7 @@ import { Desk } from "./shell.js";
 import DESIGNED from "../skills/motion-graphics-that-look-designed.md?raw";
 
 /**
- * AI Skills — instructions this page hands to whatever agent is reading it.
+ * AI Skills: instructions this page hands to whatever agent is reading it.
  *
  * The honest framing matters here, because the obvious description of this is
  * wrong. A web page cannot install anything into ChatGPT. There is no API for
@@ -24,8 +24,8 @@ import DESIGNED from "../skills/motion-graphics-that-look-designed.md?raw";
  *
  * The file format is the SKILL.md convention, because that is what agents
  * already read: YAML frontmatter carrying `name` and `description`, then a
- * markdown body. A file without frontmatter still works — the name comes from
- * the filename and the description from the first line — because someone
+ * markdown body. A file without frontmatter still works: the name comes from
+ * the filename and the description from the first line, because someone
  * dropping a plain note in here should not have to know any of that.
  */
 
@@ -301,8 +301,8 @@ number, \`invert\` for a dip to black.
 
 ## Say what you did
 
-Every proposal takes a \`reason\`. Say what it is for in the person's own terms —
-"the three points you list at 0:14" — not "added a bullet list". They are reading
+Every proposal takes a \`reason\`. Say what it is for in the person's own terms:
+"the three points you list at 0:14", not "added a bullet list". They are reading
 the reason to decide, and there is no tool that decides for them.
 `;
 

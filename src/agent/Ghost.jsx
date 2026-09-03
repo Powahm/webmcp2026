@@ -38,7 +38,7 @@ export default function Ghost() {
    * The agent will not volunteer one: it has a folder attached to the chat and
    * no reason to think a web page wants to hear about it. So the page asks. It
    * appears a beat after the agent turns up, once, and goes away for good
-   * whether they take it or not — an offer that keeps coming back is a nag.
+   * whether they take it or not: an offer that keeps coming back is a nag.
    */
   const [askFolder, setAskFolder] = useState(false);
   const picker = useRef(null);

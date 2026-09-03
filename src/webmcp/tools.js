@@ -38,7 +38,7 @@ const round = (n) => Math.round((Number(n) || 0) * 100) / 100;
  *
  * A skills folder nobody loads from is decoration. The agent has no way to know
  * that the person wrote something about summarising links, three windows ago,
- * unless the page says so — and the moment to say so is not at the start of the
+ * unless the page says so, and the moment to say so is not at the start of the
  * session but when the situation the skill was written for is actually on
  * screen.
  *

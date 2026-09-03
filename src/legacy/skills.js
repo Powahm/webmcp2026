@@ -3,7 +3,7 @@ import { Desk } from "./shell.js";
 import { Editor } from "./editor.js";
 
 /* ============================================================
-   Skills — craft notes on cutting, pacing and looks.
+   Skills: craft notes on cutting, pacing and looks.
    A skill that describes a look carries an `apply`, which sets
    it on the selected timeline clip, so the reference is usable
    rather than just readable.
@@ -24,7 +24,7 @@ export const Skills = (() => {
         { t: "p", v: "A hand reaches for a cup. If you cut while the hand is still travelling and land on the next shot mid-reach, the eye follows the motion straight across the join and never registers the edit. Cut a beat earlier or later and the same edit reads as a jolt." },
         { t: "h", v: "How to find the frame" },
         { t: "ul", v: [
-          "Scrub to where the movement is fastest — that is where the eye is least able to notice a change.",
+          "Scrub to where the movement is fastest: that is where the eye is least able to notice a change.",
           "Trim the outgoing clip to end there, and the incoming clip to start slightly *before* the matching position.",
           "Overlap by two or three frames. The brain fills the gap; a perfectly matched cut often reads as a stutter."
         ] },
@@ -39,11 +39,11 @@ export const Skills = (() => {
       title: "J-cuts and L-cuts",
       blocks: [
         { t: "lede", v: "Let the sound arrive before the picture, or linger after it. This is the single biggest upgrade to an amateur edit." },
-        { t: "p", v: "In a **J-cut** you hear the next scene before you see it — the audio leads. In an **L-cut** the audio of the outgoing shot continues over the incoming one. Both stop the video feeling like a slideshow, because picture and sound stop changing at the same instant." },
+        { t: "p", v: "In a **J-cut** you hear the next scene before you see it: the audio leads. In an **L-cut** the audio of the outgoing shot continues over the incoming one. Both stop the video feeling like a slideshow, because picture and sound stop changing at the same instant." },
         { t: "h", v: "Where to use them" },
         { t: "ul", v: [
-          "Interview to b-roll — keep the voice running, change the picture. That is an L-cut.",
-          "Before a reveal — bring the room tone or music in a second early. That is a J-cut.",
+          "Interview to b-roll: keep the voice running, change the picture. That is an L-cut.",
+          "Before a reveal: bring the room tone or music in a second early. That is a J-cut.",
           "Anywhere two talking heads alternate. Straight cuts between them feel mechanical."
         ] },
         { t: "note", v: "This editor cuts picture and sound together, so approximate it: mute the incoming clip and let the previous one carry, or trim so the spoken line finishes across the join." }
@@ -85,7 +85,7 @@ export const Skills = (() => {
         { t: "ul", v: [
           "**Hook, 0–3s.** State the problem or show the result. No logo, no “hey guys”, no throat-clearing.",
           "**Body, 3s–80%.** One idea. If you have two, you have two videos.",
-          "**Out, last 10%.** One line. Stop recording before you feel finished — the impulse to wrap up politely is what makes endings drag."
+          "**Out, last 10%.** One line. Stop recording before you feel finished: the impulse to wrap up politely is what makes endings drag."
         ] },
         { t: "p", v: "The most common fixable mistake is burying the result. If the payoff is at 0:45, show a two-second flash of it at 0:02 and then go back and explain." },
         { t: "note", v: "Write the hook last, once you know what the video actually turned out to be about." }
@@ -104,7 +104,7 @@ export const Skills = (() => {
         { t: "h", v: "Use it for" },
         { t: "ul", v: ["Short-form and social.", "Product shots that need to pop.", "Anything with a lot of fast cuts."] },
         { t: "h", v: "Avoid it for" },
-        { t: "ul", v: ["Skin tones in close-up — saturation this high goes orange fast.", "Footage already shot in harsh sun."] }
+        { t: "ul", v: ["Skin tones in close-up: saturation this high goes orange fast.", "Footage already shot in harsh sun."] }
       ]
     },
     {
@@ -116,7 +116,7 @@ export const Skills = (() => {
       apply: { look: "faded", speed: 1, label: "Apply faded look" },
       blocks: [
         { t: "lede", v: "Lifted blacks, low saturation. Calm, filmic, a little nostalgic." },
-        { t: "p", v: "Contrast 0.85, saturation 0.75, brightness 1.12. The lifted black point is what reads as film — the image never reaches true black, so nothing feels digital or harsh." },
+        { t: "p", v: "Contrast 0.85, saturation 0.75, brightness 1.12. The lifted black point is what reads as film: the image never reaches true black, so nothing feels digital or harsh." },
         { t: "h", v: "Use it for" },
         { t: "ul", v: ["Vlogs and personal pieces.", "Voiceover over b-roll.", "Anything you want to feel unhurried."] },
         { t: "note", v: "Pairs badly with fast cutting. If the edit is quick, the softness reads as a mistake rather than a choice." }
@@ -131,9 +131,9 @@ export const Skills = (() => {
       apply: { look: "warm", speed: 1, label: "Apply warm look" },
       blocks: [
         { t: "lede", v: "Temperature is the cheapest way to separate two places, or two times." },
-        { t: "p", v: "**Warm** adds sepia and saturation — interiors, evenings, memory, comfort. **Cool** rotates hue and lifts brightness — mornings, exteriors, clinical, distant." },
+        { t: "p", v: "**Warm** adds sepia and saturation: interiors, evenings, memory, comfort. **Cool** rotates hue and lifts brightness: mornings, exteriors, clinical, distant." },
         { t: "h", v: "The trick worth knowing" },
-        { t: "p", v: "Grade a flashback or a before-shot cool and the present-day or after-shot warm, and the audience tracks which is which without being told once. Do not mix temperatures inside a single scene — it reads as a mistake, not a choice." },
+        { t: "p", v: "Grade a flashback or a before-shot cool and the present-day or after-shot warm, and the audience tracks which is which without being told once. Do not mix temperatures inside a single scene; it reads as a mistake, not a choice." },
         { t: "note", v: "Applies the warm look. Switch a clip to cool from the inspector to see the pairing." }
       ]
     },
@@ -146,9 +146,9 @@ export const Skills = (() => {
       apply: { look: "mono", speed: 1, label: "Apply mono look" },
       blocks: [
         { t: "lede", v: "Black and white forces the eye onto shape and light." },
-        { t: "p", v: "Grayscale with contrast at 1.1. Without colour to sort the frame, composition has to do all the work — which is exactly why it exposes a weak shot rather than saving it." },
+        { t: "p", v: "Grayscale with contrast at 1.1. Without colour to sort the frame, composition has to do all the work, which is exactly why it exposes a weak shot rather than saving it." },
         { t: "h", v: "Honest test" },
-        { t: "p", v: "If a shot looks better in mono, the colour version probably had a distraction in it — a bright object in the corner, mixed lighting. Fix that instead, and keep the colour." },
+        { t: "p", v: "If a shot looks better in mono, the colour version probably had a distraction in it: a bright object in the corner, mixed lighting. Fix that instead, and keep the colour." },
         { t: "h", v: "When it genuinely works" },
         { t: "ul", v: ["Strong side light and real shadow.", "Archive or interstitial material you want to sit apart.", "Faces, close, with one light source."] }
       ]

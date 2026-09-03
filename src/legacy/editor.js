@@ -14,7 +14,7 @@ import { Camera } from "./camera.js";
 
 /* The composition engine: the frame-accurate graphics layer over the cut, the
    transcript derived from the teleprompter, and cuts staged against the edit.
-   The timeline, the trims and the six looks below are untouched by all of it —
+   The timeline, the trims and the six looks below are untouched by all of it:
    the composition sits on top of the cut and never owns the footage. */
 import { createMixer, createScheduler, speechRanges } from "../comp/audio.js";
 import { COMPONENT_INFO, SFX_PRESETS, validateLayer } from "../comp/composition.js";
@@ -55,7 +55,7 @@ import { hasApiKey, onTranscripts, setApiKey, transcriptsFor } from "../transcri
 import { transcribe } from "../transcript/whisper.js";
 
 /* ============================================================
-   Editor — a timeline of trimmed clips with per-clip grading.
+   Editor: a timeline of trimmed clips with per-clip grading.
    Export replays the timeline into a canvas and records the
    canvas stream, so there is no encoder dependency.
    ============================================================ */
@@ -210,8 +210,8 @@ export const Editor = (() => {
    *
    * Until now a graphic had to sit on footage, which meant you could not build
    * a title sequence, a lower-third pack or an animated card without shooting
-   * something first to put underneath it. A blank is a segment like any other
-   * — it takes up time on the spine, it trims, it splits — it just paints a
+   * something first to put underneath it. A blank is a segment like any other:
+   * it takes up time on the spine, it trims, it splits; it just paints a
    * colour instead of decoding a video. Everything downstream treats it as a
    * segment, so the transcript, the export and the cut tools needed no special
    * case beyond "there is no picture to draw".
@@ -364,8 +364,8 @@ export const Editor = (() => {
                    (width - gutter), while the ruler ticks and the playhead sat
                    halfway across the full width and timeAtPointer measured the
                    full width too. Everything therefore disagreed by the gutter
-                   plus a scale factor — about two seconds on a minute-long
-                   cut — which is why a cut landed nowhere near where it was
+                   plus a scale factor (about two seconds on a minute-long
+                   cut), which is why a cut landed nowhere near where it was
                    aimed. The tl-field element below is that one space, and it
                    is the only rectangle the pointer is measured against. -->
               <div class="tl-ruler" data-seek></div>
@@ -587,7 +587,7 @@ export const Editor = (() => {
      * A lane above the spine needs its own decoder, so each gets a hidden
      * <video>. They are never shown: the preview draws them onto the same
      * canvas the graphics use, and the export draws them onto the canvas it is
-     * recording. That is deliberate — one drawing path for both, the same rule
+     * recording. That is deliberate: one drawing path for both, the same rule
      * the composition follows, so an overlay cannot look right in the preview
      * and wrong in the file.
      */
@@ -600,8 +600,8 @@ export const Editor = (() => {
      * belongs on an audio lane. In practice that meant dragging a video onto
      * V2 silently threw its audio away with no control anywhere to get it
      * back. It now plays at the item's own gain, and it is routed into the
-     * same graph the export records from — the same wiring `laneAudioEl` does
-     * — so what you hear in the preview is what lands in the file.
+     * same graph the export records from (the same wiring `laneAudioEl` does)
+     * so what you hear in the preview is what lands in the file.
      */
     const overlayWired = new Set();
 
@@ -707,7 +707,7 @@ export const Editor = (() => {
      * Motion graphics clips that float over the cut.
      *
      * A clip on the spine takes a turn: the footage stops and the graphics
-     * play. A floating one does not — it sits above the pictures for a stretch
+     * play. A floating one does not: it sits above the pictures for a stretch
      * of the cut, which is the only way to build a title sequence over someone
      * talking. It needs no compositing work because the graphics canvas already
      * draws over the frame; what it adds is a container to hold and name them,
@@ -799,7 +799,7 @@ export const Editor = (() => {
      *
      * An overlay placed over a clip on the spine covers the same seconds, and
      * asking each container separately what it holds counts every element
-     * twice — two clips both claiming six elements, and deleting one from
+     * twice: two clips both claiming six elements, and deleting one from
      * inside either leaves it in the other. The overlay wins because it sits
      * above the picture, which is the same order the frame is painted in.
      */
@@ -1061,8 +1061,8 @@ export const Editor = (() => {
     /**
      * Seconds to a percentage of the track, and back.
      *
-     * Everything on the timeline is positioned in one timebase — the finished
-     * cut — so a lane, a ruler tick and the playhead cannot disagree about
+     * Everything on the timeline is positioned in one timebase (the finished
+     * cut), so a lane, a ruler tick and the playhead cannot disagree about
      * where two seconds is. Zoom widens the track and the scroller takes the
      * overflow; nothing recomputes, because a percentage of a wider box is
      * still the same second.
@@ -1186,7 +1186,7 @@ export const Editor = (() => {
      * A1: the spine's own sound, on its own row.
      *
      * Drawn from the same segments as V1 rather than kept as a second list of
-     * them, because a cut is a cut — trimming the picture trims the sound, and
+     * them, because a cut is a cut: trimming the picture trims the sound, and
      * two lists of the same thing is how they come to disagree. Clicking a
      * block here selects the clip, so the mute is where the rest of the clip's
      * controls are.
@@ -1222,8 +1222,8 @@ export const Editor = (() => {
      * Stack things that overlap.
      *
      * Two graphics at the same second on one row draw on top of each other and
-     * neither label can be read. Packing them into sub-rows — the first row
-     * that is free at that moment — is what every editor does, and it costs
+     * neither label can be read. Packing them into sub-rows (the first row
+     * that is free at that moment) is what every editor does, and it costs
      * one pass over a list that is never long.
      */
     const MAX_ROWS = 4;
@@ -1562,7 +1562,7 @@ export const Editor = (() => {
      * A number, or the fallback.
      *
      * `Number(null)` is 0 and 0 is finite, so the obvious version of this
-     * quietly turned every unset field into zero — which for opacity meant a
+     * quietly turned every unset field into zero, which for opacity meant a
      * keyframed graphic animated perfectly and invisibly.
      */
     const num = (v, fallback) => {
@@ -1901,7 +1901,7 @@ export const Editor = (() => {
             <span class="gfx-type mono">${Desk.esc(g.type.replace(/_/g, " "))}</span>
             <span class="gfx-at mono">${timecode(g.start)} · ${g.duration.toFixed(1)}s</span>
           </div>
-          <p class="gfx-text">${Desk.esc(g.text || g.subtext || "—")}</p>
+          <p class="gfx-text">${Desk.esc(g.text || g.subtext || "no text")}</p>
           ${g.reason ? `<p class="gfx-reason">${Desk.esc(g.reason)}</p>` : ""}
           ${
             g.status === "proposed"
@@ -1952,14 +1952,14 @@ export const Editor = (() => {
       const formats = "";
       const reframe = doc.pendingFormat
         ? `<div class="cmp-reframe">
-             <p><b>${formatOf(doc.pendingFormat.format).label}</b> proposed — decide it above the picture.</p>
+             <p><b>${formatOf(doc.pendingFormat.format).label}</b> proposed: decide it above the picture.</p>
              ${doc.pendingFormat.reason ? `<p class="cmp-reframe-why">${Desk.esc(doc.pendingFormat.reason)}</p>` : ""}
            </div>`
         : "";
 
       const layerCard = (l) => {
         const label = l.component.replace(/_/g, " ");
-        const words = l.props?.text || l.props?.items?.[0] || l.props?.subtext || "—";
+        const words = l.props?.text || l.props?.items?.[0] || l.props?.subtext || "no text";
         return `
           <li class="cmp-item ${l.status}" data-layer="${l.id}">
             <div class="cmp-item-head">
@@ -1979,7 +1979,7 @@ export const Editor = (() => {
 
       const soundCard = (a) => {
         const what = a.kind === "sfx"
-          ? `${a.preset} — ${SFX_PRESETS[a.preset]?.blurb ?? ""}`
+          ? `${a.preset}: ${SFX_PRESETS[a.preset]?.blurb ?? ""}`
           : `music bed${a.duck ? ", ducked under speech" : ""}`;
         return `
           <li class="cmp-item ${a.status}" data-sound="${a.id}">
@@ -2012,7 +2012,7 @@ export const Editor = (() => {
         ${reframe}
         ${layers.length
           ? `<ul class="cmp-list">${[...layers].sort(byPending).map(layerCard).join("")}</ul>`
-          : `<p class="cmp-empty">Nothing waiting on you. Accepted work is on the timeline — open a motion graphics clip to change or remove an element.</p>`}
+          : `<p class="cmp-empty">Nothing waiting on you. Accepted work is on the timeline: open a motion graphics clip to change or remove an element.</p>`}
         ${sounds.length
           ? `<ul class="cmp-list">${[...sounds].sort(byPending).map(soundCard).join("")}</ul>`
           : ""}`;
@@ -2161,8 +2161,8 @@ export const Editor = (() => {
     /**
      * Position, rotation and flip for one lane item.
      *
-     * The same normalised numbers the spine uses — x and y as fractions of the
-     * frame, scale as a multiplier, rotation in degrees — so one set of
+     * The same normalised numbers the spine uses (x and y as fractions of the
+     * frame, scale as a multiplier, rotation in degrees) so one set of
      * sliders drives the preview and the export through the same
      * `applyTransform`.
      */
@@ -2374,7 +2374,7 @@ export const Editor = (() => {
      * The second tab: how a clip arrives, how it leaves, and where it sits.
      *
      * These used to be the bottom half of the Clip panel, below the trim, the
-     * look, the speed and the volume — which meant the two things you reach
+     * look, the speed and the volume, which meant the two things you reach
      * for while watching the cut back were the two things furthest down a
      * scroll. They are their own column now.
      *
@@ -2414,16 +2414,16 @@ export const Editor = (() => {
     }
 
     /** A field worth protecting from a mid-keystroke repaint: text you could
-     *  still be typing into, inside the rail. Anything else focused there —
-     *  a button included — is not something a repaint could lose. */
+     *  still be typing into, inside the rail. Anything else focused there
+     *  (a button included) is not something a repaint could lose. */
     function isEditingField(el) {
       if (!el || !insp.contains(el)) return false;
       return el.matches?.("input, textarea") || el.isContentEditable === true;
     }
 
     function renderInspector() {
-      // "trans" no longer names a tab of this rail's own — transitions moved
-      // to the left panel — so it is not a case here. clipPaneHtml() is left
+      // "trans" no longer names a tab of this rail's own: transitions moved
+      // to the left panel, so it is not a case here. clipPaneHtml() is left
       // to answer for it, same as any other id it does not recognise.
       insp.innerHTML =
         inspTab === "gfx" ? graphicsHtml()
@@ -2572,7 +2572,7 @@ export const Editor = (() => {
             <p class="cmp-empty">${
               !timeline.length
                 ? "Nothing on the timeline yet. Add a clip, and if it was recorded with the teleprompter its transcript is already waiting."
-                : "These clips were not recorded against a script, so there are no prompter timings to derive. Load a script into the Camera before recording and the transcript comes for free — or paste an OpenAI key below to transcribe with Whisper."
+                : "These clips were not recorded against a script, so there are no prompter timings to derive. Load a script into the Camera before recording and the transcript comes for free, or paste an OpenAI key below to transcribe with Whisper."
             }</p>
             ${timeline.length ? whisperHtml() : ""}
           </div>`;
@@ -2626,7 +2626,7 @@ export const Editor = (() => {
     }
 
     /** Switch the left rail to one of its own tabs (Library, Text,
-     *  Transitions, Transcript) — the counterpart to clicking a `[data-lib]`
+     *  Transitions, Transcript): the counterpart to clicking a `[data-lib]`
      *  button, shared with the arrow-key cycling below. */
     function selectLibTab(name, { focus = false } = {}) {
       libTab = name;
@@ -2683,7 +2683,7 @@ export const Editor = (() => {
       video.playbackRate = at.seg.speed;
       video.muted = at.seg.muted;
       // On the video element, not `.ed-screen`. A CSS filter on an ancestor
-      // rasterises and grades its whole subtree — the graphics canvas
+      // rasterises and grades its whole subtree: the graphics canvas
       // included, and no `filter: none` on the canvas can opt back out of
       // that, because it is the ancestor's composite being filtered, not
       // the canvas's own paint. The clip's look belongs on the clip.
@@ -2916,7 +2916,7 @@ export const Editor = (() => {
           try {
             // Cover, not stretch. A 16:9 take in a 9:16 frame with bars down
             // both sides is not a vertical video, it is a landscape video
-            // someone gave up on — and stretching every clip to the canvas
+            // someone gave up on, and stretching every clip to the canvas
             // distorted any footage that was not the first clip's shape.
             const fit = fitVideo(
               video.videoWidth || first?.width || canvas.width,
@@ -3132,7 +3132,7 @@ export const Editor = (() => {
 
       // Everything downstream of a removal has just moved. The cuts still
       // waiting are absolute ranges in the edit and the layers are absolute
-      // frames of it, so both have to slide back by what went — otherwise
+      // frames of it, so both have to slide back by what went, otherwise
       // accepting the first of a batch quietly aims the rest at the wrong
       // words, and propose_tidy stages a batch by design.
       settle(id);
@@ -3338,8 +3338,8 @@ export const Editor = (() => {
         const id = noCut.dataset.cutReject;
         const result = rejectCut(id, e);
         // Reject only reaches `onCuts`, which redraws the strip. If the same
-        // cut was open in the Clip tab — reachable from that panel's own
-        // "Keep it", not only the chip's — the rail never heard about it and
+        // cut was open in the Clip tab (reachable from that panel's own
+        // "Keep it", not only the chip's), the rail never heard about it and
         // sat there showing a decision that had already been made.
         if (result.ok) {
           if (selected === id) selected = null;
@@ -3397,7 +3397,7 @@ export const Editor = (() => {
         // An overlay is graphics over a picture. With no cut under it there is
         // nothing to overlay, and the bar would be drawn wider than the track.
         if (total() < 0.5) {
-          return void Desk.toast("Add a clip first — an overlay goes over footage.", "bad");
+          return void Desk.toast("Add a clip first: an overlay goes over footage.", "bad");
         }
         const room = Math.max(1, total() - playhead);
         const made = addFloatingClip({ at: playhead, seconds: Math.min(5, room) });
@@ -3639,7 +3639,7 @@ export const Editor = (() => {
 
     body.addEventListener("click", (e) => {
       // The cross-reference at the bottom of a Clip panel. Transitions live
-      // in the left panel now, beside Library and Text — this used to point
+      // in the left panel now, beside Library and Text: this used to point
       // at a tab of its own on the right, which moved out from under it.
       const go = e.target.closest("[data-insp-go]");
       if (go) {
@@ -3762,7 +3762,7 @@ export const Editor = (() => {
      * Shortcuts belong to the window, not to whatever happens to have focus.
      *
      * Clicking a block rebuilds the track, which destroys the element that was
-     * clicked and hands focus back to the document — so a listener on the
+     * clicked and hands focus back to the document, so a listener on the
      * window body never saw the keypress that followed. Listening on the
      * document and checking which window is focused is what makes Backspace
      * work right after selecting something, which is the only time anyone
@@ -3991,8 +3991,8 @@ export const Editor = (() => {
       // Taken before anything moves; discarded at the end if nothing did.
       markGesture();
       // A real control inside the timeline is still a control. Swallowing its
-      // pointerdown here — which the scrub branch does, to stop the drag
-      // selecting text — also swallows its click.
+      // pointerdown here (which the scrub branch does, to stop the drag
+      // selecting text) also swallows its click.
       if (e.target.closest("button, input, select, a")) return;
 
       /**
@@ -4298,7 +4298,7 @@ export const Editor = (() => {
      * A transition on a clip, by hand.
      *
      * It is an `effect` layer of kind `dip`, which is exactly what the agent
-     * would propose for the same thing — the person is not getting a second,
+     * would propose for the same thing: the person is not getting a second,
      * lesser mechanism. Because it is a layer it draws through the one
      * renderer, so it is in the export the moment it is on the timeline, and
      * it can be dragged, retimed and deleted like anything else.
@@ -4449,7 +4449,7 @@ export const Editor = (() => {
     function clipStatsHtml(seg, clip) {
       const shape = clip?.width && clip?.height ? `${clip.width}&times;${clip.height}` : "unknown";
       const bytes = clip?.blob?.size;
-      const mb = bytes ? `${(bytes / 1048576).toFixed(1)} MB` : "—";
+      const mb = bytes ? `${(bytes / 1048576).toFixed(1)} MB` : "unknown";
       const used = segDuration(seg);
       return `
         <dl class="insp-stats mono">
@@ -4597,7 +4597,7 @@ export const Editor = (() => {
      * It is a composition layer, not a new kind of object, which is what makes
      * it correct in the export the moment it exists: the same renderer draws
      * it in the preview and into the file. Created by a click, so it is
-     * accepted the moment it is made — a person does not propose to themselves.
+     * accepted the moment it is made: a person does not propose to themselves.
      */
     /**
      * What a person can put on the frame, and what to fill it with.
@@ -4610,7 +4610,7 @@ export const Editor = (() => {
       // `font` is seeded to each component's own default rather than left
       // unset. The draw functions fall back to the same value either way, but
       // a font menu with nothing selected shows its first entry regardless of
-      // what is actually on screen — seeding it is what keeps the menu
+      // what is actually on screen: seeding it is what keeps the menu
       // telling the truth from the moment the element lands.
       { component: "title_card", label: "Title card", props: { text: "Your title", subtext: "", font: "displayHeavy" }, position: "center" },
       { component: "lower_third", label: "Lower third", props: { text: "Their name", subtext: "What they do", font: "display" }, position: "lower_left" },
@@ -4802,7 +4802,7 @@ export const Editor = (() => {
       renderTrack();
       renderInspector();
       // Transitions reads the same `selected`, but it lives in the left panel
-      // now and only `renderLib()` redraws it — without this, picking a
+      // now and only `renderLib()` redraws it: without this, picking a
       // different clip while that tab is open left it showing the last one.
       if (libTab === "trans") renderLib();
       armFrameGrabs();
@@ -4961,7 +4961,7 @@ export const Editor = (() => {
         // Narrowly: only an actual text field earns that protection. The
         // first version checked `insp.contains(document.activeElement)`,
         // which also matched a Reject button sitting there focused after its
-        // own click — nothing else ever nudges focus off a button, so the
+        // own click: nothing else ever nudges focus off a button, so the
         // card it belonged to stayed on screen, fully stale, until something
         // unrelated happened to move focus out of the rail. Rejecting a
         // proposal is not typing, and its card is gone from the store the
@@ -4978,7 +4978,7 @@ export const Editor = (() => {
      * Commit a rename.
      *
      * A lane item carries its own label, so renaming one is local. A spine
-     * clip has no name of its own — it points at a library record — so
+     * clip has no name of its own: it points at a library record, so
      * renaming it renames the clip, which is what makes the library
      * navigable and is almost always what was meant.
      */
@@ -5042,8 +5042,8 @@ export const Editor = (() => {
      * Tick spacing, the playhead and the viewer's fit are all computed from a
      * width read at render time, and nothing was watching that width. Resizing
      * the window or dragging a pane grip therefore left the ruler labelled for
-     * the old size — ticks bunched up or spread out, and the playhead sitting
-     * off the second it claimed — until something else happened to re-render.
+     * the old size: ticks bunched up or spread out, and the playhead sitting
+     * off the second it claimed, until something else happened to re-render.
      * Coalesced into one animation frame, because a drag fires this per pixel.
      */
     let resizeFrame = 0;

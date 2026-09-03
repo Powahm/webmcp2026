@@ -44,7 +44,7 @@ const LINES = {
   // The ones that ask something of you read differently, because they are the
   // ones you have to answer.
   propose_graphic: [
-    "made you something — have a look",
+    "made you something, have a look",
     "here is a graphic, your call",
     "drew this. Keep it?",
   ],
@@ -62,12 +62,12 @@ const LINES = {
   ],
   propose_layer_change: ["moved it. Better?", "try the layer this way"],
   propose_sound: ["found a sound for that", "here is something under it"],
-  propose_format: ["reframed it — have a look", "this might work vertical"],
+  propose_format: ["reframed it, have a look", "this might work vertical"],
   propose_cut: ["marked a cut for you", "here is a cut, your call"],
-  propose_tidy: ["marked every um and every gap", "tidied the whole take — check it"],
+  propose_tidy: ["marked every um and every gap", "tidied the whole take, check it"],
   propose_script_line: [
     "wrote you a line",
-    "here is a line — yours if you want it",
+    "here is a line, yours if you want it",
     "how about this one",
   ],
   offer_folder: ["I have a folder you might want", "found some files of yours"],

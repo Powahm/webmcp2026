@@ -3,7 +3,7 @@ import { Desk } from "./shell.js";
 import { Editor } from "./editor.js";
 
 /* ============================================================
-   Camera — live preview and recording.
+   Camera: live preview and recording.
    The same recorder backs both the window UI and the scripting
    API, so camera.record(3) in a script behaves identically.
    ============================================================ */
@@ -67,7 +67,7 @@ export const Camera = (() => {
       if (name === "UnsupportedError" || !navigator.mediaDevices?.getDisplayMedia) {
         return framed()
           ? "This preview frame does not allow screen capture. Open the deployed site to record your screen."
-          : "Screen capture needs a secure page — https or localhost.";
+          : "Screen capture needs a secure page: https or localhost.";
       }
     }
     if (name === "NotFoundError" || name === "OverconstrainedError")
@@ -77,7 +77,7 @@ export const Camera = (() => {
     if (name === "UnsupportedError" || !navigator.mediaDevices?.getUserMedia) {
       return framed()
         ? "This preview frame does not allow camera access. Open the deployed site to record, or use Import video."
-        : "Camera access needs a secure page — https or localhost. Import video works anywhere.";
+        : "Camera access needs a secure page: https or localhost. Import video works anywhere.";
     }
     return err?.message || "The camera could not be started.";
   }
@@ -405,7 +405,7 @@ export const Camera = (() => {
       const clips = (await Clips.all()).slice(-6).reverse();
       strip.innerHTML = clips.length
         ? clips.map((c) => `
-            <button class="strip-clip" data-clip="${c.id}" title="${Desk.esc(c.name)} — open in Editor">
+            <button class="strip-clip" data-clip="${c.id}" title="${Desk.esc(c.name)} (open in Editor)">
               ${c.thumb ? `<img src="${c.thumb}" alt="">` : `<span class="strip-blank"></span>`}
               <span class="strip-time mono">${timecode(c.duration)}</span>
             </button>`).join("")

@@ -13,7 +13,7 @@
  * side-chain compressor nobody configures correctly. We already know exactly
  * where the words are, because the transcript says so, so the envelope is
  * computed up front and scheduled on a gain node. Not an approximation of
- * ducking — the actual word boundaries.
+ * ducking: the actual word boundaries.
  *
  * One graph serves the preview and the export. The export in legacy/editor.js
  * already builds an AudioContext with a MediaStreamDestination to get the

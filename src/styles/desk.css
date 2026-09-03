@@ -1,5 +1,5 @@
 /* ============================================================
-   Deskmate — chunky-border desktop
+   Deskmate: chunky-border desktop
    Tokens live in bare :root; the two theme blocks only redefine.
    ============================================================ */
 
@@ -282,7 +282,7 @@ body {
  * preference in both directions, which is the same rule every colour token in
  * this file follows.
  *
- * Only the file the current theme asks for is fetched — a background image on
+ * Only the file the current theme asks for is fetched: a background image on
  * a selector that does not match is never requested.
  */
 .wp-photo {
@@ -313,7 +313,7 @@ body {
     to bottom,
     color-mix(in srgb, var(--wp-scrim) 52%, transparent) 0%,
     color-mix(in srgb, var(--wp-scrim) 62%, transparent) 34%,
-    /* the horizon is the one part left alone — it is the whole picture */
+    /* the horizon is the one part left alone: it is the whole picture */
     color-mix(in srgb, var(--wp-scrim) 26%, transparent) 58%,
     color-mix(in srgb, var(--wp-scrim) 42%, transparent) 78%,
     color-mix(in srgb, var(--wp-scrim) 54%, transparent) 100%
@@ -339,7 +339,7 @@ body {
 /*
  * The imported folders and the ghost folders sit lower, over the valley, where
  * the picture has detail of its own and a halo alone starts to look like fog.
- * They get an actual plate — the same soft pill the hint uses — so the words
+ * They get an actual plate (the same soft pill the hint uses) so the words
  * are read against a colour this stylesheet chose.
  */
 .desk-folder-name, .desk-folder-sub,
@@ -835,7 +835,7 @@ body {
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-/* A minimised window is still listed, but it is not on screen — the dimmed
+/* A minimised window is still listed, but it is not on screen: the dimmed
    tile is the only thing that says so. */
 .dock-btn[data-minimised="true"] .dock-glyph { filter: saturate(.25); }
 .dock-btn[data-minimised="true"] .dock-label { color: var(--text-muted); }
@@ -1532,7 +1532,7 @@ body {
 .cam-blocked[hidden], .cam-rec[hidden], .prompter[hidden], .cam-hint[hidden] { display: none; }
 
 /* ============================================================
-   Script editor — spoken lines, not code
+   Script editor: spoken lines, not code
    ============================================================ */
 
 .scr-lines { flex: 1; min-height: 0; overflow-y: auto; padding: 12px; display: grid; gap: 9px; align-content: start; }

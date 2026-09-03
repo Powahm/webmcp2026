@@ -34,7 +34,7 @@ backend to receive anything.
 |---|---|
 | **Readme** | Documentation about the machine. |
 | **Scripts** | What you are going to say, one line per spoken beat with its shot direction. Two views of one document: a **Draft** you write in, and a **Shot list** for the pass before you shoot. A **Research** pane for links and notes you gathered while browsing. A teleprompter. |
-| **Skills** | Craft notes on cutting and pacing, plus **AI Skills** — markdown you drop in that the agent can load and follow. |
+| **Skills** | Craft notes on cutting and pacing, plus **AI Skills**: markdown you drop in that the agent can load and follow. |
 | **Camera** | Camera or screen capture with your mic mixed in. The teleprompter runs over the preview and records which line you were on at which second. |
 | **Editor** | Library, timeline, trim, six looks, speed, and an export that replays the cut into a canvas. The bottom pane switches between **Timeline**, **Transcript** and **Code**. Motion graphics and sound compose here. |
 
@@ -44,13 +44,13 @@ Registered on `document.modelContext.registerTool`, with a `navigator.modelConte
 fallback for Chrome's origin trial. Read-only tools carry `readOnlyHint`; every schema
 sets `additionalProperties: false`.
 
-**Reading the page** — `get_desktop_state` · `list_scripts` · `get_script` ·
+**Reading the page**: `get_desktop_state` · `list_scripts` · `get_script` ·
 `get_open_script` · `get_prompter_state` · `get_recorder_state` · `list_clips` ·
 `get_timeline` · `get_selection` · `get_playhead` · `get_graphics` ·
 `get_offered_folders` · `list_ai_skills` · `load_ai_skill` · `get_composition` ·
 `get_transcript` · `get_composition_code`
 
-**Proposing** — `propose_graphic` · `propose_graphic_change` · `propose_script_line` ·
+**Proposing**: `propose_graphic` · `propose_graphic_change` · `propose_script_line` ·
 `offer_folder` · `propose_layer` · `propose_blank_clip` · `propose_layer_change` ·
 `propose_sound` · `propose_format` · `propose_cut` · `propose_tidy`
 
@@ -73,8 +73,8 @@ The ones worth knowing about:
 ### The line the agent does not cross
 
 **There is no tool that accepts a proposal, exports a video, or reads a file.** Every
-accept path — in `comp/store.js`, `graphics/store.js`, `cuts/store.js` and
-`scripts/proposals.js` — refuses anything that is not a trusted user event, which is how
+accept path (in `comp/store.js`, `graphics/store.js`, `cuts/store.js` and
+`scripts/proposals.js`) refuses anything that is not a trusted user event, which is how
 the browser itself tells a click from a script.
 
 So the agent can compose an animated title card, put a synthesised thump under it, reframe
@@ -85,8 +85,8 @@ picker that opens is your authorisation, not its own.
 
 ## Three things worth a look
 
-**Motion graphics from one spec.** The agent fills in a constrained declarative object —
-never CSS, SVG or JavaScript — and one render function draws it twice: onto a transparent
+**Motion graphics from one spec.** The agent fills in a constrained declarative object
+(never CSS, SVG or JavaScript) and one render function draws it twice: onto a transparent
 canvas over the preview, and onto the canvas the export is recording. Same function, same
 spec, same pixels, so what you approve is what gets written. All geometry is normalised,
 so a graphic approved on a 468px preview is correct in a 4K export.
@@ -96,7 +96,7 @@ directory without a click. So the announcing is inverted: the agent sends a mani
 through `offer_folder`, a translucent folder appears on the desktop, and hovering says
 what would come in. Text rides along in the tool call; video waits for the picker.
 
-**AI Skills that fire.** Skills declare `triggers` in frontmatter — either a signal the
+**AI Skills that fire.** Skills declare `triggers` in frontmatter: either a signal the
 page computes about itself (`research_has_url`, `timeline_empty`, `recording`) or a word
 to look for in what you wrote. When the situation matches, **every read tool carries the
 suggestion in its result**. Paste a link into Research and the next tool the agent calls
@@ -105,7 +105,7 @@ capability.
 
 ## The composition engine
 
-The Editor has a second half. The **Cut** owns footage — trims, order, looks, speed. The
+The Editor has a second half. The **Cut** owns footage: trims, order, looks, speed. The
 **composition** owns everything layered on top of it: motion graphics, sound, and the aspect
 ratio. Reframing to 9:16 moves no layer, because every position in a spec is a fraction of the
 frame rather than a pixel.
@@ -121,7 +121,7 @@ and a headless browser. What was worth taking from them is the model, not the de
   group of graphics moves as a unit and children are clipped to their parent's window.
 - **`interpolate` and `spring`** are pure functions of the frame. A component holds no state,
   so there is nothing to get wrong when the playhead jumps.
-- **Eleven components** — title card, lower third, caption pop, bullet list, comparison cards,
+- **Eleven components**: title card, lower third, caption pop, bullet list, comparison cards,
   process flow, stat badge, callout arrow, progress bar, code card, quote card.
 - **Colour is a role**, not a hex value. `accent` resolves against the live theme, so one spec
   is legible in light and dark.
@@ -132,13 +132,13 @@ arguments. One renderer is what stops the preview from quietly ceasing to match 
 ## Transcripts
 
 The Camera has been recording the useful thing all along. A take driven by the teleprompter
-saves `clip.beats` — which script line was on screen at which second. That array plus the
+saves `clip.beats`: which script line was on screen at which second. That array plus the
 script is a transcript: we know what was said, because they read it, and roughly when, because
 we watched them advance it. Words are spread across their line by length.
 
 It is an estimate and it says so: `source: "prompter"`, `approximate: true`. Pasting an OpenAI
 key into the Transcript panel upgrades any clip to measured per-word timing from Whisper. The
-key lives in this browser's localStorage and is never bundled — a static site cannot keep a
+key lives in this browser's localStorage and is never bundled: a static site cannot keep a
 secret, so the only honest version of that feature is one where the key is yours.
 
 Times are reported in **cut** seconds, already adjusted for every trim, reorder and speed
@@ -152,7 +152,7 @@ called out inline.
 ## Scripts
 
 A script is a title and a list of lines. Each line carries the **spoken text** and an optional
-**shot direction** — where the camera is, what the b-roll is, what the tone should be.
+**shot direction**: where the camera is, what the b-roll is, what the tone should be.
 
 Runtime is estimated at 2.5 words per second (about 150 wpm, an unhurried speaking pace) and
 totalled across the script. The teleprompter scrolls the whole thing across roughly that
@@ -167,7 +167,7 @@ line becomes a spoken line, so nothing is lost.
 
 ## Skills
 
-Short craft notes in three kinds — `cut`, `edit` and `style`. The style notes carry an
+Short craft notes in three kinds: `cut`, `edit` and `style`. The style notes carry an
 **Apply** button that sets that look and speed on the last clip on the timeline, so the
 reference is usable rather than only readable.
 
@@ -175,14 +175,14 @@ reference is usable rather than only readable.
 
 There is no encoder dependency. Export replays the timeline into a `<canvas>`, applying each
 clip's filter as `ctx.filter`, drawing the accepted composition layers over the frame, captures
-that canvas with `captureStream()`, mixes the audio back in through a Web Audio graph — the
-same graph the synthesised sound effects fire into — and records the combined stream with
+that canvas with `captureStream()`, mixes the audio back in through a Web Audio graph (the
+same graph the synthesised sound effects fire into) and records the combined stream with
 `MediaRecorder`.
 
 The consequence: **rendering is real time.** A forty-second cut takes forty seconds.
 
 Exports are saved back into the library as a new clip *and* offered as a download. The library
-copy is the reliable one — some embedded frames block downloads a page starts itself.
+copy is the reliable one: some embedded frames block downloads a page starts itself.
 
 ## Storage
 
@@ -195,7 +195,7 @@ so nothing breaks, but a refresh loses the library.
 Two photographs of the same valley, one per theme: `Light_theme` at sunrise,
 `Dark_theme` at last light. The exports live in `assets/` as PNG and are never
 touched; `tools/wallpaper.mjs` writes the `.webp` beside each one, which is what
-`desk.css` actually loads. It does two things on the way — WebP takes 1.9MB down
+`desk.css` actually loads. It does two things on the way: WebP takes 1.9MB down
 to about 100KB, and the brand lock-up is moved. It ships across the middle of each
 export, which is exactly where the desktop icons and their labels land, so the
 script lifts it off the sky and puts it back above the icon row: a clean plate
@@ -206,12 +206,12 @@ that no colour key could.
 Nothing else has to know: the picture is a `background-image` on one element, so
 swapping in a different export is two lines of CSS. What sits on top of it is a
 scrim in the ground colour, strongest across the icon row and lightest across the
-horizon, plus a halo behind every desktop label — which is what keeps the labels
+horizon, plus a halo behind every desktop label, which is what keeps the labels
 readable on a picture that was never designed to have text on it.
 
 ## Interactions
 
-- **Click an icon** — folders hinge open, apps press in; the window scales out of the icon's
+- **Click an icon**: folders hinge open, apps press in; the window scales out of the icon's
   exact rectangle and reverses back into it on close.
 - **Drag** a window by its title bar, **resize** from the bottom-right, **double-click** to maximise.
 - **⌘K / Ctrl+K** searches documents, scripts and clips.
@@ -227,12 +227,12 @@ open and back to the icon on close. `prefers-reduced-motion` disables the window
 and the wallpaper parallax. The **Accessibility** document in the Readme folder is the
 user-facing version of this list.
 
-**Focus work** — `src/a11y/focus-work.js` — is the keyboard's map of the desktop:
+**Focus work** (`src/a11y/focus-work.js`) is the keyboard's map of the desktop:
 
 - A **skip link** as the first tab stop, and one 3px focus ring with a ground-coloured halo
   so it survives the wallpaper as well as a window body.
 - **Arrow keys, Home and End** walk the desktop icons; Tab still reaches each one.
-- **F6 / Shift+F6** cycles the open windows — the only way to reach one that is behind
+- **F6 / Shift+F6** cycles the open windows: the only way to reach one that is behind
   another. Closing a window hands focus back to its icon, minimising hands it to the dock
   button, and both are announced.
 - The **launcher** and the **teleprompter** hold focus inside themselves and give it back to
@@ -254,7 +254,7 @@ npm run build    # static output in dist/, deploys as-is
 
 To see the tools, open the site in **ChatGPT's browser**, or Chrome 149+ with
 `chrome://flags/#enable-webmcp-testing`. The badge in the menu bar says whether a host is
-present, how many tools it took, and whether anything has actually called one — "ready"
+present, how many tools it took, and whether anything has actually called one: "ready"
 and "connected" are deliberately different words.
 
 Camera and screen capture need a **secure context**, so `https://` or `localhost`.

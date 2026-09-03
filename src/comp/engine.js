@@ -312,7 +312,7 @@ export const clamp01 = (n) => Math.max(0, Math.min(1, Number(n) || 0));
  *
  * This is deliberately not a general animation system. It moves, sizes, turns
  * and fades what is already there, which is what a person means when they say
- * "make it slide in and settle" — and it stays a pure function of the frame,
+ * "make it slide in and settle", and it stays a pure function of the frame,
  * so the export can still render frame 512 without having rendered 511.
  */
 export const KEYABLE = ["x", "y", "width", "height", "opacity", "rotation"];

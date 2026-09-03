@@ -4,8 +4,8 @@
  * Optional, and optional in a way that matters: the prompter path in
  * ./transcript.js is the default and produces a usable transcript for every
  * clip recorded on this desktop, with no key and no network. This file exists
- * for the clips it cannot help with — an import, a screen recording, anything
- * shot before the script was written — and to turn a good estimate into a
+ * for the clips it cannot help with (an import, a screen recording, anything
+ * shot before the script was written) and to turn a good estimate into a
  * measurement when someone wants one.
  *
  * Three things are worth knowing about how this is wired.

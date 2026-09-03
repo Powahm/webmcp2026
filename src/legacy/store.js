@@ -1,5 +1,5 @@
 /* ============================================================
-   Store — clips and scripts, persisted in IndexedDB.
+   Store: clips and scripts, persisted in IndexedDB.
    Falls back to memory when IDB is unavailable (private mode,
    sandboxed frames) so nothing above this layer has to care.
    ============================================================ */

@@ -14,7 +14,7 @@
  * them can promote one, because the store guards every accept path behind a
  * trusted user event. The agent can compose an eight-second animated title
  * card, a sound effect under it, a reframe to vertical and a list of every
- * hesitation in the take — four calls — and it still cannot put one frame into
+ * hesitation in the take (four calls) and it still cannot put one frame into
  * the video.
  */
 
@@ -257,7 +257,7 @@ export const getCompositionCode = {
  * The layer schema, generated from the components themselves.
  *
  * This used to be typed out by hand, which meant a component could declare a
- * field and the tool would still refuse it — `additionalProperties: false` and
+ * field and the tool would still refuse it: `additionalProperties: false` and
  * a stale property list is a silent way to make a feature unreachable. The
  * component library is the single description of what a graphic takes, so the
  * schema is built from it and adding a field to a component is the whole job.
@@ -433,7 +433,7 @@ export const proposeLayerChangeTool = {
 export const proposeSound = {
   name: "propose_sound",
   description:
-    `Propose sound: a one-shot effect on a moment, or a music bed under a stretch of the cut. Effects are synthesised in the browser, so there is nothing to load and nothing to license — pick one of: ${SFX_NAMES.map((n) => `${n} (${SFX_PRESETS[n].blurb})`).join(" ")} A music bed takes an existing clip from the library and ducks itself under speech automatically, using the transcript's word boundaries, so you do not need to shape the volume yourself.`,
+    `Propose sound: a one-shot effect on a moment, or a music bed under a stretch of the cut. Effects are synthesised in the browser, so there is nothing to load and nothing to license; pick one of: ${SFX_NAMES.map((n) => `${n} (${SFX_PRESETS[n].blurb})`).join(" ")} A music bed takes an existing clip from the library and ducks itself under speech automatically, using the transcript's word boundaries, so you do not need to shape the volume yourself.`,
   inputSchema: {
     type: "object",
     properties: {
@@ -473,7 +473,7 @@ export const proposeSound = {
 export const proposeFormatTool = {
   name: "propose_format",
   description:
-    "Propose reframing the whole composition to a different aspect ratio. Every graphic is laid out as fractions of the frame, so this moves nothing and rewrites nothing — the same composition simply becomes 16:9, 9:16 or 1:1, with the safe margins that format needs. Use it when they mention shorts, reels, vertical or a square post.",
+    "Propose reframing the whole composition to a different aspect ratio. Every graphic is laid out as fractions of the frame, so this moves nothing and rewrites nothing: the same composition simply becomes 16:9, 9:16 or 1:1, with the safe margins that format needs. Use it when they mention shorts, reels, vertical or a square post.",
   inputSchema: {
     type: "object",
     properties: {

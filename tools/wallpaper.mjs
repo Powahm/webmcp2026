@@ -24,8 +24,8 @@
  *
  * 2. *A difference matte.* With a clean plate of what the sky looks like
  *    without the lock-up, the lock-up is simply wherever the original differs
- *    from the plate. That gives an alpha channel no colour-keying could —
- *    grey letters and an orange mark come out together, edges and all — and it
+ *    from the plate. That gives an alpha channel no colour-keying could:
+ *    grey letters and an orange mark come out together, edges and all, and it
  *    is composited back at LOGO.top with its own colours untouched.
  *
  * To ship the exports exactly as they are, point the two `background-image`
@@ -49,7 +49,7 @@ const FEATHER = 34;
  * `top` is in the original's coordinates and has to clear the icon row once the
  * picture is drawn `cover` behind the desktop. On a 1440x852 desktop the icons
  * start at about y=427 of the source image, so a lock-up sitting at y=152 ends
- * around y=290 — high in the sky, with the whole icon row below it. `scale`
+ * around y=290: high in the sky, with the whole icon row below it. `scale`
  * shrinks it a little: this is a mark on a wallpaper now, not the headline of a
  * brand sheet.
  */
@@ -60,7 +60,7 @@ const LOGO = { top: 152, scale: 0.82 };
  *
  * BOX has to be generous so its feathered edge clears the letters. The matte
  * must not be: every extra row is sky, and sky is where the clean plate and
- * the original honestly disagree — a wisp of cloud the crossfade could not
+ * the original honestly disagree: a wisp of cloud the crossfade could not
  * know about comes out as a rectangle of half-opaque haze around the words.
  */
 const INK = { left: 152, top: 392, width: 764, height: 168 };

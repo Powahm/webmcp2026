@@ -29,7 +29,7 @@ import { clamp01 } from "./engine.js";
  *
  * The *narrow* dimension, not the height. Type sized off the height would grow
  * by 78% the moment the same composition was reframed to 9:16, because 1920
- * became the height — so a headline that fitted across a landscape frame would
+ * became the height, so a headline that fitted across a landscape frame would
  * overflow a portrait one that is physically narrower. Scaling on the short
  * edge keeps a graphic the same size relative to the space it actually has.
  */
