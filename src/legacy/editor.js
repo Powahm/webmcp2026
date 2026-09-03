@@ -274,7 +274,7 @@ export const Editor = (() => {
         <div class="cmp-tabs insp-tabs" role="tablist" aria-label="Inspector">
           <button class="cmp-tab" role="tab" data-insp="clip" aria-selected="true" tabindex="0">Clip</button>
           <button class="cmp-tab" role="tab" data-insp="gfx" aria-selected="false" tabindex="-1">Graphics</button>
-          <button class="cmp-tab" role="tab" data-insp="comp" aria-selected="false" tabindex="-1">Composition</button>
+          <button class="cmp-tab" role="tab" data-insp="comp" aria-selected="false" tabindex="-1">Comp</button>
         </div>
         <div class="insp-panes"></div>
       </aside>
@@ -1121,6 +1121,16 @@ export const Editor = (() => {
     function renderTrack() {
       empty.hidden = timeline.length > 0 || lanes.some((l) => l.items.length)
         || liveLayers().length > 0 || liveAudio().length > 0;
+
+      // Nothing on the spine means nothing to show. Without this the viewer
+      // keeps the last decoded frame after the final clip is deleted, which
+      // reads as "the delete did not work".
+      if (!timeline.length && loaded) {
+        video.pause();
+        video.removeAttribute("src");
+        video.load?.();
+        loaded = null;
+      }
 
       const rows = [];
       // Video lanes read top-down like every editor: the newest overlay on
