@@ -240,6 +240,9 @@ export const Editor = (() => {
           </div>
           <p class="ed-empty">Add a clip from the library to start cutting.</p>
         </div>
+        <!-- The format lives where the picture is, because it is a thing you
+             look at and change, not a setting you go and find. -->
+        <div class="ed-formats" role="group" aria-label="Frame shape"></div>
         <div class="ed-transport">
           <button class="btn btn-play" data-act="play" aria-label="Play">
             <svg class="ico-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9-5.5z"/></svg>
@@ -251,9 +254,26 @@ export const Editor = (() => {
         </div>
       </section>
 
-      <aside class="ed-insp"></aside>
+      <div class="ed-grip ed-grip--lib" data-grip-pane="lib" role="separator"
+           aria-label="Resize the library" tabindex="0"></div>
+      <div class="ed-grip ed-grip--insp" data-grip-pane="insp" role="separator"
+           aria-label="Resize the inspector" tabindex="0"></div>
+      <aside class="ed-insp">
+        <!-- Three columns of the same right-hand rail. Clip, graphics and the
+             composition were stacked in one scroll, which meant reaching the
+             composition took a scroll past whatever else happened to be
+             selected. -->
+        <div class="cmp-tabs insp-tabs" role="tablist" aria-label="Inspector">
+          <button class="cmp-tab" role="tab" data-insp="clip" aria-selected="true" tabindex="0">Clip</button>
+          <button class="cmp-tab" role="tab" data-insp="gfx" aria-selected="false" tabindex="-1">Graphics</button>
+          <button class="cmp-tab" role="tab" data-insp="comp" aria-selected="false" tabindex="-1">Composition</button>
+        </div>
+        <div class="insp-panes"></div>
+      </aside>
 
       <div class="ed-timeline">
+        <div class="ed-grip ed-grip--tl" data-grip-pane="tl" role="separator"
+             aria-label="Resize the timeline" tabindex="0"></div>
         <div class="ed-head">
           <!-- One pane, three views of the same cut. The transcript and the
                code are both full-width things, which is why they live down
@@ -310,6 +330,7 @@ export const Editor = (() => {
     const gfxCtx = gfx.getContext("2d");
     const screen = body.querySelector(".ed-screen");
     const frameBox = body.querySelector(".ed-frame");
+    const formatBar = body.querySelector(".ed-formats");
     const empty = body.querySelector(".ed-empty");
     const libList = body.querySelector(".ed-lib-list");
     const tl = body.querySelector(".tl");
@@ -318,7 +339,9 @@ export const Editor = (() => {
     const laneBox = body.querySelector(".tl-lanes");
     const head = body.querySelector(".tl-playhead");
     const zoom = body.querySelector(".tl-zoom");
-    const insp = body.querySelector(".ed-insp");
+    const insp = body.querySelector(".insp-panes");
+    const inspTabs = body.querySelector(".insp-tabs");
+    let inspTab = "clip";
     const scrub = body.querySelector(".scrub");
     const clock = body.querySelector(".ed-clock");
     const playBtn = body.querySelector('[data-act="play"]');
@@ -387,6 +410,72 @@ export const Editor = (() => {
     const TEXTY_COMPONENTS = Object.keys(COMPONENT_INFO).filter((k) => {
       const f = COMPONENT_INFO[k].fields || {};
       return "text" in f && !("items" in f);
+    });
+
+    /* ---------------- resizing the panels ----------------
+     *
+     * The three regions are grid tracks, so a resize is one custom property
+     * rather than any layout maths: the grip writes a width or a height and
+     * the grid does the rest. Sizes are clamped so a panel cannot be dragged
+     * to nothing and stranded.
+     */
+    const PANES = {
+      lib:  { prop: "--ed-lib",  axis: "x", min: 96,  max: 420, from: (r, e) => e.clientX - r.left },
+      insp: { prop: "--ed-insp", axis: "x", min: 150, max: 480, from: (r, e) => r.right - e.clientX },
+      tl:   { prop: "--ed-tl",   axis: "y", min: 120, max: 620, from: (r, e) => r.bottom - e.clientY },
+    };
+
+    let sizing = null;
+
+    body.addEventListener("pointerdown", (e) => {
+      const grip = e.target.closest("[data-grip-pane]");
+      if (!grip) return;
+      sizing = PANES[grip.dataset.gripPane];
+      if (!sizing) return;
+      if (!body.style.getPropertyValue(sizing.prop)) {
+        const el = { lib: ".ed-lib", insp: ".ed-insp", tl: ".ed-timeline" }[grip.dataset.gripPane];
+        const r0 = body.querySelector(el)?.getBoundingClientRect();
+        if (r0) body.style.setProperty(sizing.prop, `${Math.round(sizing.axis === "x" ? r0.width : r0.height)}px`);
+      }
+      grip.setPointerCapture?.(e.pointerId);
+      body.dataset.sizing = "true";
+      e.preventDefault();
+    });
+
+    body.addEventListener("pointermove", (e) => {
+      if (!sizing) return;
+      const r = body.getBoundingClientRect();
+      const px = Math.max(sizing.min, Math.min(sizing.max, sizing.from(r, e)));
+      body.style.setProperty(sizing.prop, `${Math.round(px)}px`);
+    });
+
+    const endSizing = () => {
+      if (!sizing) return;
+      sizing = null;
+      delete body.dataset.sizing;
+      // The timeline is drawn as percentages of its own width, so it has to be
+      // repainted once the width it is a percentage of has changed.
+      renderTrack();
+    };
+    body.addEventListener("pointerup", endSizing);
+    body.addEventListener("pointercancel", endSizing);
+
+    // Keyboard, because a drag handle nobody can tab to is not a control.
+    body.addEventListener("keydown", (e) => {
+      const grip = e.target.closest?.("[data-grip-pane]");
+      if (!grip) return;
+      const pane = PANES[grip.dataset.gripPane];
+      if (!pane) return;
+      const step = e.shiftKey ? 32 : 8;
+      const now = parseFloat(getComputedStyle(body).getPropertyValue(pane.prop)) || pane.min;
+      const grow = e.key === (pane.axis === "x" ? "ArrowRight" : "ArrowUp");
+      const shrink = e.key === (pane.axis === "x" ? "ArrowLeft" : "ArrowDown");
+      if (!grow && !shrink) return;
+      e.preventDefault();
+      const sign = pane.prop === "--ed-lib" ? 1 : -1;
+      const next = Math.max(pane.min, Math.min(pane.max, now + (grow ? step : -step) * (pane.axis === "y" ? -1 : sign)));
+      body.style.setProperty(pane.prop, `${Math.round(next)}px`);
+      renderTrack();
     });
 
     /* ---------------- overlay lanes ----------------
@@ -529,6 +618,10 @@ export const Editor = (() => {
             <span class="tl-grip tl-grip--in" data-grip="in" data-seg="${seg.uid}"></span>
             <span class="tl-item-name">${Desk.esc(name)}</span>
             <span class="tl-item-time mono">${timecode(dur)}</span>
+            ${(seg.tkeys ?? []).map((k) => {
+              const at2 = Math.max(0, Math.min(1, k.f / Math.max(1, dur * (composition().fps || 30))));
+              return `<span class="tl-key" style="left:${(at2 * 100).toFixed(2)}%"></span>`;
+            }).join("")}
             ${seg.status === "proposed" ? `<span class="tl-ask">
               <button class="btn btn-mini btn-accent" data-take-blank="${seg.uid}">Keep</button>
               <button class="btn btn-mini btn-danger" data-drop-blank="${seg.uid}">Drop</button>
@@ -693,6 +786,63 @@ export const Editor = (() => {
       });
     }
 
+    /* ---------------- reframing a clip ----------------
+     *
+     * The frame is the composition's shape; the footage covers it. Which is
+     * fine until you reframe 16:9 to 9:16 and the thing you cared about is
+     * outside the crop, so every clip carries a transform saying where inside
+     * the frame its picture sits.
+     *
+     * Everything is normalised: x and y are fractions of the frame, scale is a
+     * multiplier on "cover", rotation is degrees, flips are booleans. That is
+     * what lets the same numbers drive a CSS transform in the preview and a
+     * canvas transform in the export and produce the same picture.
+     */
+    const NO_TRANSFORM = { x: 0, y: 0, scale: 1, rotation: 0, flipH: false, flipV: false };
+
+    const transformOf = (seg) => ({ ...NO_TRANSFORM, ...(seg?.transform || {}) });
+
+    /** The transform at a moment, with the clip's own keyframes applied. */
+    function transformAt(seg, cutSeconds) {
+      const base = transformOf(seg);
+      const keys = seg?.tkeys;
+      if (!Array.isArray(keys) || keys.length === 0) return base;
+      const b = boundsOf(seg);
+      const local = Math.round(((cutSeconds ?? playhead) - (b?.start ?? 0)) * (composition().fps || 30));
+      const now = keyedAt(keys, local, "out");
+      if (!now) return base;
+      return {
+        ...base,
+        x: Number.isFinite(now.x) ? now.x : base.x,
+        y: Number.isFinite(now.y) ? now.y : base.y,
+        scale: Number.isFinite(now.width) ? now.width : base.scale,
+        rotation: Number.isFinite(now.rotation) ? now.rotation : base.rotation,
+      };
+    }
+
+    /** The same transform as a CSS string, for the preview. */
+    function cssTransform(t) {
+      const sx = t.flipH ? -t.scale : t.scale;
+      const sy = t.flipV ? -t.scale : t.scale;
+      return `translate(${(t.x * 100).toFixed(3)}%, ${(t.y * 100).toFixed(3)}%) rotate(${t.rotation}deg) scale(${sx}, ${sy})`;
+    }
+
+    /** Point the export's canvas at the same place. Caller restores. */
+    function applyTransform(ctx, t, w, h) {
+      ctx.translate(w / 2 + t.x * w, h / 2 + t.y * h);
+      ctx.rotate((t.rotation * Math.PI) / 180);
+      ctx.scale(t.flipH ? -t.scale : t.scale, t.flipV ? -t.scale : t.scale);
+      ctx.translate(-w / 2, -h / 2);
+    }
+
+    /** Push the selected clip's transform onto the preview element. */
+    function paintTransform() {
+      const at = segmentAt(playhead);
+      const t = at ? transformAt(at.seg) : NO_TRANSFORM;
+      video.style.transform = cssTransform(t);
+      video.style.transformOrigin = "center";
+    }
+
     /* ---------------- keyframes ----------------
      *
      * A key is the layer's placement at one frame. Pressing Key writes where
@@ -745,6 +895,55 @@ export const Editor = (() => {
 
     /** The key sitting exactly on the playhead, if there is one. */
     const keyHere = (layer) => (layer.keys ?? []).find((k) => k.f === Math.max(0, localFrame(layer))) || null;
+
+    /* Dragging the picture itself reframes the clip, when no graphic is
+       selected to take the drag instead. */
+    let reframing = null;
+
+    frameBox.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      const layer = selectedLayer();
+      if (layer && MOVABLE.has(layer.component)) return;   // the graphic wants it
+      const at = segmentAt(playhead);
+      if (!at || !at.seg || at.seg.blank) return;
+      reframing = { seg: at.seg, x: e.clientX, y: e.clientY, rect: frameBox.getBoundingClientRect() };
+      selected = at.seg.uid;
+      frameBox.setPointerCapture?.(e.pointerId);
+      frameBox.dataset.dragging = "true";
+      e.preventDefault();
+    });
+
+    frameBox.addEventListener("pointermove", (e) => {
+      if (!reframing) return;
+      const t = transformOf(reframing.seg);
+      reframing.seg.transform = {
+        ...t,
+        x: Math.max(-1, Math.min(1, t.x + (e.clientX - reframing.x) / reframing.rect.width)),
+        y: Math.max(-1, Math.min(1, t.y + (e.clientY - reframing.y) / reframing.rect.height)),
+      };
+      reframing.x = e.clientX;
+      reframing.y = e.clientY;
+      if ((reframing.seg.tkeys ?? []).length) {
+        const b = boundsOf(reframing.seg);
+        const f = Math.max(0, Math.round((playhead - (b?.start ?? 0)) * (composition().fps || 30)));
+        const tt = transformOf(reframing.seg);
+        reframing.seg.tkeys = (reframing.seg.tkeys ?? [])
+          .filter((k) => k.f !== f)
+          .concat({ f, x: tt.x, y: tt.y, width: tt.scale, rotation: tt.rotation })
+          .sort((a, c) => a.f - c.f);
+      }
+      paintTransform();
+    });
+
+    const endReframe = () => {
+      if (!reframing) return;
+      reframing = null;
+      delete frameBox.dataset.dragging;
+      renderInspector();
+      renderTrack();
+    };
+    frameBox.addEventListener("pointerup", endReframe);
+    frameBox.addEventListener("pointercancel", endReframe);
 
     /* Dragging on the picture. */
     let onFrame = null;
@@ -822,8 +1021,27 @@ export const Editor = (() => {
 
     /** The preview frame takes the composition's aspect ratio. */
     function paintFrame() {
-      const shape = formatOf(composition().format);
+      const doc = composition();
+      const shape = formatOf(doc.format);
       frameBox.style.setProperty("--ar", `${shape.width} / ${shape.height}`);
+
+      formatBar.innerHTML = ["landscape", "vertical", "square"].map((name) => {
+        const f = formatOf(name);
+        const w = f.width >= f.height ? 15 : Math.round((f.width / f.height) * 15);
+        const h = f.height >= f.width ? 15 : Math.round((f.height / f.width) * 15);
+        return `
+          <button class="cmp-format" data-format="${name}" aria-pressed="${doc.format === name}"
+                  style="--fw:${w}px; --fh:${h}px" title="${f.label}">
+            <span class="cmp-format-box" aria-hidden="true"></span>
+            <span>${f.label}</span>
+          </button>`;
+      }).join("") + (doc.pendingFormat
+        ? `<span class="ed-formats-ask">
+             <b>${formatOf(doc.pendingFormat.format).label}?</b>
+             <button class="btn btn-mini btn-accent" data-fmt-accept="1">Keep</button>
+             <button class="btn btn-mini btn-danger" data-fmt-reject="1">No</button>
+           </span>`
+        : "");
     }
 
     function renderTrack() {
@@ -938,27 +1156,14 @@ export const Editor = (() => {
       const sounds = liveAudio();
       const pending = pendingCount();
 
-      const formats = ["landscape", "vertical", "square"].map((name) => {
-        const f = formatOf(name);
-        // The glyph is the aspect ratio itself, scaled to fit a 20px box.
-        const w = f.width >= f.height ? 20 : Math.round((f.width / f.height) * 20);
-        const h = f.height >= f.width ? 20 : Math.round((f.height / f.width) * 20);
-        return `
-          <button class="cmp-format" data-format="${name}" aria-pressed="${doc.format === name}"
-                  style="--fw:${w}px; --fh:${h}px" title="${Desk.esc(name)}">
-            <span class="cmp-format-box" aria-hidden="true"></span>
-            <span>${f.label}</span>
-          </button>`;
-      }).join("");
-
+      // The format buttons live beside the picture now. What stays here is
+      // the reason an agent gave for wanting a different one, which is a thing
+      // to read rather than a control to press.
+      const formats = "";
       const reframe = doc.pendingFormat
         ? `<div class="cmp-reframe">
-             <p><b>Reframe to ${formatOf(doc.pendingFormat.format).label}?</b></p>
+             <p><b>${formatOf(doc.pendingFormat.format).label}</b> proposed — decide it above the picture.</p>
              ${doc.pendingFormat.reason ? `<p class="cmp-reframe-why">${Desk.esc(doc.pendingFormat.reason)}</p>` : ""}
-             <div class="cmp-item-acts">
-               <button class="btn btn-mini btn-accent" data-fmt-accept="1">Accept</button>
-               <button class="btn btn-mini btn-danger" data-fmt-reject="1">Reject</button>
-             </div>
            </div>`
         : "";
 
@@ -1147,21 +1352,22 @@ export const Editor = (() => {
         </div>`;
     }
 
-    function renderInspector() {
+    /**
+     * The left-hand tab: whatever is selected.
+     *
+     * A graphic and a clip are both "the thing you are working on", so they
+     * share a tab rather than each having one that is empty most of the time.
+     */
+    function clipPaneHtml() {
       const layer = liveLayers().find((l) => l.id === selected);
-      if (layer) {
-        insp.innerHTML = layerPanelHtml(layer) + graphicsHtml() + compositionHtml();
-        return;
-      }
+      if (layer) return layerPanelHtml(layer);
+
       const seg = timeline.find((s) => s.uid === selected);
       if (!seg) {
-        insp.innerHTML =
-          `<div class="ed-head"><span>Clip</span></div><p class="insp-empty">Select a clip on the timeline.</p>` +
-          graphicsHtml() + compositionHtml();
-        return;
+        return `<p class="insp-empty">Select a clip or a graphic on the timeline.</p>`;
       }
       if (seg.blank) {
-        insp.innerHTML = `
+        return `
           <div class="ed-head"><span>Blank</span></div>
           <div class="insp-body">
             <p class="insp-name">A ground to build on.</p>
@@ -1175,13 +1381,13 @@ export const Editor = (() => {
             </label>
             <button class="btn btn-ghost btn-wide" data-blank="theme">Use the theme ground</button>
             ${transitionFields(seg)}
-          </div>` + graphicsHtml() + compositionHtml();
-        return;
+            ${transformFields(seg)}
+          </div>`;
       }
 
       const clip = byId.get(seg.clipId);
       const max = clip?.duration || seg.out;
-      insp.innerHTML = `
+      return `
         <div class="ed-head"><span>Clip</span></div>
         <div class="insp-body">
           <p class="insp-name">${Desk.esc(clip?.name || "Missing clip")}</p>
@@ -1212,14 +1418,76 @@ export const Editor = (() => {
           <button class="btn btn-ghost btn-wide" data-set="mute" aria-pressed="${seg.muted}">${seg.muted ? "Muted" : "Sound on"}</button>
 
           ${transitionFields(seg)}
+          ${transformFields(seg)}
 
           <div class="insp-row">
             <button class="btn btn-mini" data-move="-1" aria-label="Move earlier">←</button>
             <button class="btn btn-mini" data-move="1" aria-label="Move later">→</button>
             <button class="btn btn-mini btn-danger" data-move="x" aria-label="Remove from timeline">Remove</button>
           </div>
-        </div>` + graphicsHtml() + compositionHtml();
+        </div>`;
     }
+
+    function renderInspector() {
+      insp.innerHTML =
+        inspTab === "gfx" ? graphicsHtml()
+        : inspTab === "comp" ? compositionHtml()
+        : clipPaneHtml();
+      // A count on the tab, because a proposal behind a closed tab is a
+      // proposal nobody answers.
+      const waiting = agentWaiting();
+      inspTabs.querySelectorAll("[data-insp]").forEach((b) => {
+        const on = b.dataset.insp === inspTab;
+        b.setAttribute("aria-selected", String(on));
+        b.tabIndex = on ? 0 : -1;
+        const n = waiting[b.dataset.insp] ?? 0;
+        b.dataset.count = n > 0 ? String(n) : "";
+        b.classList.toggle("has-waiting", n > 0);
+      });
+    }
+
+    /**
+     * A new proposal opens the tab that shows it.
+     *
+     * Splitting the rail into columns is worth it right up until something
+     * arrives in a column you are not looking at, so anything newly staged
+     * brings its own tab forward. Only on an increase: re-rendering must not
+     * drag the rail back while somebody is reading a different tab.
+     */
+    /**
+     * What is actually waiting on a decision, counting only what an agent
+     * asked for. A transition somebody picks is a layer that exists as a
+     * proposal for one tick before it is accepted, and following that would
+     * drag the rail away from the panel they are working in.
+     */
+    function agentWaiting() {
+      return {
+        // The two stores land in two different panes, so they are counted
+        // apart: badging the wrong tab is worse than not badging one.
+        gfx: pendingGraphics().filter((g) => g.origin !== "human").length,
+        comp: liveLayers().filter((l) => l.status === "proposed" && l.origin !== "human").length
+          + liveAudio().filter((a) => a.status === "proposed" && a.origin !== "human").length
+          + (composition().pendingFormat ? 1 : 0),
+      };
+    }
+
+    let lastWaiting = { gfx: 0, comp: 0 };
+    function followProposals() {
+      const w = agentWaiting();
+      const grew = w.gfx > lastWaiting.gfx ? "gfx" : w.comp > lastWaiting.comp ? "comp" : null;
+      lastWaiting = w;
+      if (grew && inspTab !== grew) {
+        inspTab = grew;
+        renderInspector();
+      }
+    }
+
+    inspTabs.addEventListener("click", (e) => {
+      const tab = e.target.closest("[data-insp]");
+      if (!tab) return;
+      inspTab = tab.dataset.insp;
+      renderInspector();
+    });
 
     function renderClock() {
       clock.textContent = `${timecode(playhead)} / ${timecode(total())}`;
@@ -1430,6 +1698,7 @@ export const Editor = (() => {
       // effect that retriggered every time you scrubbed over it would make the
       // preview unusable.
       scheduler?.seek(playhead);
+      paintTransform();
       syncOverlays(playhead, { play });
       syncLaneAudio(playhead, { play });
       renderClock();
@@ -1468,6 +1737,7 @@ export const Editor = (() => {
       }
       // Fire any accepted effect the playhead just crossed.
       scheduler?.tick(playhead, liveAudio());
+      paintTransform();
       syncOverlays(playhead, { play: true });
       syncLaneAudio(playhead, { play: true });
       renderClock();
@@ -1645,7 +1915,12 @@ export const Editor = (() => {
               canvas.height
             );
             ctx.clearRect(0, 0, canvas.width, canvas.height);
+            // The clip's own reframe, from the same numbers the preview uses.
+            const t = transformAt(at.seg, playhead);
+            ctx.save();
+            applyTransform(ctx, t, canvas.width, canvas.height);
             ctx.drawImage(video, fit.x, fit.y, fit.w, fit.h);
+            ctx.restore();
           } catch { /* frame not ready */ }
           }
 
@@ -2129,6 +2404,22 @@ export const Editor = (() => {
         return void seekTo(playhead);
       }
 
+      const tf = e.target.dataset.tf;
+      if (tf) {
+        const tseg = timeline.find((x) => x.uid === selected);
+        if (!tseg) return;
+        tseg.transform = { ...transformOf(tseg), [tf]: Number(e.target.value) };
+        // If this clip is animated, the slider edits the key you are parked on
+        // rather than a base the animation would immediately overrule.
+        if ((tseg.tkeys ?? []).length) addTransformKey(tseg);
+        const label = e.target.closest(".field")?.querySelector("b");
+        if (label) label.textContent = tf === "rotation"
+          ? `${Math.round(Number(e.target.value))}\u00B0`
+          : Number(e.target.value).toFixed(2);
+        paintTransform();
+        return;
+      }
+
       const trans = e.target.dataset.trans;
       if (trans) {
         const tseg = timeline.find((x) => x.uid === selected);
@@ -2175,6 +2466,28 @@ export const Editor = (() => {
         selected = null;
         return refresh();
       }
+      const flip = e.target.closest("[data-tflip]");
+      if (flip) {
+        const fseg = timeline.find((x) => x.uid === selected);
+        if (!fseg) return;
+        const key = flip.dataset.tflip;
+        fseg.transform = { ...transformOf(fseg), [key]: !transformOf(fseg)[key] };
+        paintTransform();
+        return void refresh();
+      }
+
+      const tkey = e.target.closest("[data-tkey]");
+      if (tkey) {
+        const kseg = timeline.find((x) => x.uid === selected);
+        if (!kseg) return;
+        if (tkey.dataset.tkey === "add") return addTransformKey(kseg);
+        if (tkey.dataset.tkey === "clear") { kseg.tkeys = []; paintTransform(); return void refresh(); }
+        kseg.transform = { ...NO_TRANSFORM };
+        kseg.tkeys = [];
+        paintTransform();
+        return void refresh();
+      }
+
       if (e.target.dataset.blank === "theme") {
         const bseg = timeline.find((x) => x.uid === selected);
         if (bseg) { bseg.colour = null; refresh(); seekTo(playhead); }
@@ -2569,6 +2882,61 @@ export const Editor = (() => {
     }
 
     /** The transition already on an edge, if any. */
+    /**
+     * Reframing controls for a clip.
+     *
+     * These are the fields the transform already has, so there is nothing here
+     * that the drag on the picture cannot also write and nothing the drag
+     * writes that is not shown here.
+     */
+    function transformFields(seg) {
+      const t = transformOf(seg);
+      const keys = seg.tkeys ?? [];
+      return `
+        <div class="ed-head"><span>Transform</span></div>
+        <div class="insp-body insp-body--tight">
+          <p class="insp-hint">Drag the picture to move it in the frame. Handy after a reframe, when the shot is no longer centred on what matters.</p>
+          <label class="field"><span>Across <b class="mono">${t.x.toFixed(2)}</b></span>
+            <input type="range" data-tf="x" min="-1" max="1" step="0.01" value="${t.x}"></label>
+          <label class="field"><span>Down <b class="mono">${t.y.toFixed(2)}</b></span>
+            <input type="range" data-tf="y" min="-1" max="1" step="0.01" value="${t.y}"></label>
+          <label class="field"><span>Scale <b class="mono">${t.scale.toFixed(2)}</b></span>
+            <input type="range" data-tf="scale" min="0.2" max="4" step="0.01" value="${t.scale}"></label>
+          <label class="field"><span>Rotate <b class="mono">${Math.round(t.rotation)}&deg;</b></span>
+            <input type="range" data-tf="rotation" min="-180" max="180" step="1" value="${t.rotation}"></label>
+          <div class="insp-row">
+            <button class="btn btn-mini" data-tflip="flipH" aria-pressed="${t.flipH}">Flip across</button>
+            <button class="btn btn-mini" data-tflip="flipV" aria-pressed="${t.flipV}">Flip down</button>
+          </div>
+          <div class="insp-row">
+            <button class="btn btn-mini btn-accent" data-tkey="add">${tkeyHere(seg) ? "Update key" : "Key"}</button>
+            ${keys.length ? `<button class="btn btn-mini" data-tkey="clear">Clear ${keys.length}</button>` : ""}
+            <button class="btn btn-mini" data-tkey="reset">Reset</button>
+          </div>
+        </div>`;
+    }
+
+    /** A transform key at the playhead, if there is one. */
+    function tkeyHere(seg) {
+      const b = boundsOf(seg);
+      if (!b) return null;
+      const f = Math.max(0, Math.round((playhead - b.start) * (composition().fps || 30)));
+      return (seg.tkeys ?? []).find((k) => k.f === f) || null;
+    }
+
+    function addTransformKey(seg) {
+      const b = boundsOf(seg);
+      if (!b) return;
+      const t = transformOf(seg);
+      const key = {
+        f: Math.max(0, Math.round((playhead - b.start) * (composition().fps || 30))),
+        x: t.x, y: t.y, width: t.scale, rotation: t.rotation,
+      };
+      seg.tkeys = (seg.tkeys ?? []).filter((k) => k.f !== key.f).concat(key).sort((a, c) => a.f - c.f);
+      Desk.toast(`Key at ${timecode(playhead)}`, "good");
+      refresh();
+    }
+
     /** The two transition pickers, for whatever kind of clip is selected. */
     function transitionFields(seg) {
       const pick = (edge) => `
@@ -2692,6 +3060,8 @@ export const Editor = (() => {
 
     function select(uid) {
       selected = uid;
+      // Selecting a thing means you want to look at it, so the rail follows.
+      inspTab = "clip";
       renderTrack();
       renderInspector();
       armFrameGrabs();
@@ -2822,12 +3192,13 @@ export const Editor = (() => {
     }
     gfxFrame = requestAnimationFrame(paintGraphics);
 
-    const offGraphics = onGraphics(() => renderInspector());
+    const offGraphics = onGraphics(() => { renderInspector(); followProposals(); });
     const offComposition = onComposition(() => {
       // Typing in the text panel changes the composition, which fires this.
       // Rebuilding the panel mid-sentence takes the caret with it, so the
       // panel holding focus is left alone and repaints when focus leaves.
       if (!insp.contains(document.activeElement)) renderInspector();
+      followProposals();
       // The graphics and sound lanes are drawn from the composition, so a
       // staged layer or sound has to reach the track too, not just the list.
       renderTrack();

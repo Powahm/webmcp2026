@@ -1032,3 +1032,71 @@
   transform: rotate(45deg);
   pointer-events: none;
 }
+
+/* ---- the resize grips ----
+   Two pixels of hit area is a dare, so each grip is a wide invisible strip
+   sitting over the border it moves. It shows itself on hover and while it is
+   being dragged, and nowhere else. */
+.ed-grip {
+  position: absolute;
+  z-index: 6;
+  background: transparent;
+  transition: background .12s;
+}
+.ed-grip:hover, .ed-grip:focus-visible, .ed[data-sizing] .ed-grip:active {
+  background: color-mix(in srgb, var(--accent) 55%, transparent);
+  outline: none;
+}
+.ed-grip--lib  { top: 0; bottom: 0; left: calc(var(--ed-lib, 152px) - 3px); width: 7px; cursor: col-resize; }
+.ed-grip--insp { top: 0; bottom: 0; right: calc(var(--ed-insp, 220px) - 3px); width: 7px; cursor: col-resize; }
+.ed-grip--tl   { left: 0; right: 0; top: -3px; height: 7px; cursor: row-resize; }
+
+/* While a drag is running, nothing else should be selecting text or taking
+   the pointer out from under it. */
+.win-body[data-sizing] { user-select: none; }
+.win-body[data-sizing] iframe, .win-body[data-sizing] video { pointer-events: none; }
+
+.insp-tabs .cmp-tab { flex: 1 1 0; min-width: 0; }
+
+/* ---- the format switcher, beside the picture ---- */
+.ed-formats {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 11px 0;
+}
+.ed-formats-ask {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  font-size: 11.5px;
+  color: var(--text);
+}
+
+/* The picture is grabbable when a clip is under the playhead. */
+.ed-frame { cursor: grab; }
+.ed-frame[data-dragging] { cursor: grabbing; }
+.ed-frame .ed-video { transition: transform .06s linear; will-change: transform; }
+.ed-frame[data-dragging] .ed-video { transition: none; }
+
+.insp-body--tight { padding-top: 9px; gap: 9px; }
+.insp-row { display: flex; gap: 6px; flex-wrap: wrap; }
+
+@media (prefers-reduced-motion: reduce) { .ed-frame .ed-video { transition: none; } }
+
+.ed-timeline { position: relative; }
+.ed-grip--tl { z-index: 7; }
+
+/* The graphics tab counts what is waiting on a decision. */
+.insp-tabs .cmp-tab.has-waiting::after {
+  content: attr(data-count);
+  margin-left: 6px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  font-size: 9.5px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--accent);
+}
