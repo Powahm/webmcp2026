@@ -552,7 +552,7 @@ export const Camera = (() => {
       title: "Camera",
       meta: "live",
       tint: TINT,
-      size: { w: 760, h: 700 },
+      size: "large",
       origin,
       build
     });

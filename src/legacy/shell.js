@@ -60,7 +60,21 @@ export const Desk = (() => {
     syncDock();
   }
 
-  function placement(w, h) {
+  /** Dead centre, no cascade offset. For the windows a person spends the
+   *  most time in, where a stack of near-misses just makes it harder to
+   *  find the thing you just opened. */
+  function centredPlacement(w, h) {
+    const bounds = desktop.getBoundingClientRect();
+    const left = Math.max(14, Math.round((bounds.width - w) / 2));
+    const top = Math.max(14, Math.round((bounds.height - h) / 2));
+    return {
+      left: Math.min(left, Math.max(14, bounds.width - w - 14)),
+      top: Math.min(top, Math.max(14, bounds.height - h - 14))
+    };
+  }
+
+  function placement(w, h, { centered = false } = {}) {
+    if (centered) return centredPlacement(w, h);
     const bounds = desktop.getBoundingClientRect();
     const offset = (cascade % 5) * 28;
     cascade += 1;
@@ -72,7 +86,17 @@ export const Desk = (() => {
     };
   }
 
-  function openWindow({ id, title, meta = "", tint, size = { w: 560, h: 440 }, origin, build, onClose }) {
+  /** A window sized off the desktop rather than a fixed pixel guess, for
+   *  the apps a person actually works inside. 70% of whatever screen this
+   *  is, not a box tuned for one laptop and cramped on every other. */
+  function largeSize() {
+    return {
+      w: Math.round(desktop.clientWidth * 0.7),
+      h: Math.round(desktop.clientHeight * 0.7)
+    };
+  }
+
+  function openWindow({ id, title, meta = "", tint, size = { w: 560, h: 440 }, centered = false, origin, build, onClose }) {
     const existing = windows.get(id);
     if (existing) {
       setWindowState(existing, "open");
@@ -80,9 +104,11 @@ export const Desk = (() => {
       return existing;
     }
 
-    const w = Math.min(size.w, Math.max(300, desktop.clientWidth - 28));
-    const h = Math.min(size.h, Math.max(220, desktop.clientHeight - 28));
-    const pos = placement(w, h);
+    const large = size === "large";
+    const wanted = large ? largeSize() : size;
+    const w = Math.min(wanted.w, Math.max(300, desktop.clientWidth - 28));
+    const h = Math.min(wanted.h, Math.max(220, desktop.clientHeight - 28));
+    const pos = placement(w, h, { centered: centered || large });
 
     const el = document.createElement("section");
     el.className = "win";

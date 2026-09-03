@@ -238,7 +238,7 @@ export const Scripts = (() => {
       title: script.name,
       meta: timecode(runtime(script)),
       tint: TINT,
-      size: { w: 900, h: 720 },
+      size: "large",
       origin,
       build(body, win) {
         body.className = "win-body scr";
@@ -639,7 +639,7 @@ export const Scripts = (() => {
       title: "Scripts",
       meta: "",
       tint: TINT,
-      size: { w: 660, h: 480 },
+      size: "large",
       origin,
       build(body, win) {
         body.className = "win-body";
