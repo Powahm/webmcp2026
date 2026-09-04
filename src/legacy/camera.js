@@ -156,6 +156,12 @@ export const Camera = (() => {
     stream = new MediaStream(tracks);
     gotAudio = stream.getAudioTracks().length > 0;
 
+    // A screen is whatever shape the screen is. Read it, do not try to change
+    // it: cropping somebody's window to 16:9 would hide the part of it they
+    // were pointing at.
+    const settings = display.getVideoTracks()[0]?.getSettings?.() || {};
+    shape = { width: Number(settings.width) || 0, height: Number(settings.height) || 0 };
+
     // The browser's own stop button lives outside the page. This is the only
     // way the page hears about it.
     display.getVideoTracks()[0]?.addEventListener("ended", () => {
@@ -170,6 +176,91 @@ export const Camera = (() => {
 
   /** Callbacks that end an in-flight take. Registered by start(). */
   const stopRequests = new Set();
+
+  /**
+   * 16:9, at the best size the camera will actually give.
+   *
+   * An unconstrained getUserMedia does not hand you the camera's good mode. The
+   * spec's default is 640x480, so the feed arrived at a quarter of the height a
+   * native camera app shows and, worse, at 4:3. That is the whole bug: the
+   * preview looked squarer and softer than the same webcam everywhere else, and
+   * 4:3 footage dropped into a 16:9 timeline is pillarboxed or cropped for the
+   * rest of its life. The old ladder never mentioned a size at all.
+   *
+   * `ideal`, never `exact`. An `exact` constraint a camera cannot meet is an
+   * OverconstrainedError; an `ideal` one is a best effort, and a best effort is
+   * exactly what is wanted here -- a 720p webcam should give 720p rather than
+   * refuse and fall back to its 480p default. `aspectRatio` is stated as well
+   * as the two sides, because a camera offering 1920x1440 satisfies "about
+   * 1920 wide" while being 4:3, and browsers will crop to an aspect ratio they
+   * have been asked for.
+   */
+  const SHAPE_169 = [
+    { width: { ideal: 1920 }, height: { ideal: 1080 }, aspectRatio: { ideal: 16 / 9 } },
+    { width: { ideal: 1280 }, height: { ideal: 720 }, aspectRatio: { ideal: 16 / 9 } }
+  ];
+
+  /** What the video track is really doing, once the camera has answered. Read
+   *  from the track rather than assumed from the constraints, because a
+   *  constraint is a request and this is the reply. */
+  let shape = { width: 0, height: 0 };
+
+  const ratioOf = (w, h) => (w > 0 && h > 0 ? w / h : 0);
+  const is169 = (w, h) => Math.abs(ratioOf(w, h) - 16 / 9) < 0.02;
+
+  /** The live track's own answer, read fresh, because applyConstraints can
+   *  settle a moment after it resolves. Falls back to the acquisition reading. */
+  function liveShape() {
+    const settings = stream?.getVideoTracks?.()[0]?.getSettings?.() || {};
+    return {
+      width: Number(settings.width) || shape.width,
+      height: Number(settings.height) || shape.height
+    };
+  }
+
+  /** "4:3", not "1.3333". Reduced only while the reduction still means
+   *  something: 1366x768 goes to 683:384, which tells nobody anything. */
+  function niceRatio(w, h) {
+    const gcd = (a, b) => (b ? gcd(b, a % b) : a);
+    const d = gcd(w, h) || 1;
+    const rw = Math.round(w / d);
+    const rh = Math.round(h / d);
+    if (rw <= 32 && rh <= 32) return `${rw}:${rh}`;
+    return `${ratioOf(w, h).toFixed(2)}:1`;
+  }
+
+  /**
+   * Ask a track that came back the wrong shape to change.
+   *
+   * Constraints at acquisition are a request the camera can partly ignore, and
+   * some drivers hand back their native 4:3 mode regardless. `applyConstraints`
+   * is the second ask, on the live track, and browsers honour it by cropping
+   * where the sensor cannot oblige. It is allowed to fail: a camera with only a
+   * 4:3 mode and a browser that will not crop is a real combination, and the
+   * honest response is to record what there is and say what it is.
+   */
+  async function squareUp(track) {
+    if (!track) return;
+    shape = { width: 0, height: 0 };
+    const read = () => {
+      const s = track.getSettings?.() || {};
+      return { width: Number(s.width) || 0, height: Number(s.height) || 0 };
+    };
+
+    shape = read();
+    if (is169(shape.width, shape.height)) return;
+
+    try {
+      await track.applyConstraints({
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
+        aspectRatio: { ideal: 16 / 9 }
+      });
+      shape = read();
+    } catch {
+      /* the camera will not be moved; shape already says what it is */
+    }
+  }
 
   /**
    * The microphone, on its own.
@@ -241,10 +332,15 @@ export const Camera = (() => {
       throw Object.assign(new Error("no camera API in this context"), { name: "UnsupportedError" });
     }
 
-    const video = deviceId ? { deviceId: { exact: deviceId } } : { facingMode: "user" };
+    const which = deviceId ? { deviceId: { exact: deviceId } } : { facingMode: "user" };
     // Video only. A named camera, then any camera: nothing here can cost the
     // take its sound, because the sound is not in this ladder any more.
-    const ladder = [{ video }, { video: true }];
+    const ladder = [
+      { video: { ...which, ...SHAPE_169[0] } },
+      { video: { ...which, ...SHAPE_169[1] } },
+      { video: which },
+      { video: true }
+    ];
 
     let last;
     let picture = null;
@@ -260,6 +356,8 @@ export const Camera = (() => {
     }
     if (!picture) throw last;
 
+    await squareUp(picture.getVideoTracks()[0]);
+
     const audioTracks = await acquireMic();
     stream = new MediaStream([...picture.getVideoTracks(), ...audioTracks]);
     gotAudio = audioTracks.length > 0;
@@ -271,6 +369,7 @@ export const Camera = (() => {
   function release() {
     stream?.getTracks().forEach((t) => t.stop());
     stream = null;
+    shape = { width: 0, height: 0 };
     if (recorder.status === "armed") recorder.status = "idle";
   }
 
@@ -369,6 +468,10 @@ export const Camera = (() => {
           <p class="cam-blocked-env mono"></p>
         </div>
         <div class="cam-rec" hidden><span class="cam-dot"></span><span class="cam-time mono">00:00:00</span></div>
+        <!-- What the camera actually gave, not what was asked for. The whole
+             reason this exists: a feed that is quietly 640x480 and 4:3 looks
+             like a feed, and there was no way to tell from the preview. -->
+        <div class="cam-shape mono" hidden></div>
 
         <!-- The teleprompter, over the preview rather than over the desktop.
              Tailwind utilities with the theme's own custom properties, so it
@@ -405,6 +508,7 @@ export const Camera = (() => {
     const blocked = body.querySelector(".cam-blocked");
     const blockedMsg = body.querySelector(".cam-blocked-msg");
     const recBadge = body.querySelector(".cam-rec");
+    const shapeBadge = body.querySelector(".cam-shape");
     const recTime = body.querySelector(".cam-time");
     const shutter = body.querySelector('[data-act="record"]');
     const micBtn = body.querySelector('[data-act="mic"]');
@@ -481,6 +585,11 @@ export const Camera = (() => {
 
     scriptSelect.addEventListener("change", () => loadPrompt(scriptSelect.value));
 
+    // The element knows the true frame size once it has decoded one, and a
+    // track's own settings can lag a moment behind applyConstraints.
+    video.addEventListener("loadedmetadata", () => paintShape());
+    video.addEventListener("resize", () => paintShape());
+
     // Click the preview to advance. The shutter is a long way from your hand
     // when you are set up in front of the camera; the picture is not.
     stage.addEventListener("click", (e) => {
@@ -523,6 +632,30 @@ export const Camera = (() => {
       else micBtn.removeAttribute("title");
     }
 
+    /**
+     * The size and shape of what is being captured.
+     *
+     * Named plainly rather than as a resolution alone, because "1280x960" does
+     * not tell most people they are about to shoot 4:3. It says the ratio, and
+     * it says it in the accent colour when the ratio is not the one the editor
+     * is going to want.
+     */
+    function paintShape() {
+      const { width, height } = liveShape();
+      if (!width || !height) {
+        shapeBadge.hidden = true;
+        return;
+      }
+      const wide = is169(width, height);
+      const ratio = wide ? "16:9" : niceRatio(width, height);
+      shapeBadge.hidden = false;
+      shapeBadge.textContent = `${width}x${height} · ${ratio}`;
+      shapeBadge.dataset.warn = wide || source === "screen" ? "false" : "true";
+      shapeBadge.title = wide || source === "screen"
+        ? ""
+        : `This camera would not give 16:9, so the take is ${ratio}. The Editor will crop or pad it to fit a 16:9 cut.`;
+    }
+
     async function connect() {
       blocked.hidden = true;
       try {
@@ -531,6 +664,7 @@ export const Camera = (() => {
         await video.play().catch(() => {});
         shutter.disabled = false;
         paintMic();
+        paintShape();
         // Said once, on arming, so it is known before the take rather than
         // after it. start() says it again if it is still true by then.
         if (withAudio && !gotAudio) Desk.toast(describeAudioError(audioError), "bad");
@@ -539,6 +673,7 @@ export const Camera = (() => {
         shutter.disabled = true;
         blocked.hidden = false;
         blockedMsg.textContent = describeError(err);
+        paintShape();
         showEnvironment();
       }
     }
@@ -625,6 +760,7 @@ export const Camera = (() => {
           release();
           video.srcObject = null;
           blocked.hidden = false;
+          paintShape();
           blockedMsg.textContent = "Press record to pick a window or a screen again.";
         }
         Desk.toast(`Saved ${clip.name}`, "good");
@@ -810,6 +946,16 @@ export const Camera = (() => {
       // person has spoken into it for a minute.
       audioError: withAudio && !gotAudio ? audioError : null,
       audioProblem: withAudio && !gotAudio ? describeAudioError(audioError) : null,
+      // The frame as the camera is really giving it, which is not always the
+      // 16:9 that was asked for. Worth reporting: a 4:3 take in a 16:9 cut is
+      // cropped or padded, and that is a decision somebody should make on
+      // purpose rather than discover.
+      width: liveShape().width || null,
+      height: liveShape().height || null,
+      widescreen: (() => {
+        const { width, height } = liveShape();
+        return width && height ? is169(width, height) : null;
+      })(),
       source,
       deviceId: deviceId || null,
       windowOpen: Desk.isOpen("camera"),

@@ -258,6 +258,12 @@ export const getRecorderState = {
       // clip is on the timeline.
       audio_problem: state.audioProblem,
       audio_error: state.audioError,
+      // The frame the camera is really giving. `widescreen: false` means a 4:3
+      // take that a 16:9 cut will crop or pad, which is worth mentioning
+      // before they shoot rather than after.
+      width: state.width,
+      height: state.height,
+      widescreen: state.widescreen,
       // "camera" or "screen". A screen recording is a tutorial or a walkthrough
       // and wants different advice from a piece to camera.
       source: state.source,

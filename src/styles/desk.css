@@ -1184,6 +1184,26 @@ body {
   background: rgba(16, 18, 26, .72);
   border-radius: 999px;
 }
+/* What the camera actually gave. Top-right, opposite the record badge, so the
+   two never collide. Quiet until the shape is wrong, then it is the loud
+   colour, because a 4:3 take is a decision worth making on purpose. */
+.cam-shape {
+  position: absolute;
+  top: 12px; right: 12px;
+  padding: 4px 9px;
+  font-size: 11px;
+  letter-spacing: .04em;
+  color: rgba(255, 255, 255, .72);
+  background: rgba(16, 18, 26, .72);
+  border-radius: 999px;
+  pointer-events: none;
+}
+.cam-shape[data-warn="true"] {
+  color: #fff;
+  background: var(--accent);
+}
+.cam-shape[hidden] { display: none; }
+
 .cam-dot {
   width: 9px; height: 9px;
   background: var(--accent);
