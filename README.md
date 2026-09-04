@@ -1,7 +1,7 @@
 # Deskmate
 
-**A whole video studio in one browser tab, built so an AI agent can work inside it.**
-Write the script, read it off the teleprompter while you record, cut what you shot — with an
+**A whole content studio in one browser tab where an AI agent and a human can work together inside it.**
+Write the script, read it off the teleprompter while the camera rolls and edit it with an
 agent on the same surface as you the entire time, through **WebMCP**.
 
 ![The Deskmate desktop: a menubar reading "28 tools ready", five icons for Readme, Scripts, Skills, Camera and Editor over a valley at dusk](assets/Readme_picture.png)
