@@ -16,111 +16,43 @@ Five apps, each in a window you can drag, stack, resize, minimise and close.
 
 ### Scripts
 
-- A script is a list of lines. Each line carries the **spoken text** and an optional **shot
-  direction**: where the camera is, what the b-roll is, what the tone should be.
-- Two views of one document. A **Draft** you write in, and a **Shot list** for the pass before
-  you shoot.
-- A **Research** pane for links and notes you gathered while browsing.
-- Runtime is estimated at 2.5 words per second (about 150 wpm, an unhurried pace) and totalled
-  across the script, so you know how long the video is before you shoot it.
-- The Draft does not wrap, so one line of the document is exactly one row on screen. That is
-  what lets a suggestion from an agent sit at the line it is aimed at.
+Write your script line by line, with optional notes for camera shots, b-roll and tone. You can switch between a writing view and a shot list, keep research alongside it, and see the estimated video length as you write. AI can suggest ideas and help you writing the script!
 
 ### Teleprompter
 
-- Scrolls the whole script across roughly its estimated runtime, brightening the line you
-  should be on.
-- Speed control while it runs, 0.4x to 2.5x. Space pauses it.
-- Opens as its own window for rehearsal, or runs over the camera preview while you record.
-- **Records which line was on screen at which second.** That log is what the transcript gets
-  built from later, and it is the most interesting thing in the app.
-
-### Camera
-
-- Camera or screen capture, with your mic mixed into either, so a tutorial is one take rather
-  than two files to line up.
-- A constraint ladder that falls back through resolutions instead of failing outright, and a
-  device picker so you choose which camera.
-- The teleprompter runs over the preview, and three states are readable while you shoot: idle,
-  armed (a stream is live but nothing is being kept) and recording, with the elapsed seconds.
-- Takes land straight in the Editor's library, named and measured.
-- Releases the camera when the window is minimised, so the light goes out when you expect it to.
-
-### Editor
-
-- Lanes of clips, graphics and sound in one timebase: **V1** for the spine, video lanes above
-  it, **A1** for sound.
-- Trim, split, drag to reorder with a snap and a marker showing where it lands, inline rename,
-  and delete with Backspace or a right-click.
-- **Six looks**: none, mono, warm, cool, punch, faded. Plus speed and per-clip volume.
-- **Four transitions**: dip to black, dip to white, flash, dip to accent.
-- **Transform with keyframes**: position, scale, rotation, and horizontal or vertical flip.
-- **Three frame shapes**: 16:9, 9:16 and 1:1, each with fill, fit, or drag the picture to
-  choose what stays in frame.
-- **Unlink sound from picture** onto its own audio lane, where it gets its own position, trim
-  and volume, so a line can run under the next shot. Relink puts it back.
-- **Undo and redo** over the cut, with Ctrl+Z and Ctrl+Shift+Z.
-- Left rail: library, text, transitions, transcript. Right rail: clip, motion, composition.
-- One orange **Import** takes video and audio together; the file's own type decides which it is.
-- **Export** replays the cut into a canvas at the composition's size, mixes the audio back
-  through Web Audio and records it with `MediaRecorder`. No encoder dependency, so rendering is
-  real time. It lands back in your library and as a download.
+Read your script while recording, with adjustable scrolling speed. The prompter also keeps track of which line you were reading and when, which becomes useful later for the transcript and editing.
 
 ### Skills
 
-- **Craft notes** in three kinds, cut, edit and style, eight in total. The style notes carry an
-  **Apply** button that sets that look and speed on the last clip on the timeline, so the
-  reference is usable rather than only readable.
-- **AI Skills**: a folder of markdown an agent can load and follow. Six ship with the app and
-  you can write your own. This is the part worth reading about below.
+Deskmate includes a set of **custom AI Skills** that teach an agent how to work with the app. You can also create your own, so the AI can follow your preferred editing style or workflow.
+
+### Camera
+
+Record your camera, microphone or even your screen! Your takes are automatically added to the editor, and the teleprompter can run directly over the camera preview.
+
+### Editor
+
+A full timeline for video, audio and graphics. You can trim, split, reorder and transform clips, add transitions and effects, change aspect ratios, and export your finished video directly from the browser.
+
 
 ### The desktop itself
 
-- Windows fly out of the icon you clicked and reverse back into it on close. Folders hinge
-  open, apps press in.
-- A dock, a ⌘K launcher that searches documents, scripts and clips, and light and dark themes.
-- A **Permissions** chip in the menubar, one light per thing the browser is allowed to refuse.
-- A **Readme** folder of seven documents, plus a guided tour per window.
-- Arrow keys walk the desktop icons, F6 cycles open windows, Escape closes the top one, and
-  `prefers-reduced-motion` turns all of it off.
+Everything lives inside a desktop-style interface with draggable windows, a dock, launcher, light and dark themes, keyboard shortcuts, accessibility features and built-in documentation.
 
 ## WebMCP and AI integration
 
-**28 site tools**, registered on `document.modelContext.registerTool` with a
-`navigator.modelContext` fallback for Chrome's origin trial. 17 read, 11 propose. Every schema
-sets `additionalProperties: false`, and every read tool carries `readOnlyHint`.
+Deskmate exposes **28 WebMCP tools** that let an AI agent interact directly with the application. Some tools read the current state and others can propose changes.
 
-Most of them are the scripting API this app already handed to *human*-written scripts,
-described in JSON Schema and given to an agent instead of to a text editor.
+The important part is that the agent can access things that normally only a user inside the page could see:
+- Which line the teleprompter is currently on
+- What the user is currently typing
+- Which clip is selected and where the playhead is
+- What words are being spoken at a specific point in the video
+- What graphics and layers are currently on screen
 
-**What the agent can reach that nothing off-page can:**
+There is also no backend. Everything stays in the browser, including the timeline and recorded clips.
 
-| | |
-|---|---|
-| Mid-take | Which prompter line you are on, and how many seconds in |
-| Mid-sentence | The line you are still typing, before you save it |
-| Mid-edit | The selected clip, the playhead, the words under it, the layers over it |
-
-Clips are Blobs in IndexedDB. The timeline is an array in a closure. The elapsed second is a
-running interval. **There is no backend**, so nothing is uploaded, and a server-side MCP has
-nothing to connect to in the first place.
-
-And the tools do not only *read* that state, they write back into the window you are looking
-at. A proposal is not a chat message describing a graphic. It is a dashed overlay on the actual
-frame, animating live, next to an Accept button.
-
-### The line the agent does not cross
-
-**No tool accepts a proposal, exports a video, or reads a file.** Every accept path refuses
-anything that is not a trusted browser event, which is the same mechanism the browser itself
-uses to tell a real click from a script.
-
-> The agent can compose an animated title card, put a synthesised thump under it, reframe the
-> whole cut to 9:16 and list every "um" in the take, four calls, and still cannot put one frame
-> into your video.
-
-It can write a line into your draft and cannot change a word of it. It can *offer* you a
-folder, and the directory picker that opens is your permission, not its own.
+When the AI makes a change, it doesn't just describe what to do. Its proposal appears directly on the timeline or preview, where the user can accept or reject it.
 
 ### Watching it work
 
@@ -134,12 +66,9 @@ Three things, and the first is the one we would point at.
 
 ### 1. AI Skills, so the agent already knows how to use this app
 
-This is the part we have not seen in another WebMCP project. **Tools tell an agent what it
-*can* do. They say nothing about how this app wants it done.** So a folder of markdown does
-that instead.
+**Tools tell an agent what it *can* do. They say nothing about how this app wants it done.** So a folder of markdown does that instead.
 
-An AI Skill is a `.md` file with frontmatter, in the SKILL.md convention agents already
-understand:
+An AI Skill is a `.md` file with frontmatter, in the SKILL.md convention agents already understand:
 
 ```markdown
 ---
@@ -219,7 +148,7 @@ are spread across their line by length.
 
 It is an estimate and it says so, marked `source: "prompter"` and `approximate: true`. Usually
 that is enough to find a phrase and land a graphic on it. For measured per-word timing, paste
-your own OpenAI key into the Transcript panel and any clip re-transcribes with Whisper. The key
+your **own OpenAI key** into the Transcript panel and any clip re-transcribes with Whisper. The key
 stays in this browser's `localStorage` and is sent nowhere but `api.openai.com`.
 
 Either way, the useful part is that the timing lives in the page, in **cut** seconds, already
@@ -228,9 +157,6 @@ three things"** and the agent queries the page for that quote and gets frames ba
 inferring it from pixels. That is what a server-side tool has no route to, because the prompter
 and the clicks that moved it never left this tab.
 
-It also turns the Transcript tab into a way of *moving* rather than reading: every word is a
-button that seeks to it, fillers are struck through, and gaps over a second are called out
-inline.
 
 ## Judging it in five minutes
 
@@ -242,22 +168,23 @@ whether it has actually called anything.
    hit record and read a line off the prompter. Stop.
 2. **Open the Editor.** Your take is on the timeline. Click the **Transcript** tab in the left
    rail; the words are already timed. Click one and the playhead goes to it.
-3. **Paste this to the agent:**
+   (Add an OpenAI key for more precision)
+4. **Paste this to the agent:**
 
    > *Look at my timeline, then build me an opening title sequence. Give me a title card, a
    > lower third with my name, and a stat badge, and put each one on a real moment in the
    > transcript rather than all at the start. Add a whoosh under the title. Then show me what it
    > would look like as a 9:16 short.*
 
-4. **Watch the proposals arrive dashed** on the timeline, previewing live. Accept one, reject
+5. **Watch the proposals arrive dashed** on the timeline, previewing live. Accept one, reject
    one. Then ask it to **"hold the title two seconds longer"**: it reads back what you kept and
    changes only that. This compounding turn is the whole argument.
-5. **Ask it to "tidy up the ums."** One call marks every hesitation and every silence, each
+6. **Ask it to "tidy up the ums."** One call marks every hesitation and every silence, each
    with its own reason, to take or leave one at a time.
-6. **Then ask for a look**: *"redo the title, but make it glassmorphic"*, or *"go maximalist"*.
+7. **Then ask for a look**: *"redo the title, but make it glassmorphic"*, or *"go maximalist"*.
    A skill fires on those words and hands the agent an exact recipe, which is the difference
    between an agent that can call your tools and one that knows your app.
-7. **Export.** It replays into a canvas in real time and lands back in your library.
+8. **Export.** It replays into a canvas in real time and lands back in your library.
 
 ## Run it
 
