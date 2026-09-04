@@ -1,8 +1,8 @@
 # Deskmate
 
 **A whole content studio in one browser tab where an AI agent and a human can work together inside it.**
-Write the script, read it off the teleprompter while the camera rolls and edit it with an
-agent on the same surface as you the entire time, through **WebMCP**.
+Write the script, read it off the teleprompter while recording and edit it with an
+AI agent on the same page as you the entire time, through **WebMCP**.
 
 ![The Deskmate desktop: a menubar reading "28 tools ready", five icons for Readme, Scripts, Skills, Camera and Editor over a valley at dusk](assets/Readme_picture.png)
 
@@ -59,6 +59,35 @@ When the AI makes a change, it doesn't just describe what to do. Its proposal ap
 A **ghost** names each tool as it is called, a cursor springs to the surface that call actually
 touched and presses it, and the menubar badge tells "ready" from "connected" on purpose. All of
 it is driven by real calls, never simulated.
+
+## Judging it in five minutes
+
+Open the site in **ChatGPT's browser**, or Chrome 149+ with
+`chrome://flags/#enable-webmcp-testing`. The menubar badge says whether a host is attached and
+whether it has actually called anything.
+
+1. **Record ten seconds.** Open **Scripts**, pick the sample, open **Camera**, load the script,
+   hit record and read a line off the prompter. Stop.
+2. **Open the Editor.** Your take is on the timeline. Click the **Transcript** tab in the left
+   rail; the words are already timed. Click one and the playhead goes to it.
+   (Add an OpenAI key for more precision)
+4. **Paste this to the agent:**
+
+   > *Look at my timeline, then build me an opening title sequence. Give me a title card, a
+   > lower third with my name, and a stat badge, and put each one on a real moment in the
+   > transcript rather than all at the start. Add a whoosh under the title. Then show me what it
+   > would look like as a 9:16 short.*
+
+5. **Watch the proposals arrive dashed** on the timeline, previewing live. Accept one, reject
+   one. Then ask it to **"hold the title two seconds longer"**: it reads back what you kept and
+   changes only that. This compounding turn is the whole argument.
+6. **Ask it to "tidy up the ums."** One call marks every hesitation and every silence, each
+   with its own reason, to take or leave one at a time.
+7. **Then ask for a look**: *"redo the title, but make it glassmorphic"*, or *"go maximalist"*.
+   A skill fires on those words and hands the agent an exact recipe, which is the difference
+   between an agent that can call your tools and one that knows your app.
+8. **Export.** It replays into a canvas in real time and lands back in your library.
+   
 
 ## What makes this different
 
@@ -150,41 +179,6 @@ It is an estimate and it says so, marked `source: "prompter"` and `approximate: 
 that is enough to find a phrase and land a graphic on it. For measured per-word timing, paste
 your **own OpenAI key** into the Transcript panel and any clip re-transcribes with Whisper. The key
 stays in this browser's `localStorage` and is sent nowhere but `api.openai.com`.
-
-Either way, the useful part is that the timing lives in the page, in **cut** seconds, already
-adjusted for every trim, reorder and speed change. Ask for **"a list over the bit where I say
-three things"** and the agent queries the page for that quote and gets frames back, rather than
-inferring it from pixels. That is what a server-side tool has no route to, because the prompter
-and the clicks that moved it never left this tab.
-
-
-## Judging it in five minutes
-
-Open the site in **ChatGPT's browser**, or Chrome 149+ with
-`chrome://flags/#enable-webmcp-testing`. The menubar badge says whether a host is attached and
-whether it has actually called anything.
-
-1. **Record ten seconds.** Open **Scripts**, pick the sample, open **Camera**, load the script,
-   hit record and read a line off the prompter. Stop.
-2. **Open the Editor.** Your take is on the timeline. Click the **Transcript** tab in the left
-   rail; the words are already timed. Click one and the playhead goes to it.
-   (Add an OpenAI key for more precision)
-4. **Paste this to the agent:**
-
-   > *Look at my timeline, then build me an opening title sequence. Give me a title card, a
-   > lower third with my name, and a stat badge, and put each one on a real moment in the
-   > transcript rather than all at the start. Add a whoosh under the title. Then show me what it
-   > would look like as a 9:16 short.*
-
-5. **Watch the proposals arrive dashed** on the timeline, previewing live. Accept one, reject
-   one. Then ask it to **"hold the title two seconds longer"**: it reads back what you kept and
-   changes only that. This compounding turn is the whole argument.
-6. **Ask it to "tidy up the ums."** One call marks every hesitation and every silence, each
-   with its own reason, to take or leave one at a time.
-7. **Then ask for a look**: *"redo the title, but make it glassmorphic"*, or *"go maximalist"*.
-   A skill fires on those words and hands the agent an exact recipe, which is the difference
-   between an agent that can call your tools and one that knows your app.
-8. **Export.** It replays into a canvas in real time and lands back in your library.
 
 ## Run it
 
