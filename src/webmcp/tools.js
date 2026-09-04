@@ -248,11 +248,16 @@ export const getRecorderState = {
       status: state.status,
       elapsed_seconds: round(state.elapsed),
       elapsed: timecode(state.elapsed),
-      // What the stream actually carries. acquire() walks a constraint ladder
-      // and will drop audio to get a picture at all, so asking for a mic and
-      // having one are two different facts.
+      // What the stream actually carries. Asking for a mic and having one are
+      // two different facts: it can be held by another app or not exposed to
+      // the page, and neither of those stops the picture.
       audio: state.audio,
       audio_requested: state.audioRequested,
+      // Only set when the mic was asked for and did not arrive. Tell them:
+      // a silent take is worth interrupting for, and it is invisible until the
+      // clip is on the timeline.
+      audio_problem: state.audioProblem,
+      audio_error: state.audioError,
       // "camera" or "screen". A screen recording is a tutorial or a walkthrough
       // and wants different advice from a piece to camera.
       source: state.source,

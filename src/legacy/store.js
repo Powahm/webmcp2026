@@ -246,7 +246,7 @@ export const Clips = (() => {
       return { duration, thumb, width, height, hasPicture };
     },
 
-    async save(blob, { name, kind = "recording", folder = null } = {}) {
+    async save(blob, { name, kind = "recording", folder = null, hasAudio = null } = {}) {
       const info = await Clips.describe(blob);
       const clip = {
         id: `clip-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -256,6 +256,10 @@ export const Clips = (() => {
         // the top. A clip saved while a folder is open lands in that folder,
         // because filing a thing after the fact is the step nobody does.
         folder,
+        // Whether the recorder had a microphone when this was taken. null for
+        // an import, where nobody asked. Kept because a silent clip is
+        // indistinguishable from a quiet one until you know which it is.
+        hasAudio,
         blob,
         created: Date.now(),
         ...info

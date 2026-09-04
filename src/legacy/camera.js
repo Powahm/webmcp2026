@@ -20,6 +20,9 @@ export const Camera = (() => {
   let deviceId = null;
   let withAudio = true;
   let gotAudio = false;
+  /** Why the mic is missing, when it was asked for and did not arrive. The
+   *  name of the DOMException, or null when there is nothing wrong. */
+  let audioError = null;
   /** "camera" or "screen". Screen capture keeps the mic, so a tutorial is one take. */
   let source = "camera";
   const viewers = new Set();
@@ -89,6 +92,33 @@ export const Camera = (() => {
   }
 
   /**
+   * Why this take will be silent, in one sentence a person can act on.
+   *
+   * Separate from describeError because a missing mic is not a failure to
+   * record: the picture is fine, the take will happen, and the only thing
+   * wrong is that nobody will hear it. That deserves saying out loud at the
+   * moment it is discovered, which is what the old code never did.
+   */
+  function describeAudioError(name) {
+    const tail = " so this take will have no sound.";
+    if (name === "NotFoundError")
+      return "No microphone was found," + tail;
+    if (name === "NotReadableError")
+      return "Another app is holding the microphone," + tail +
+        " An agent's browser often keeps it for its own voice features. Close that, then press the mic button to try again.";
+    if (name === "MutedError")
+      return "The microphone is muted at the system level," + tail + " Unmute it and press the mic button.";
+    if (name === "NotAllowedError" || name === "SecurityError")
+      return framed()
+        ? "The page this one is inside did not pass the microphone down," + tail + " Open Deskmate in a tab of its own."
+        : "The microphone was blocked," + tail + " Allow it from the address bar, then press the mic button to try again.";
+    if (name === "UnsupportedError")
+      return "This browser will not give the page a microphone," + tail;
+    if (!name) return "";
+    return "The microphone could not be started (" + name + ")," + tail;
+  }
+
+  /**
    * The screen, plus your voice.
    *
    * getDisplayMedia gives picture and, at the user's discretion, the audio of
@@ -118,14 +148,10 @@ export const Camera = (() => {
 
     const tracks = [...display.getVideoTracks(), ...display.getAudioTracks()];
 
-    if (withAudio) {
-      try {
-        const mic = await navigator.mediaDevices.getUserMedia({ audio: true });
-        tracks.push(...mic.getAudioTracks());
-      } catch {
-        /* No mic, or refused. A silent screen recording still beats no take. */
-      }
-    }
+    // A silent screen recording still beats no take, so a mic failure is not
+    // fatal here either. It is no longer swallowed, though: acquireMic keeps
+    // the reason, and the mic button offers to try again.
+    tracks.push(...(await acquireMic()));
 
     stream = new MediaStream(tracks);
     gotAudio = stream.getAudioTracks().length > 0;
@@ -145,6 +171,69 @@ export const Camera = (() => {
   /** Callbacks that end an in-flight take. Registered by start(). */
   const stopRequests = new Set();
 
+  /**
+   * The microphone, on its own.
+   *
+   * This used to be one rung of a video-and-audio ladder, and that was a bug
+   * with a silent failure mode. The ladder asked for `{ video, audio: true }`
+   * and, when that combination failed for any reason short of an outright
+   * refusal, fell through to a rung with `audio: false`. Every symptom of a
+   * working camera was still there -- a live preview, an enabled shutter -- and
+   * the take came out with no sound.
+   *
+   * An agent's browser makes that likely rather than rare. The host app is
+   * often already holding the microphone for its own voice features, which is
+   * `NotReadableError`, or does not expose a microphone to the page at all,
+   * which is `NotFoundError`. Neither is a refusal, so neither stopped the
+   * fall-through.
+   *
+   * Asking for the two devices separately fixes three things at once: the
+   * picture no longer depends on the mic, the mic failure keeps a name worth
+   * reporting, and asking again later costs one call instead of tearing the
+   * preview down. It also means two smaller permission prompts rather than one
+   * combined one, and a combined prompt that is only half granted is refused
+   * outright by the browser.
+   */
+  async function acquireMic() {
+    audioError = null;
+    if (!withAudio) return [];
+    if (!navigator.mediaDevices?.getUserMedia) {
+      audioError = "UnsupportedError";
+      return [];
+    }
+    try {
+      const mic = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const tracks = mic.getAudioTracks();
+      if (!tracks.length) audioError = "NotFoundError";
+      // A track can arrive live and muted at the source, which is silence with
+      // none of the signs of failure. Say so rather than record it.
+      else if (tracks.every((t) => t.muted)) audioError = "MutedError";
+      return tracks;
+    } catch (err) {
+      audioError = err?.name || "unknown";
+      return [];
+    }
+  }
+
+  /**
+   * Put the mic on a preview that is already running.
+   *
+   * MediaRecorder freezes its track list when it is constructed, so this is
+   * only ever useful before a take starts. That is exactly when it is called:
+   * once from the mic button, and once more from start(), because the click
+   * that starts a take is a fresh user gesture and a browser that ignored the
+   * first request may honour one attached to that.
+   */
+  async function addMicToLive() {
+    if (!withAudio || gotAudio || !stream) return false;
+    const tracks = await acquireMic();
+    if (!tracks.length) return false;
+    tracks.forEach((t) => stream.addTrack(t));
+    gotAudio = true;
+    viewers.forEach((fn) => fn(stream));
+    return true;
+  }
+
   async function acquire() {
     if (stream && stream.active) return stream;
     if (source === "screen") return acquireScreen();
@@ -153,27 +242,30 @@ export const Camera = (() => {
     }
 
     const video = deviceId ? { deviceId: { exact: deviceId } } : { facingMode: "user" };
-    const ladder = [
-      { video, audio: withAudio },
-      { video, audio: false },
-      { video: true, audio: false }
-    ];
+    // Video only. A named camera, then any camera: nothing here can cost the
+    // take its sound, because the sound is not in this ladder any more.
+    const ladder = [{ video }, { video: true }];
 
     let last;
+    let picture = null;
     for (const constraints of ladder) {
       try {
-        stream = await navigator.mediaDevices.getUserMedia(constraints);
-        gotAudio = stream.getAudioTracks().length > 0;
-        viewers.forEach((fn) => fn(stream));
-        if (recorder.status === "idle") recorder.status = "armed";
-        return stream;
+        picture = await navigator.mediaDevices.getUserMedia(constraints);
+        break;
       } catch (err) {
         last = err;
         /* a refusal is final; a missing device or a bad constraint is worth retrying */
         if (err.name === "NotAllowedError" || err.name === "SecurityError") break;
       }
     }
-    throw last;
+    if (!picture) throw last;
+
+    const audioTracks = await acquireMic();
+    stream = new MediaStream([...picture.getVideoTracks(), ...audioTracks]);
+    gotAudio = audioTracks.length > 0;
+    viewers.forEach((fn) => fn(stream));
+    if (recorder.status === "idle") recorder.status = "armed";
+    return stream;
   }
 
   function release() {
@@ -185,6 +277,21 @@ export const Camera = (() => {
   /* record for a fixed number of seconds, or until stop() is called */
   async function start({ onTick } = {}) {
     const live = await acquire();
+
+    /*
+     * Last chance at the microphone, and the last chance to say it is missing.
+     *
+     * Both halves matter. The retry is worth one call because the click that
+     * got us here is a fresh user gesture, and a browser that ignored the
+     * request made while the window was opening may honour this one. The
+     * warning matters more: the old code recorded a silent take and said
+     * nothing at all, so the first anyone knew of it was on the timeline
+     * afterwards. It has to be before MediaRecorder is constructed, because
+     * that is when the track list is frozen.
+     */
+    if (withAudio && !gotAudio) await addMicToLive();
+    if (withAudio && !gotAudio) Desk.toast(describeAudioError(audioError), "bad");
+
     const mimeType = pickMime();
     const rec = new MediaRecorder(live, mimeType ? { mimeType } : undefined);
     const chunks = [];
@@ -215,7 +322,11 @@ export const Camera = (() => {
         resolve(
           await Clips.save(blob, {
             name: source === "screen" ? `Screen ${stamp}` : `Recording ${stamp}`,
-            kind: source === "screen" ? "screen" : "recording"
+            kind: source === "screen" ? "screen" : "recording",
+            // Recorded on the clip so nothing downstream has to guess. A take
+            // with no audio track is why a transcript cannot be measured from
+            // it and why its volume slider does nothing.
+            hasAudio: gotAudio
           })
         );
       };
@@ -394,6 +505,24 @@ export const Camera = (() => {
 
     let session = null;
 
+    /**
+     * The mic button says which of three states it is in, not two.
+     *
+     * "Mic off" is a choice, "Mic on" is working, and "No mic" is the one that
+     * used to be invisible: asked for, not granted, take will be silent. In
+     * that state the button stops being a toggle and becomes a retry, because
+     * turning the mic "off" is not what anybody wants from it.
+     */
+    function paintMic() {
+      const warn = withAudio && !gotAudio;
+      micBtn.textContent = !withAudio ? "Mic off" : gotAudio ? "Mic on" : "No mic · retry";
+      micBtn.setAttribute("aria-pressed", String(gotAudio));
+      micBtn.dataset.warn = warn ? "true" : "false";
+      const why = warn ? describeAudioError(audioError) : "";
+      if (why) micBtn.title = why;
+      else micBtn.removeAttribute("title");
+    }
+
     async function connect() {
       blocked.hidden = true;
       try {
@@ -401,9 +530,10 @@ export const Camera = (() => {
         video.srcObject = live;
         await video.play().catch(() => {});
         shutter.disabled = false;
-        /* the ladder may have dropped audio to get a picture at all */
-        micBtn.textContent = gotAudio ? "Mic on" : withAudio ? "No mic" : "Mic off";
-        micBtn.setAttribute("aria-pressed", String(gotAudio));
+        paintMic();
+        // Said once, on arming, so it is known before the take rather than
+        // after it. start() says it again if it is still true by then.
+        if (withAudio && !gotAudio) Desk.toast(describeAudioError(audioError), "bad");
         await listDevices();
       } catch (err) {
         shutter.disabled = true;
@@ -539,9 +669,38 @@ export const Camera = (() => {
       }
       if (act === "import") fileInput.click();
       if (act === "mic") {
+        // Asked for and missing: this press is a retry, not a toggle. Straight
+        // off the click, so the request has a real gesture behind it.
+        if (withAudio && !gotAudio && stream?.active) {
+          micBtn.disabled = true;
+          micBtn.textContent = "Trying…";
+          const ok = await addMicToLive();
+          micBtn.disabled = false;
+          paintMic();
+          Desk.toast(ok ? "Microphone is on." : describeAudioError(audioError), ok ? "good" : "bad");
+          return;
+        }
+
         withAudio = !withAudio;
-        micBtn.textContent = withAudio ? "Mic on" : "Mic off";
-        micBtn.setAttribute("aria-pressed", String(withAudio));
+
+        // With a live preview the mic goes on or off in place. Tearing the
+        // stream down and reconnecting made the picture flicker and, on a
+        // browser that prompts every time, asked for the camera again.
+        if (stream?.active) {
+          if (!withAudio) {
+            stream.getAudioTracks().forEach((t) => { t.stop(); stream.removeTrack(t); });
+            gotAudio = false;
+            audioError = null;
+            paintMic();
+            return;
+          }
+          const ok = await addMicToLive();
+          paintMic();
+          if (!ok) Desk.toast(describeAudioError(audioError), "bad");
+          return;
+        }
+
+        paintMic();
         release();
         connect();
       }
@@ -642,10 +801,15 @@ export const Camera = (() => {
         ? (Date.now() - recorder.startedAt) / 1000
         : recorder.elapsed,
       // What the stream actually carries, which is not always what was asked
-      // for: acquire() walks a constraint ladder and will drop audio to get a
-      // picture at all.
+      // for: the mic can be held by another app, or not exposed to the page at
+      // all, and neither of those stops the picture.
       audio: recorder.status === "idle" ? withAudio : gotAudio,
       audioRequested: withAudio,
+      // Set when the mic was asked for and did not arrive. Worth surfacing:
+      // an agent that can see this can say the take will be silent before the
+      // person has spoken into it for a minute.
+      audioError: withAudio && !gotAudio ? audioError : null,
+      audioProblem: withAudio && !gotAudio ? describeAudioError(audioError) : null,
       source,
       deviceId: deviceId || null,
       windowOpen: Desk.isOpen("camera"),

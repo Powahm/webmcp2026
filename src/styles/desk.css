@@ -1207,6 +1207,16 @@ body {
   border-top: var(--bw) solid var(--line);
 }
 
+/* The mic asked for and not granted. A silent take is the one failure in this
+   app with no visible symptom, so the control that can fix it wears the loud
+   colour until it is fixed. */
+.cam-bar [data-act="mic"][data-warn="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
 .shutter {
   width: 52px; height: 52px;
   margin: 0 auto;
