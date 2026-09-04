@@ -256,6 +256,10 @@ readable on a picture that was never designed to have text on it.
   staged layer takes the playhead into it, past its entrance, so what you judge is the graphic
   and not its first three frames.
 - **Ctrl+Z / Ctrl+Shift+Z** undo and redo anything that changes the cut.
+- **Backspace** removes whatever is selected, and **right-clicking** anything on the timeline
+  offers the same, plus **Open** on a motion graphics clip.
+- One orange **Import** in the library takes video and audio together; the file's own type
+  decides which it is, so there is no kind to choose before choosing the file.
 - **Drag a clip along V1** to reorder it: it snaps to a seam and a marker shows which one.
   `[` and `]` do the same from the keyboard. **Drag the picture** to choose what a reframe
   keeps. **Backspace** removes whatever is selected, a suggestion included.

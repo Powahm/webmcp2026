@@ -97,7 +97,7 @@ export const Readme = (() => {
 
         { t: "h", v: "The five regions" },
         { t: "ul", v: [
-          "**Left rail**: four tabs. **Library** is your footage and sound; **Text** adds words; **Transitions** holds how a clip arrives and leaves, and where it sits in the frame; **Transcript** is what was said.",
+          "**Left rail**: four tabs. **Library** is your footage and sound, with one orange **Import** for both: the file says which it is, so there is no kind to pick first. **Text** adds words; **Transitions** holds how a clip arrives and leaves, and where it sits in the frame; **Transcript** is what was said.",
           "**Viewer**, centre: plays the whole cut as one piece. The frame shape is the composition's, not the footage's, so a reframe is something you look at rather than discover at export.",
           "**Right rail**: **Clip** for whatever is selected, **Motion** for the graphics on the cut and anything waiting on a decision, **Comp** for the composition as a whole.",
           "**Timeline**, bottom: the lanes, with **Split**, **Text**, **Motion graphics**, **Overlay** and the two lane buttons above them, and **Undo** and **Redo** beside the page switch.",
@@ -119,7 +119,8 @@ export const Readme = (() => {
           "Drag a clip along V1 to reorder it. It snaps to the seam between two clips, and a marker shows which one before you let go.",
           "**[** and **]** shuffle the selected clip one place, for when you would rather not aim a drag.",
           "Drag either end of a clip to trim it. **S** splits whatever is under the playhead.",
-          "Drag the ruler, or the playhead's handle, to scrub. **Backspace** removes whatever is selected, including a suggestion.",
+          "Drag the ruler, or the playhead's handle, to scrub.",
+          "**Backspace** removes whatever is selected: a clip, an overlay, a graphic, a sound or a suggestion. **Right click** anything on the timeline for the same thing, and for **Open** on a motion graphics clip.",
           "**Rename** in the Clip panel renames the underlying clip, so the library stops being a list of `export-00_41`."
         ] },
 
