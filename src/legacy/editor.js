@@ -262,10 +262,12 @@ export const Editor = (() => {
         </div>
         <div class="lib-pane" data-libpane="clips">
           <div class="ed-lib-bar">
-            <button class="btn btn-mini" data-act="import" title="Import video files into the library">Video</button>
-            <button class="btn btn-mini" data-act="import-audio" title="Import music or sound effects into the library">Audio</button>
-            <input type="file" accept="video/*" multiple hidden data-act="file">
-            <input type="file" accept="audio/*" multiple hidden data-act="lib-audio-file">
+            <!-- One button for both. Picking the kind before picking the file
+                 asked a question the file already answers, and got it wrong
+                 whenever someone had a folder of mixed footage and music. -->
+            <button class="btn btn-mini btn-accent" data-act="import"
+                    title="Import video, music or sound effects into the library">Import</button>
+            <input type="file" accept="video/*,audio/*" multiple hidden data-act="file">
           </div>
           <!-- Folders are a filter, not a tree. One row of chips with one open
                at a time: a library of forty takes and a music bed is a library
@@ -405,6 +407,10 @@ export const Editor = (() => {
         </div>
       </div>
 
+      <!-- The right-click menu. One element, filled per press, because the
+           actions depend on what is under the pointer. -->
+      <div class="tl-menu" role="menu" hidden></div>
+
       <div class="ed-export" hidden>
         <div class="ed-export-card">
           <p class="ed-export-title">Exporting…</p>
@@ -443,10 +449,10 @@ export const Editor = (() => {
     const playBtn = body.querySelector('[data-act="play"]');
     const fileInput = body.querySelector('[data-act="file"]');
     const audioInput = body.querySelector('[data-act="audio-file"]');
-    const libAudioInput = body.querySelector('[data-act="lib-audio-file"]');
     const libFolderBar = body.querySelector(".lib-folders");
     const exportPane = body.querySelector(".ed-export");
     const cutStrip = body.querySelector(".cut-strip");
+    const menu = body.querySelector(".tl-menu");
 
     let playing = false;
     let playhead = 0;
@@ -2602,6 +2608,37 @@ export const Editor = (() => {
       const onLane = findItem(selected);
       if (onLane) return itemPanelHtml(onLane.lane, onLane.it);
 
+      // An overlay, so selecting one shows what it is and how to be rid of it.
+      const float = floats.find((f) => f.id === selected);
+      if (float) {
+        const held = explicitClips().find((c) => c.id === float.id);
+        const n = held ? layersIn(held).length + soundsIn(held).length : 0;
+        return `
+          <p class="insp-kind mono">Overlay</p>
+          <div class="insp-body">
+            ${nameRowHtml(float.title || "Overlay")}
+            <p class="insp-hint">A motion graphics clip over the footage. Double click it on the timeline to build inside it.</p>
+            <dl class="insp-stats mono">
+              <div><dt>Starts</dt><dd>${timecode(float.at)}</dd></div>
+              <div><dt>Lasts</dt><dd>${float.seconds.toFixed(1)}s</dd></div>
+              <div><dt>Holds</dt><dd>${n} element${n === 1 ? "" : "s"}</dd></div>
+            </dl>
+            <label class="field">
+              <span>Starts <b class="mono">${timecode(float.at)}</b></span>
+              <input type="range" data-float-set="at" min="0" max="${Math.max(1, Math.ceil(total()))}" step="0.05" value="${float.at.toFixed(2)}">
+            </label>
+            <label class="field">
+              <span>Lasts <b class="mono">${float.seconds.toFixed(1)}s</b></span>
+              <input type="range" data-float-set="seconds" min="0.5" max="30" step="0.1" value="${float.seconds.toFixed(1)}">
+            </label>
+            <div class="insp-row">
+              <button class="btn btn-mini" data-open-mclip="${float.id}">Open</button>
+              <button class="btn btn-mini btn-danger" data-float-drop="${float.id}">Delete</button>
+            </div>
+            <p class="insp-hint">Backspace deletes it, and so does a right click on the bar.</p>
+          </div>`;
+      }
+
       // A staged cut, so selecting a chip does not leave the rail claiming
       // nothing is selected while a marker is clearly highlighted.
       const staged = pendingCuts().find((c) => c.id === selected);
@@ -3735,7 +3772,6 @@ export const Editor = (() => {
 
       if (act === "play") return playing ? stop() : play();
       if (act === "import") return fileInput.click();
-      if (act === "import-audio") return libAudioInput.click();
       if (act === "new-folder") {
         const made = await Folders.add(`Folder ${libFolders.length + 1}`);
         // Straight into the name field. A folder called "Folder 3" is a folder
@@ -3966,6 +4002,19 @@ export const Editor = (() => {
         return void seekTo(playhead);
       }
 
+      const fset = e.target.dataset.floatSet;
+      if (fset) {
+        const f = floats.find((x) => x.id === selected);
+        if (!f) return;
+        const v = Number(e.target.value);
+        if (fset === "at") f.at = Math.max(0, v);
+        if (fset === "seconds") f.seconds = Math.max(0.5, v);
+        const label = e.target.closest(".field")?.querySelector("b");
+        if (label) label.textContent = fset === "at" ? timecode(f.at) : `${f.seconds.toFixed(1)}s`;
+        renderTrack();
+        return void seekTo(playhead);
+      }
+
       // A lane item: volume, placement, trim and speed.
       const iset = e.target.dataset.itemSet;
       if (iset) {
@@ -4108,6 +4157,12 @@ export const Editor = (() => {
         field?.focus();
         field?.select();
         return;
+      }
+
+      const floatDrop = e.target.closest("[data-float-drop]");
+      if (floatDrop) {
+        selected = floatDrop.dataset.floatDrop;
+        return void deleteSelected(e);
       }
 
       const itemDrop = e.target.closest("[data-item-drop]");
@@ -4586,6 +4641,11 @@ export const Editor = (() => {
         select(sound.dataset.sound);
         gesture = { type: "move-sound", soundId: sound.dataset.sound, from: timeAtPointer(e) };
       } else if (floatBar) {
+        // Selecting it, like every other branch here does. Without this an
+        // overlay could be dragged but never selected, so the inspector had
+        // nothing to show for it and Backspace had nothing to act on: there
+        // was no way to delete one at all.
+        select(floatBar.dataset.float);
         gesture = { type: "move-float", floatId: floatBar.dataset.float, from: timeAtPointer(e) };
       } else if (seg) {
         select(seg.dataset.seg);
@@ -4919,6 +4979,84 @@ export const Editor = (() => {
         }
       }
     }
+
+    /* ---------------- the right-click menu ----------------
+     *
+     * Whatever is under the pointer, named, with the one action anybody
+     * actually wants from a right click on a timeline. It selects first, so
+     * the menu and the inspector are talking about the same thing, and it
+     * falls through to the browser's own menu on empty track rather than
+     * swallowing the press to show nothing.
+     */
+
+    /** What the pointer is on, in the order the timeline stacks them. */
+    function targetAt(el) {
+      const at = (sel) => el?.closest?.(sel) ?? null;
+      // A float carries both data-float and data-mclip, so it is asked first.
+      const f = at("[data-float]");
+      if (f) return { uid: f.dataset.float, label: "overlay", open: f.dataset.float };
+      const m = at("[data-mclip]");
+      if (m) return { uid: m.dataset.mclip, label: "motion graphics clip", open: m.dataset.mclip };
+      const i = at("[data-item]");
+      if (i) return { uid: i.dataset.item, label: "clip" };
+      const l = at("[data-layer]");
+      if (l) return { uid: l.dataset.layer, label: "graphic" };
+      const sd = at("[data-sound]");
+      if (sd) return { uid: sd.dataset.sound, label: "sound" };
+      const sg = at("[data-seg]");
+      if (sg) return { uid: sg.dataset.seg, label: "clip" };
+      const c = at("[data-cut]");
+      if (c) return { uid: c.dataset.cut, label: "suggested cut" };
+      return null;
+    }
+
+    function closeMenu() {
+      menu.hidden = true;
+      menu.innerHTML = "";
+    }
+
+    function openMenu(x, y, target) {
+      menu.innerHTML = [
+        `<p class="tl-menu-head mono">${Desk.esc(target.label)}</p>`,
+        target.open ? `<button class="tl-menu-item" role="menuitem" data-menu="open">Open</button>` : "",
+        `<button class="tl-menu-item tl-menu-item--danger" role="menuitem" data-menu="delete">Delete</button>`,
+      ].join("");
+      menu.hidden = false;
+      // Measured after it is shown, then pulled back inside the window, so a
+      // press near the right edge does not open a menu half off screen.
+      const r = menu.getBoundingClientRect();
+      menu.style.left = `${Math.max(6, Math.min(x, window.innerWidth - r.width - 6))}px`;
+      menu.style.top = `${Math.max(6, Math.min(y, window.innerHeight - r.height - 6))}px`;
+      menu.querySelector(".tl-menu-item")?.focus({ preventScroll: true });
+    }
+
+    body.addEventListener("contextmenu", (e) => {
+      const target = targetAt(e.target);
+      if (!target) return closeMenu();
+      e.preventDefault();
+      select(target.uid);
+      menu.dataset.uid = target.uid;
+      menu.dataset.open = target.open || "";
+      openMenu(e.clientX, e.clientY, target);
+    });
+
+    menu.addEventListener("click", (e) => {
+      const act = e.target.closest("[data-menu]")?.dataset.menu;
+      if (!act) return;
+      const uid = menu.dataset.uid;
+      closeMenu();
+      if (!uid) return;
+      selected = uid;
+      if (act === "open") return void enterScope(menu.dataset.open || uid);
+      if (act === "delete") return void deleteSelected(e);
+    });
+
+    // Anywhere else, Escape, or a scroll under it closes the menu.
+    const dismissMenu = (e) => { if (!menu.hidden && !menu.contains(e.target)) closeMenu(); };
+    document.addEventListener("pointerdown", dismissMenu, true);
+    const escMenu = (e) => { if (e.key === "Escape" && !menu.hidden) { e.stopPropagation(); closeMenu(); } };
+    document.addEventListener("keydown", escMenu, true);
+    tlScroll.addEventListener("scroll", closeMenu);
 
     tl.addEventListener("pointerdown", beginGesture);
     tl.addEventListener("pointermove", moveGesture);
@@ -5322,6 +5460,32 @@ export const Editor = (() => {
         }
       }
 
+      /**
+       * An overlay, and what is inside it.
+       *
+       * A float's contents are matched by the window of time it covers rather
+       * than by an owner field, so removing the bar and leaving them behind
+       * would not orphan them: it would hand them to whichever clip covers
+       * that moment next, and they would reappear inside something else.
+       * Deleting the overlay deletes what it holds, which is also what anyone
+       * who put one there by accident expects.
+       */
+      const float = floats.find((f) => f.id === selected);
+      if (float) {
+        mark();
+        const held = explicitClips().find((c) => c.id === float.id);
+        // Counted before they are removed, or the count is always zero.
+        const inner = held ? [...layersIn(held), ...soundsIn(held)] : [];
+        const inside = inner.length;
+        for (const l of held ? layersIn(held) : []) removeLayer(l.id, e);
+        for (const a of held ? soundsIn(held) : []) removeAudio(a.id, e);
+        floats = floats.filter((f) => f.id !== float.id);
+        if (scope === float.id) leaveScope();
+        selected = null;
+        Desk.toast(inside ? `Overlay and its ${inside} element${inside === 1 ? "" : "s"} removed` : "Overlay removed", "good");
+        return void refresh();
+      }
+
       const seg = timeline.find((x) => x.uid === selected);
       if (seg) {
         // A clip's own transitions go with it. A dip left hanging over a cut
@@ -5664,38 +5828,47 @@ export const Editor = (() => {
      * around and reach for later, which is what a library is for, so the
      * importer beside the clips leaves the timeline alone.
      */
-    libAudioInput.addEventListener("change", async () => {
-      const files = [...libAudioInput.files];
-      for (const file of files) {
-        await Clips.save(file, {
-          name: file.name.replace(/\.[^.]+$/, ""),
-          kind: "audio",
-          folder: isFolder(libFolder) ? libFolder : null,
-        });
-      }
-      libAudioInput.value = "";
-      if (files.length) Desk.toast(`${files.length} sound${files.length === 1 ? "" : "s"} in the library.`, "good");
-    });
+    /**
+     * Sound or picture, from the file rather than from which button was pressed.
+     *
+     * `file.type` is the browser's own answer and is right almost always; the
+     * extension is the fallback for the containers it declines to name, which
+     * is most often a bare `.wav` or an `.m4a` off a phone.
+     */
+    const AUDIO_EXT = /\.(mp3|wav|m4a|aac|ogg|oga|opus|flac|weba|wma|aiff?)$/i;
+    const isAudioFile = (file) =>
+      (file.type ? file.type.startsWith("audio/") : AUDIO_EXT.test(file.name));
 
     fileInput.addEventListener("change", async () => {
       const mute = [];
+      let sounds = 0;
+      let pictures = 0;
       for (const file of fileInput.files) {
+        const sound = isAudioFile(file);
         const clip = await Clips.save(file, {
           name: file.name.replace(/\.[^.]+$/, ""),
-          kind: "import",
+          kind: sound ? "audio" : "import",
           // Imported into whichever folder is open, because filing it
           // afterwards is the step that never happens.
           folder: isFolder(libFolder) ? libFolder : null,
         });
-        if (clip.hasPicture === false) mute.push(clip.name);
+        if (sound) sounds++;
+        else {
+          pictures++;
+          // Only worth saying about something that was meant to have a picture.
+          if (clip.hasPicture === false) mute.push(clip.name);
+        }
       }
       fileInput.value = "";
       // Said at the moment of import, because that is when it can still be
       // acted on. Finding out later, from a black rectangle on the timeline,
       // reads as the editor being broken rather than the file being one this
       // browser cannot draw.
-      if (mute.length) Desk.toast(noPictureMessage(mute), "bad");
-      else Desk.toast("Imported.", "good");
+      if (mute.length) return void Desk.toast(noPictureMessage(mute), "bad");
+      const parts = [];
+      if (pictures) parts.push(`${pictures} clip${pictures === 1 ? "" : "s"}`);
+      if (sounds) parts.push(`${sounds} sound${sounds === 1 ? "" : "s"}`);
+      if (parts.length) Desk.toast(`${parts.join(" and ")} in the library.`, "good");
     });
 
     /**
@@ -5848,6 +6021,13 @@ export const Editor = (() => {
         return;
       }
 
+      const float = floats.find((f) => f.id === selected);
+      if (float) {
+        float.title = name;
+        refresh();
+        return;
+      }
+
       const seg = timeline.find((x) => x.uid === selected);
       const clip = seg && byId.get(seg.clipId);
       if (clip) {
@@ -5933,6 +6113,8 @@ export const Editor = (() => {
 
     win.onCleanup(() => {
       document.removeEventListener("keydown", onShortcut);
+      document.removeEventListener("pointerdown", dismissMenu, true);
+      document.removeEventListener("keydown", escMenu, true);
       sizeWatch?.disconnect();
       cancelAnimationFrame(resizeFrame);
       off();
