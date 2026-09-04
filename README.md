@@ -10,21 +10,23 @@ agent on the same surface as you the entire time, through **WebMCP**.
 
 ---
 
-## The one thing to understand
+## Where the timings come from
 
-The take comes back **already transcribed, word by word** — with no upload, no API key and no
-transcription service.
+The teleprompter does double duty. Every take records which script line was on screen at which
+second, so that log plus the script gives you a transcript without uploading anything: we know
+what was said, because you read it, and roughly when, because we watched you advance it. Words
+are spread across their line by length.
 
-Because the teleprompter was watching. Every take records which script line was on screen at
-which second. That log plus the script *is* a transcript: we know what was said, because you
-read it, and when, because we watched you advance it.
+It's an estimate and it says so — transcripts derived this way are marked `source: "prompter"`
+and `approximate: true`. Usually that's enough to find a phrase and land a graphic on it. For
+measured per-word timing, paste your own OpenAI key into the Transcript panel and any clip
+re-transcribes with Whisper; the key stays in this browser's `localStorage` and is sent nowhere
+but `api.openai.com`.
 
-This is the fact a server cannot have. A transcription API can tell you what is inside a file
-you uploaded to it. It cannot tell you what you were reading when you said it, because the
-prompter is in this tab and so are the clicks that moved it.
-
-So when you say **"put a list over the bit where I say three things"**, the agent asks the page
-for that quote, gets exact frames back, and draws the graphic there. Not near there.
+Either way, the useful part is that the timing lives in the page. Ask for **"a list over the
+bit where I say three things"** and the agent queries the page for that quote and gets frames
+back, rather than inferring it from pixels — and that's the part a server-side tool has no
+route to, because the prompter and the clicks that moved it never left this tab.
 
 ## What the agent can reach that nothing off-page can
 
