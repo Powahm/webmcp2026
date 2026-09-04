@@ -1,6 +1,7 @@
 import { Store } from "./store.js";
 import { Desk } from "./shell.js";
 import DESIGNED from "../skills/motion-graphics-that-look-designed.md?raw";
+import LOUD from "../skills/loud-looks-glass-and-maximalist.md?raw";
 
 /**
  * AI Skills: instructions this page hands to whatever agent is reading it.
@@ -450,6 +451,7 @@ export async function seed() {
     ["building-a-motion-graphics-clip.md", MOTION],
     ["taste-not-slop.md", TASTE],
     ["motion-graphics-that-look-designed.md", DESIGNED],
+    ["loud-looks-glass-and-maximalist.md", LOUD],
   ];
   for (const [filename, body] of stock) {
     if (!have.has(filename)) await addSkill(parseSkill(filename, body));

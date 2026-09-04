@@ -202,12 +202,24 @@ function drawGuides(ctx, width, height, safe, pal) {
  * down both sides is not a vertical video, it is a landscape video someone
  * gave up on. Returns the rectangle to draw the video into.
  */
-export function fitVideo(videoW, videoH, frameW, frameH, mode = "cover") {
+export function fitVideo(videoW, videoH, frameW, frameH, mode = "cover", pan) {
   if (!(videoW > 0) || !(videoH > 0)) return { x: 0, y: 0, w: frameW, h: frameH };
   const scale = mode === "contain"
     ? Math.min(frameW / videoW, frameH / videoH)
     : Math.max(frameW / videoW, frameH / videoH);
   const w = videoW * scale;
   const h = videoH * scale;
-  return { x: (frameW - w) / 2, y: (frameH - h) / 2, w, h };
+
+  // CSS object-position semantics, deliberately: 0% pins the source's left or
+  // top edge to the frame's, 100% pins its right or bottom, 50% centres it.
+  // Writing it this way is what lets the preview say the same thing in one
+  // `object-position` declaration and be guaranteed to agree.
+  //
+  // It also clamps itself. On cover there is only as much to pan as there is
+  // hidden, and (frameW - w) is exactly that overflow, so 0 and 100 are the
+  // real limits rather than numbers that would slide the picture off frame.
+  const px = Math.max(0, Math.min(100, Number(pan?.px ?? 50)));
+  const py = Math.max(0, Math.min(100, Number(pan?.py ?? 50)));
+
+  return { x: (frameW - w) * (px / 100), y: (frameH - h) * (py / 100), w, h };
 }

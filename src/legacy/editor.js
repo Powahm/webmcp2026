@@ -262,10 +262,12 @@ export const Editor = (() => {
         </div>
         <div class="lib-pane" data-libpane="clips">
           <div class="ed-lib-bar">
-            <button class="btn btn-mini" data-act="import" title="Import video files into the library">Video</button>
-            <button class="btn btn-mini" data-act="import-audio" title="Import music or sound effects into the library">Audio</button>
-            <input type="file" accept="video/*" multiple hidden data-act="file">
-            <input type="file" accept="audio/*" multiple hidden data-act="lib-audio-file">
+            <!-- One button for both. Picking the kind before picking the file
+                 asked a question the file already answers, and got it wrong
+                 whenever someone had a folder of mixed footage and music. -->
+            <button class="btn btn-mini btn-accent" data-act="import"
+                    title="Import video, music or sound effects into the library">Import</button>
+            <input type="file" accept="video/*,audio/*" multiple hidden data-act="file">
           </div>
           <!-- Folders are a filter, not a tree. One row of chips with one open
                at a time: a library of forty takes and a music bed is a library
@@ -405,6 +407,10 @@ export const Editor = (() => {
         </div>
       </div>
 
+      <!-- The right-click menu. One element, filled per press, because the
+           actions depend on what is under the pointer. -->
+      <div class="tl-menu" role="menu" hidden></div>
+
       <div class="ed-export" hidden>
         <div class="ed-export-card">
           <p class="ed-export-title">Exporting…</p>
@@ -443,10 +449,10 @@ export const Editor = (() => {
     const playBtn = body.querySelector('[data-act="play"]');
     const fileInput = body.querySelector('[data-act="file"]');
     const audioInput = body.querySelector('[data-act="audio-file"]');
-    const libAudioInput = body.querySelector('[data-act="lib-audio-file"]');
     const libFolderBar = body.querySelector(".lib-folders");
     const exportPane = body.querySelector(".ed-export");
     const cutStrip = body.querySelector(".cut-strip");
+    const menu = body.querySelector(".tl-menu");
 
     let playing = false;
     let playhead = 0;
@@ -835,10 +841,10 @@ export const Editor = (() => {
         const el = overlayVideos.get(lane.id);
         if (!el || el.readyState < 2) continue;
         try {
-          const fit = fitVideo(el.videoWidth || w, el.videoHeight || h, w, h);
           // The item's own placement, through the same function the spine and
           // the export use, so a nudged overlay is nudged in the file too.
           const t = transformOf(item);
+          const fit = fitVideo(el.videoWidth || w, el.videoHeight || h, w, h, fitOf(item), panOf(t));
           ctx.save();
           applyTransform(ctx, t, w, h);
           ctx.drawImage(el, fit.x, fit.y, fit.w, fit.h);
@@ -1396,7 +1402,9 @@ export const Editor = (() => {
                role="button" tabindex="0" aria-pressed="${seg.uid === selected}"
                aria-label="${Desk.esc(clip?.name || "audio")}, ${seg.muted ? "muted" : "sound on"}">
             <span class="tl-item-name">${Desk.esc(clip?.name || "audio")}</span>
-            <span class="tl-item-time mono">${seg.muted ? "muted" : "sound"}</span>
+            <span class="tl-item-time mono">${
+              detachedAudio(seg.uid) ? "unlinked" : seg.muted ? "muted" : "sound"
+            }</span>
           </div>`;
       }).join("");
     }
@@ -1700,6 +1708,37 @@ export const Editor = (() => {
      */
     const NO_TRANSFORM = { x: 0, y: 0, scale: 1, rotation: 0, flipH: false, flipV: false };
 
+    /**
+     * How a clip's picture meets the frame.
+     *
+     * "cover" fills the frame and loses whatever does not fit; "contain" keeps
+     * the whole picture and pads the rest. Reframing 16:9 footage to 9:16 on
+     * cover throws away about 70% of the width, which is right when you have
+     * chosen what to keep and wrong when you have not been asked. This is the
+     * choice, and it is per clip because a talking head and a screen recording
+     * want different answers in the same cut.
+     */
+    const fitOf = (thing) => (thing?.fit === "contain" ? "contain" : "cover");
+
+    /**
+     * The transform's pan, as CSS object-position percentages.
+     *
+     * This is the fix for "the whole video is cropped and I cannot move it".
+     * The pan used to be a `transform: translate()` on the video element, and
+     * with `object-fit: cover` that element *is* the frame: the source is
+     * already cropped to it, so translating slid the cropped picture out of
+     * frame and showed the backdrop instead of revealing more of the source.
+     *
+     * object-position is the primitive that actually means "which part of the
+     * source the frame shows", and it clamps itself to however much is
+     * hidden. x = +1 pushes the picture right, which is the same as showing
+     * the source's left edge, hence 50 - x*50.
+     */
+    const panOf = (t) => ({
+      px: Math.max(0, Math.min(100, 50 - (Number(t?.x) || 0) * 50)),
+      py: Math.max(0, Math.min(100, 50 - (Number(t?.y) || 0) * 50)),
+    });
+
     const transformOf = (seg) => ({ ...NO_TRANSFORM, ...(seg?.transform || {}) });
 
     /** The transform at a moment, with the clip's own keyframes applied. */
@@ -1724,12 +1763,17 @@ export const Editor = (() => {
     function cssTransform(t) {
       const sx = t.flipH ? -t.scale : t.scale;
       const sy = t.flipV ? -t.scale : t.scale;
-      return `translate(${(t.x * 100).toFixed(3)}%, ${(t.y * 100).toFixed(3)}%) rotate(${t.rotation}deg) scale(${sx}, ${sy})`;
+      // No translate. The pan is object-position, because translating a
+      // cover-fitted element moves the crop and its contents together instead
+      // of moving the crop across the source.
+      return `rotate(${t.rotation}deg) scale(${sx}, ${sy})`;
     }
 
-    /** Point the export's canvas at the same place. Caller restores. */
+    /** Point the export's canvas at the same place. Caller restores.
+     *  Scale, rotation and flip only: the pan arrives in the rect fitVideo
+     *  returns, exactly as object-position supplies it in the preview. */
     function applyTransform(ctx, t, w, h) {
-      ctx.translate(w / 2 + t.x * w, h / 2 + t.y * h);
+      ctx.translate(w / 2, h / 2);
       ctx.rotate((t.rotation * Math.PI) / 180);
       ctx.scale(t.flipH ? -t.scale : t.scale, t.flipV ? -t.scale : t.scale);
       ctx.translate(-w / 2, -h / 2);
@@ -1741,6 +1785,17 @@ export const Editor = (() => {
       const t = at ? transformAt(at.seg) : NO_TRANSFORM;
       video.style.transform = cssTransform(t);
       video.style.transformOrigin = "center";
+      // object-fit and object-position in the preview, the same two numbers
+      // fitVideo takes at export, so the two cannot mean different things.
+      video.style.objectFit = at ? fitOf(at.seg) : "cover";
+      const pan = panOf(t);
+      video.style.objectPosition = `${pan.px.toFixed(2)}% ${pan.py.toFixed(2)}%`;
+
+      // A grab cursor on a picture that cannot move is a promise the frame
+      // cannot keep, and footage already the shape of the frame has nothing
+      // hidden to pan to.
+      const g = at ? panGearing(at.seg, frameBox.getBoundingClientRect()) : { gx: 0, gy: 0 };
+      frameBox.style.cursor = g.gx || g.gy ? "" : "default";
     }
 
     /* ---------------- keyframes ----------------
@@ -1804,22 +1859,68 @@ export const Editor = (() => {
       if (e.button !== 0) return;
       const layer = selectedLayer();
       if (layer && MOVABLE.has(layer.component)) return;   // the graphic wants it
-      const at = segmentAt(playhead);
-      if (!at || !at.seg || at.seg.blank) return;
-      reframing = { seg: at.seg, x: e.clientX, y: e.clientY, rect: frameBox.getBoundingClientRect() };
-      selected = at.seg.uid;
+      // An overlay you have selected takes the drag, because that is the
+      // picture you are looking at on top. Otherwise it is the spine's.
+      const onLane = findItem(selected);
+      const target = onLane && playhead >= onLane.it.at && playhead < itemEnd(onLane.it)
+        ? onLane.it
+        : segmentAt(playhead)?.seg;
+      if (!target || target.blank) return;
+      reframing = { seg: target, x: e.clientX, y: e.clientY, rect: frameBox.getBoundingClientRect() };
+      selected = target.uid;
       frameBox.setPointerCapture?.(e.pointerId);
       frameBox.dataset.dragging = "true";
       e.preventDefault();
     });
 
+    /**
+     * How far a pixel of cursor moves the pan.
+     *
+     * The picture should sit under the cursor, so a drag of `dx` has to move
+     * the visible content by `dx` — and the content can only move through the
+     * part of it that is hidden. That overflow is what sets the gearing, not
+     * the width of the frame: gearing to the frame made the picture crawl at
+     * roughly a third of the pointer and feel like it was resisting.
+     *
+     * Returns 0 on each axis with nothing hidden, which is the honest answer
+     * on `contain` and on footage that already matches the frame.
+     */
+    function panGearing(thing, rect) {
+      const vw = video.videoWidth || 0;
+      const vh = video.videoHeight || 0;
+      if (!(vw > 0) || !(vh > 0) || !(rect.width > 0) || !(rect.height > 0)) return { gx: 0, gy: 0 };
+
+      const t = transformOf(thing);
+      const scale = t.scale || 1;
+      // The rectangle the picture actually occupies, from the same function
+      // the export uses, so the gearing is derived from the real geometry
+      // rather than a second guess at it.
+      const box = fitVideo(vw * scale, vh * scale, rect.width, rect.height, fitOf(thing));
+
+      // offset = (frame - drawn) * px/100 and px = 50 - x*50, so moving the
+      // content by dx needs x to change by -2*dx/(frame - drawn).
+      //
+      // One formula covers both fits, and the sign falls out of it. On cover
+      // (frame - drawn) is negative, which is overflow to reveal; on contain
+      // it is positive, which is slack to slide the letterboxed picture
+      // around in. Special-casing contain to zero meant a fitted clip could
+      // not be nudged off-centre to make room for a caption.
+      const slackX = rect.width - box.w;
+      const slackY = rect.height - box.h;
+      return {
+        gx: Math.abs(slackX) > 0.5 ? -2 / slackX : 0,
+        gy: Math.abs(slackY) > 0.5 ? -2 / slackY : 0,
+      };
+    }
+
     frameBox.addEventListener("pointermove", (e) => {
       if (!reframing) return;
       const t = transformOf(reframing.seg);
+      const { gx, gy } = panGearing(reframing.seg, reframing.rect);
       reframing.seg.transform = {
         ...t,
-        x: Math.max(-1, Math.min(1, t.x + (e.clientX - reframing.x) / reframing.rect.width)),
-        y: Math.max(-1, Math.min(1, t.y + (e.clientY - reframing.y) / reframing.rect.height)),
+        x: Math.max(-1, Math.min(1, t.x + (e.clientX - reframing.x) * gx)),
+        y: Math.max(-1, Math.min(1, t.y + (e.clientY - reframing.y) * gy)),
       };
       reframing.x = e.clientX;
       reframing.y = e.clientY;
@@ -2308,7 +2409,18 @@ export const Editor = (() => {
         }
         if (spec.type === "number") {
           const [lo, hi, step] = RANGES[name] ?? [0, 1, 0.01];
-          const now = Number.isFinite(Number(value)) ? Number(value) : lo;
+          // The component's own default, not the bottom of the range. An
+          // unset opacity used to show a slider parked at 0 while the shape
+          // drew at full strength, so transparency looked broken before it
+          // had been touched.
+          const fallback = Number.isFinite(Number(spec.default)) ? Number(spec.default) : lo;
+          // `value == null` first, because the validator stores an unset
+          // numeric field as null and `Number(null)` is 0, which sails through
+          // Number.isFinite. That is what parked a fresh shape's opacity
+          // slider at 0 while the shape itself drew fully opaque.
+          const now = value == null || value === ""
+            ? fallback
+            : (Number.isFinite(Number(value)) ? Number(value) : fallback);
           return `<label class="field"><span>${name.replace(/_/g, " ")} <b class="mono">${now}</b></span>
             <input type="range" data-lprop="${name}" min="${lo}" max="${hi}" step="${step}" value="${now}"></label>`;
         }
@@ -2399,6 +2511,11 @@ export const Editor = (() => {
       return `
         <p class="insp-kind mono">Transform</p>
         <div class="insp-body insp-body--tight">
+          <p class="insp-hint">Drag the picture to choose what stays in frame.</p>
+          <div class="insp-row">
+            <button class="btn btn-mini" data-item-fit="cover" aria-pressed="${fitOf(it) === "cover"}">Fill frame</button>
+            <button class="btn btn-mini" data-item-fit="contain" aria-pressed="${fitOf(it) === "contain"}">Fit whole clip</button>
+          </div>
           <label class="field"><span>Across <b class="mono">${t.x.toFixed(2)}</b></span>
             <input type="range" data-item-tf="x" min="-1" max="1" step="0.01" value="${t.x}"></label>
           <label class="field"><span>Down <b class="mono">${t.y.toFixed(2)}</b></span>
@@ -2491,6 +2608,37 @@ export const Editor = (() => {
       const onLane = findItem(selected);
       if (onLane) return itemPanelHtml(onLane.lane, onLane.it);
 
+      // An overlay, so selecting one shows what it is and how to be rid of it.
+      const float = floats.find((f) => f.id === selected);
+      if (float) {
+        const held = explicitClips().find((c) => c.id === float.id);
+        const n = held ? layersIn(held).length + soundsIn(held).length : 0;
+        return `
+          <p class="insp-kind mono">Overlay</p>
+          <div class="insp-body">
+            ${nameRowHtml(float.title || "Overlay")}
+            <p class="insp-hint">A motion graphics clip over the footage. Double click it on the timeline to build inside it.</p>
+            <dl class="insp-stats mono">
+              <div><dt>Starts</dt><dd>${timecode(float.at)}</dd></div>
+              <div><dt>Lasts</dt><dd>${float.seconds.toFixed(1)}s</dd></div>
+              <div><dt>Holds</dt><dd>${n} element${n === 1 ? "" : "s"}</dd></div>
+            </dl>
+            <label class="field">
+              <span>Starts <b class="mono">${timecode(float.at)}</b></span>
+              <input type="range" data-float-set="at" min="0" max="${Math.max(1, Math.ceil(total()))}" step="0.05" value="${float.at.toFixed(2)}">
+            </label>
+            <label class="field">
+              <span>Lasts <b class="mono">${float.seconds.toFixed(1)}s</b></span>
+              <input type="range" data-float-set="seconds" min="0.5" max="30" step="0.1" value="${float.seconds.toFixed(1)}">
+            </label>
+            <div class="insp-row">
+              <button class="btn btn-mini" data-open-mclip="${float.id}">Open</button>
+              <button class="btn btn-mini btn-danger" data-float-drop="${float.id}">Delete</button>
+            </div>
+            <p class="insp-hint">Backspace deletes it, and so does a right click on the bar.</p>
+          </div>`;
+      }
+
       // A staged cut, so selecting a chip does not leave the rail claiming
       // nothing is selected while a marker is clearly highlighted.
       const staged = pendingCuts().find((c) => c.id === selected);
@@ -2576,6 +2724,11 @@ export const Editor = (() => {
             <input type="range" data-set="gain" min="0" max="1" step="0.02" value="${seg.gain ?? 1}">
           </label>
           <button class="btn btn-ghost btn-wide" data-set="mute" aria-pressed="${seg.muted}">${seg.muted ? "Muted" : "Sound on"}</button>
+          ${detachedAudio(seg.uid)
+            ? `<button class="btn btn-ghost btn-wide" data-link="relink">Relink sound to picture</button>
+               <p class="insp-hint">Its sound is on an audio lane with its own position and trim.</p>`
+            : `<button class="btn btn-ghost btn-wide" data-link="unlink">Unlink sound from picture</button>
+               <p class="insp-hint">Puts this clip's audio on its own lane, so it can run past the cut or be replaced.</p>`}
 
           ${crossToTransitions()}
 
@@ -3152,15 +3305,17 @@ export const Editor = (() => {
             // both sides is not a vertical video, it is a landscape video
             // someone gave up on, and stretching every clip to the canvas
             // distorted any footage that was not the first clip's shape.
+            // The clip's own reframe, from the same numbers the preview uses.
+            const t = transformAt(at.seg, playhead);
             const fit = fitVideo(
               video.videoWidth || first?.width || canvas.width,
               video.videoHeight || first?.height || canvas.height,
               canvas.width,
-              canvas.height
+              canvas.height,
+              fitOf(at.seg),
+              panOf(t)
             );
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            // The clip's own reframe, from the same numbers the preview uses.
-            const t = transformAt(at.seg, playhead);
             ctx.save();
             applyTransform(ctx, t, canvas.width, canvas.height);
             ctx.drawImage(video, fit.x, fit.y, fit.w, fit.h);
@@ -3617,7 +3772,6 @@ export const Editor = (() => {
 
       if (act === "play") return playing ? stop() : play();
       if (act === "import") return fileInput.click();
-      if (act === "import-audio") return libAudioInput.click();
       if (act === "new-folder") {
         const made = await Folders.add(`Folder ${libFolders.length + 1}`);
         // Straight into the name field. A folder called "Folder 3" is a folder
@@ -3848,6 +4002,19 @@ export const Editor = (() => {
         return void seekTo(playhead);
       }
 
+      const fset = e.target.dataset.floatSet;
+      if (fset) {
+        const f = floats.find((x) => x.id === selected);
+        if (!f) return;
+        const v = Number(e.target.value);
+        if (fset === "at") f.at = Math.max(0, v);
+        if (fset === "seconds") f.seconds = Math.max(0.5, v);
+        const label = e.target.closest(".field")?.querySelector("b");
+        if (label) label.textContent = fset === "at" ? timecode(f.at) : `${f.seconds.toFixed(1)}s`;
+        renderTrack();
+        return void seekTo(playhead);
+      }
+
       // A lane item: volume, placement, trim and speed.
       const iset = e.target.dataset.itemSet;
       if (iset) {
@@ -3992,6 +4159,12 @@ export const Editor = (() => {
         return;
       }
 
+      const floatDrop = e.target.closest("[data-float-drop]");
+      if (floatDrop) {
+        selected = floatDrop.dataset.floatDrop;
+        return void deleteSelected(e);
+      }
+
       const itemDrop = e.target.closest("[data-item-drop]");
       if (itemDrop) {
         const found = findItem(itemDrop.dataset.itemDrop);
@@ -4000,6 +4173,41 @@ export const Editor = (() => {
           selected = null;
           Desk.toast("Removed from the lane", "good");
           refresh();
+        }
+        return;
+      }
+
+      const link = e.target.closest("[data-link]");
+      if (link) {
+        const lseg = timeline.find((x) => x.uid === selected);
+        if (lseg) (link.dataset.link === "unlink" ? unlinkAudio : relinkAudio)(lseg);
+        return;
+      }
+
+      const fitBtn = e.target.closest("[data-fit]");
+      if (fitBtn) {
+        const fseg = timeline.find((x) => x.uid === selected);
+        if (fseg) {
+          fseg.fit = fitBtn.dataset.fit;
+          // Filling the frame from a fit shot keeps whatever pan was chosen;
+          // fitting from a filled one re-centres, because a pan chosen to
+          // rescue a crop is meaningless once nothing is cropped.
+          if (fseg.fit === "contain") fseg.transform = { ...transformOf(fseg), x: 0, y: 0 };
+          renderInspector();
+          paintTransform();
+          paintFrame();
+        }
+        return;
+      }
+
+      const itemFit = e.target.closest("[data-item-fit]");
+      if (itemFit) {
+        const found = findItem(selected);
+        if (found) {
+          found.it.fit = itemFit.dataset.itemFit;
+          if (found.it.fit === "contain") found.it.transform = { ...transformOf(found.it), x: 0, y: 0 };
+          renderInspector();
+          paintFrame();
         }
         return;
       }
@@ -4134,6 +4342,16 @@ export const Editor = (() => {
           e.preventDefault();
           addBlank({ seconds: 5 });
           return void rebuildTranscript().then(refresh);
+        case "[": case "]": {
+          // Shuffling a clip one place along, without aiming a drag at a seam.
+          e.preventDefault();
+          const i = timeline.findIndex((x) => x.uid === selected);
+          if (i < 0) return;
+          const to = i + (e.key === "[" ? -1 : 1);
+          if (to < 0 || to >= timeline.length) return;
+          [timeline[i], timeline[to]] = [timeline[to], timeline[i]];
+          return void rebuildTranscript().then(() => { refresh(); seekTo(playhead); });
+        }
         case "Backspace": case "Delete":
           e.preventDefault();
           return deleteSelected(e);
@@ -4423,10 +4641,25 @@ export const Editor = (() => {
         select(sound.dataset.sound);
         gesture = { type: "move-sound", soundId: sound.dataset.sound, from: timeAtPointer(e) };
       } else if (floatBar) {
+        // Selecting it, like every other branch here does. Without this an
+        // overlay could be dragged but never selected, so the inspector had
+        // nothing to show for it and Backspace had nothing to act on: there
+        // was no way to delete one at all.
+        select(floatBar.dataset.float);
         gesture = { type: "move-float", floatId: floatBar.dataset.float, from: timeAtPointer(e) };
       } else if (seg) {
         select(seg.dataset.seg);
-        return;
+        // Pressing a spine clip starts a reorder. It used to select and stop,
+        // so the only way to move a clip was the browser's own drag-and-drop
+        // with no feedback, or two arrow buttons in the inspector.
+        gesture = {
+          type: "reorder",
+          segUid: seg.dataset.seg,
+          from: timeAtPointer(e),
+          startX: e.clientX,
+          moved: false,
+        };
+        seg.classList.add("is-dragging");
       } else {
         gesture = { type: "scrub" };
       }
@@ -4460,6 +4693,15 @@ export const Editor = (() => {
         trimBy(gesture, delta, e);
         renderTrack();
         renderInspector();
+        return;
+      }
+
+      if (gesture.type === "reorder") {
+        // A few pixels of slop, so a click that wobbles stays a click.
+        if (!gesture.moved && Math.abs(e.clientX - gesture.startX) < 4) return;
+        gesture.moved = true;
+        gesture.seam = seamIndexAt(now);
+        markSeam(seamAt(gesture.seam));
         return;
       }
 
@@ -4508,9 +4750,135 @@ export const Editor = (() => {
       const was = gesture;
       gesture = null;
       settleGesture();
+
+      if (was.type === "reorder") {
+        clearDrop();
+        if (was.moved && was.seam != null && moveSegTo(was.segUid, was.seam)) {
+          // Reordering re-times every word after the clip that moved.
+          return void rebuildTranscript().then(() => { refresh(); seekTo(playhead); });
+        }
+        return void refresh();
+      }
+
       if (was.type === "scrub" && wasPlaying) { wasPlaying = false; play(); return; }
       if (was.type === "trim" && was.segUid) rebuildTranscript().then(refresh);
       else refresh();
+    }
+
+    /**
+     * The seams between spine clips, in cut seconds.
+     *
+     * A clip can only land in one of these, so a reorder snaps to them rather
+     * than to wherever the pointer happens to be. Seam `i` means "before clip
+     * i", which is exactly the index a splice wants.
+     */
+    function seams() {
+      const out = [0];
+      let acc = 0;
+      for (const seg of timeline) { acc += segDuration(seg); out.push(acc); }
+      return out;
+    }
+
+    const seamAt = (i) => seams()[Math.max(0, Math.min(i, timeline.length))] ?? 0;
+
+    function seamIndexAt(at) {
+      const all = seams();
+      let best = 0;
+      all.forEach((sm, i) => { if (Math.abs(sm - at) < Math.abs(all[best] - at)) best = i; });
+      return best;
+    }
+
+    /** Put the drop marker on a spine seam. */
+    function markSeam(seconds) {
+      const laneEl = laneBox.querySelector('[data-lane="spine"]');
+      const bodyEl = laneEl?.querySelector(".tl-lane-body");
+      if (!bodyEl) return;
+      if (!dropMark) {
+        dropMark = document.createElement("div");
+        dropMark.className = "tl-drop";
+      }
+      if (dropMark.parentElement !== bodyEl) bodyEl.appendChild(dropMark);
+      dropMark.style.left = `${pctOf(seconds)}%`;
+      laneEl.classList.add("is-drop-target");
+    }
+
+    /**
+     * Move a clip to a seam.
+     *
+     * Taking the clip out first shifts every seam after its old slot down by
+     * one, which is the off-by-one that makes a drag to the right land one
+     * place short. Returns whether anything actually moved.
+     */
+    function moveSegTo(uid, seamIndex) {
+      const from = timeline.findIndex((x) => x.uid === uid);
+      if (from < 0) return false;
+      const [held] = timeline.splice(from, 1);
+      const to = Math.max(0, Math.min(timeline.length, seamIndex > from ? seamIndex - 1 : seamIndex));
+      timeline.splice(to, 0, held);
+      return to !== from;
+    }
+
+    /* ---------------- unlinking sound from picture ----------------
+     *
+     * A1 is drawn from the spine, not stored separately, because a cut is a
+     * cut: trimming the picture trims the sound with it. That is the right
+     * default and the wrong law. Holding a line of dialogue over the next shot,
+     * or dropping the on-camera audio while keeping the picture, both need the
+     * two to come apart.
+     *
+     * Unlinking copies the segment's audio onto a real audio lane as an item of
+     * its own and mutes the segment, so from then on the sound has its own
+     * position, trim and volume. The item remembers where it came from, which
+     * is what lets it be put back.
+     */
+
+    /** The detached audio for a segment, if it has been unlinked. */
+    function detachedAudio(segUid) {
+      for (const lane of lanes) {
+        if (lane.kind !== "audio") continue;
+        const it = lane.items.find((x) => x.fromSeg === segUid);
+        if (it) return { lane, it };
+      }
+      return null;
+    }
+
+    function unlinkAudio(seg) {
+      if (!seg || seg.blank || detachedAudio(seg.uid)) return;
+      const b = boundsOf(seg);
+      const clip = byId.get(seg.clipId);
+      if (!b || !clip) return;
+
+      const lane = lanes.filter((l) => l.kind === "audio").at(-1) || addLane("audio");
+      lane.items.push({
+        uid: `it-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        clipId: seg.clipId,
+        name: `${clip.name} (sound)`,
+        // Where it sits in the cut, and the same window of the source, so the
+        // moment you unlink nothing has changed about what you hear.
+        at: b.start,
+        in: seg.in,
+        out: seg.out,
+        speed: seg.speed || 1,
+        gain: seg.gain ?? 1,
+        fromSeg: seg.uid,
+      });
+      seg.muted = true;
+      Desk.toast("Sound unlinked onto its own lane", "good");
+      refresh();
+      seekTo(playhead);
+    }
+
+    function relinkAudio(seg) {
+      const found = detachedAudio(seg?.uid);
+      if (!found) return;
+      found.lane.items = found.lane.items.filter((x) => x.uid !== found.it.uid);
+      // Take the volume back with it: it is the one thing that may have been
+      // deliberately changed while the two were apart.
+      seg.gain = found.it.gain ?? seg.gain ?? 1;
+      seg.muted = false;
+      Desk.toast("Sound relinked to the picture", "good");
+      refresh();
+      seekTo(playhead);
     }
 
     /** Move one edge of whatever is under the grip. */
@@ -4611,6 +4979,84 @@ export const Editor = (() => {
         }
       }
     }
+
+    /* ---------------- the right-click menu ----------------
+     *
+     * Whatever is under the pointer, named, with the one action anybody
+     * actually wants from a right click on a timeline. It selects first, so
+     * the menu and the inspector are talking about the same thing, and it
+     * falls through to the browser's own menu on empty track rather than
+     * swallowing the press to show nothing.
+     */
+
+    /** What the pointer is on, in the order the timeline stacks them. */
+    function targetAt(el) {
+      const at = (sel) => el?.closest?.(sel) ?? null;
+      // A float carries both data-float and data-mclip, so it is asked first.
+      const f = at("[data-float]");
+      if (f) return { uid: f.dataset.float, label: "overlay", open: f.dataset.float };
+      const m = at("[data-mclip]");
+      if (m) return { uid: m.dataset.mclip, label: "motion graphics clip", open: m.dataset.mclip };
+      const i = at("[data-item]");
+      if (i) return { uid: i.dataset.item, label: "clip" };
+      const l = at("[data-layer]");
+      if (l) return { uid: l.dataset.layer, label: "graphic" };
+      const sd = at("[data-sound]");
+      if (sd) return { uid: sd.dataset.sound, label: "sound" };
+      const sg = at("[data-seg]");
+      if (sg) return { uid: sg.dataset.seg, label: "clip" };
+      const c = at("[data-cut]");
+      if (c) return { uid: c.dataset.cut, label: "suggested cut" };
+      return null;
+    }
+
+    function closeMenu() {
+      menu.hidden = true;
+      menu.innerHTML = "";
+    }
+
+    function openMenu(x, y, target) {
+      menu.innerHTML = [
+        `<p class="tl-menu-head mono">${Desk.esc(target.label)}</p>`,
+        target.open ? `<button class="tl-menu-item" role="menuitem" data-menu="open">Open</button>` : "",
+        `<button class="tl-menu-item tl-menu-item--danger" role="menuitem" data-menu="delete">Delete</button>`,
+      ].join("");
+      menu.hidden = false;
+      // Measured after it is shown, then pulled back inside the window, so a
+      // press near the right edge does not open a menu half off screen.
+      const r = menu.getBoundingClientRect();
+      menu.style.left = `${Math.max(6, Math.min(x, window.innerWidth - r.width - 6))}px`;
+      menu.style.top = `${Math.max(6, Math.min(y, window.innerHeight - r.height - 6))}px`;
+      menu.querySelector(".tl-menu-item")?.focus({ preventScroll: true });
+    }
+
+    body.addEventListener("contextmenu", (e) => {
+      const target = targetAt(e.target);
+      if (!target) return closeMenu();
+      e.preventDefault();
+      select(target.uid);
+      menu.dataset.uid = target.uid;
+      menu.dataset.open = target.open || "";
+      openMenu(e.clientX, e.clientY, target);
+    });
+
+    menu.addEventListener("click", (e) => {
+      const act = e.target.closest("[data-menu]")?.dataset.menu;
+      if (!act) return;
+      const uid = menu.dataset.uid;
+      closeMenu();
+      if (!uid) return;
+      selected = uid;
+      if (act === "open") return void enterScope(menu.dataset.open || uid);
+      if (act === "delete") return void deleteSelected(e);
+    });
+
+    // Anywhere else, Escape, or a scroll under it closes the menu.
+    const dismissMenu = (e) => { if (!menu.hidden && !menu.contains(e.target)) closeMenu(); };
+    document.addEventListener("pointerdown", dismissMenu, true);
+    const escMenu = (e) => { if (e.key === "Escape" && !menu.hidden) { e.stopPropagation(); closeMenu(); } };
+    document.addEventListener("keydown", escMenu, true);
+    tlScroll.addEventListener("scroll", closeMenu);
 
     tl.addEventListener("pointerdown", beginGesture);
     tl.addEventListener("pointermove", moveGesture);
@@ -4847,7 +5293,11 @@ export const Editor = (() => {
       return `
         <p class="insp-kind mono">Transform</p>
         <div class="insp-body insp-body--tight">
-          <p class="insp-hint">Drag the picture to move it in the frame. Handy after a reframe, when the shot is no longer centred on what matters.</p>
+          <p class="insp-hint">Drag the picture to choose what stays in frame. On <b>Fill</b> the shot is cropped to the frame; on <b>Fit</b> the whole shot is kept and the edges are padded.</p>
+          <div class="insp-row">
+            <button class="btn btn-mini" data-fit="cover" aria-pressed="${fitOf(seg) === "cover"}">Fill frame</button>
+            <button class="btn btn-mini" data-fit="contain" aria-pressed="${fitOf(seg) === "contain"}">Fit whole clip</button>
+          </div>
           <label class="field"><span>Across <b class="mono">${t.x.toFixed(2)}</b></span>
             <input type="range" data-tf="x" min="-1" max="1" step="0.01" value="${t.x}"></label>
           <label class="field"><span>Down <b class="mono">${t.y.toFixed(2)}</b></span>
@@ -5008,6 +5458,32 @@ export const Editor = (() => {
           Desk.toast("Removed from the lane", "good");
           return void refresh();
         }
+      }
+
+      /**
+       * An overlay, and what is inside it.
+       *
+       * A float's contents are matched by the window of time it covers rather
+       * than by an owner field, so removing the bar and leaving them behind
+       * would not orphan them: it would hand them to whichever clip covers
+       * that moment next, and they would reappear inside something else.
+       * Deleting the overlay deletes what it holds, which is also what anyone
+       * who put one there by accident expects.
+       */
+      const float = floats.find((f) => f.id === selected);
+      if (float) {
+        mark();
+        const held = explicitClips().find((c) => c.id === float.id);
+        // Counted before they are removed, or the count is always zero.
+        const inner = held ? [...layersIn(held), ...soundsIn(held)] : [];
+        const inside = inner.length;
+        for (const l of held ? layersIn(held) : []) removeLayer(l.id, e);
+        for (const a of held ? soundsIn(held) : []) removeAudio(a.id, e);
+        floats = floats.filter((f) => f.id !== float.id);
+        if (scope === float.id) leaveScope();
+        selected = null;
+        Desk.toast(inside ? `Overlay and its ${inside} element${inside === 1 ? "" : "s"} removed` : "Overlay removed", "good");
+        return void refresh();
       }
 
       const seg = timeline.find((x) => x.uid === selected);
@@ -5352,38 +5828,47 @@ export const Editor = (() => {
      * around and reach for later, which is what a library is for, so the
      * importer beside the clips leaves the timeline alone.
      */
-    libAudioInput.addEventListener("change", async () => {
-      const files = [...libAudioInput.files];
-      for (const file of files) {
-        await Clips.save(file, {
-          name: file.name.replace(/\.[^.]+$/, ""),
-          kind: "audio",
-          folder: isFolder(libFolder) ? libFolder : null,
-        });
-      }
-      libAudioInput.value = "";
-      if (files.length) Desk.toast(`${files.length} sound${files.length === 1 ? "" : "s"} in the library.`, "good");
-    });
+    /**
+     * Sound or picture, from the file rather than from which button was pressed.
+     *
+     * `file.type` is the browser's own answer and is right almost always; the
+     * extension is the fallback for the containers it declines to name, which
+     * is most often a bare `.wav` or an `.m4a` off a phone.
+     */
+    const AUDIO_EXT = /\.(mp3|wav|m4a|aac|ogg|oga|opus|flac|weba|wma|aiff?)$/i;
+    const isAudioFile = (file) =>
+      (file.type ? file.type.startsWith("audio/") : AUDIO_EXT.test(file.name));
 
     fileInput.addEventListener("change", async () => {
       const mute = [];
+      let sounds = 0;
+      let pictures = 0;
       for (const file of fileInput.files) {
+        const sound = isAudioFile(file);
         const clip = await Clips.save(file, {
           name: file.name.replace(/\.[^.]+$/, ""),
-          kind: "import",
+          kind: sound ? "audio" : "import",
           // Imported into whichever folder is open, because filing it
           // afterwards is the step that never happens.
           folder: isFolder(libFolder) ? libFolder : null,
         });
-        if (clip.hasPicture === false) mute.push(clip.name);
+        if (sound) sounds++;
+        else {
+          pictures++;
+          // Only worth saying about something that was meant to have a picture.
+          if (clip.hasPicture === false) mute.push(clip.name);
+        }
       }
       fileInput.value = "";
       // Said at the moment of import, because that is when it can still be
       // acted on. Finding out later, from a black rectangle on the timeline,
       // reads as the editor being broken rather than the file being one this
       // browser cannot draw.
-      if (mute.length) Desk.toast(noPictureMessage(mute), "bad");
-      else Desk.toast("Imported.", "good");
+      if (mute.length) return void Desk.toast(noPictureMessage(mute), "bad");
+      const parts = [];
+      if (pictures) parts.push(`${pictures} clip${pictures === 1 ? "" : "s"}`);
+      if (sounds) parts.push(`${sounds} sound${sounds === 1 ? "" : "s"}`);
+      if (parts.length) Desk.toast(`${parts.join(" and ")} in the library.`, "good");
     });
 
     /**
@@ -5536,6 +6021,13 @@ export const Editor = (() => {
         return;
       }
 
+      const float = floats.find((f) => f.id === selected);
+      if (float) {
+        float.title = name;
+        refresh();
+        return;
+      }
+
       const seg = timeline.find((x) => x.uid === selected);
       const clip = seg && byId.get(seg.clipId);
       if (clip) {
@@ -5621,6 +6113,8 @@ export const Editor = (() => {
 
     win.onCleanup(() => {
       document.removeEventListener("keydown", onShortcut);
+      document.removeEventListener("pointerdown", dismissMenu, true);
+      document.removeEventListener("keydown", escMenu, true);
       sizeWatch?.disconnect();
       cancelAnimationFrame(resizeFrame);
       off();
