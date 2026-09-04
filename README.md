@@ -1,6 +1,6 @@
 # Deskmate
 
-**A whole content studio in one browser tab where an AI agent and a human can work together inside it.**
+**A whole content studio in one browser tab where an AI agent and a human can work together inside it!!!**
 Write the script, read it off the teleprompter while recording and edit it with an
 AI agent on the same page as you the entire time, through **WebMCP**.
 
